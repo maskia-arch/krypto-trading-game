@@ -30,20 +30,11 @@ const useStore = create((set, get) => ({
 
   loadVersion: async () => {
     try {
-      const res = await fetch('./version.txt?t=' + Date.now(), {
-        cache: 'no-store'
-      });
-      
-      if (res.ok) {
-        const text = await res.text();
-        const cleanVersion = text.trim();
-        if (cleanVersion) {
-          set({ version: cleanVersion });
-        }
+      const data = await api.getVersion();
+      if (data && data.version) {
+        set({ version: data.version });
       }
-    } catch (e) {
-      set({ version: '0.1' });
-    }
+    } catch (e) {}
   },
 
   fetchProfile: async () => {
