@@ -1,58 +1,49 @@
-// ============================================================
-// COMMANDS: ECONOMY (commands/economy.js)
-// ============================================================
-
 const { InlineKeyboard } = require('grammy');
 const { db } = require('../core/database');
 const { esc } = require('../core/utils');
-const { WEBAPP_URL } = require('../core/config');
 
-/**
- * /rank oder /leaderboard - Zeigt die reichsten Spieler und Season-Infos
- */
 async function handleLeaderboard(ctx) {
   try {
     const leaders = await db.getLeaderboard(10);
     const pool = await db.getFeePool();
     const season = await db.getActiveSeason();
 
-    let text = `🏆 <b>RANGLISTE</b>\n\n`;
+    let text = `🏆 <b>ValueTrade Rangliste</b>\n\n`;
 
     if (season) {
       const end = new Date(season.end_date);
-      const days = Math.ceil((end - Date.now()) / 1000 / 60 / 60 / 24);
-      text += `📅 Season endet in ${days} Tagen\n💰 Fee Pool: ${pool.toFixed(2)}€\n\n`;
+      const days = Math.max(0, Math.ceil((end - Date.now()) / (1000 * 60 * 60 * 24)));
+      text += `🗓 <b>Season Ende:</b> in ${days} Tagen\n`;
+      text += `💰 <b>Season Pool:</b> ${Number(pool || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€\n\n`;
     }
 
-    text += `━━ 💎 Reichste Spieler ━━\n`;
+    text += `━━ 💎 <b>Top 10 Gesamtvermögen</b> 💎 ━━\n\n`;
     leaders.forEach((l, i) => {
-      const medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
-      text += `${medal} ${esc(l.first_name)}: ${Number(l.net_worth).toFixed(0)}€\n`;
+      const medal = ['🥇', '🥈', '🥉'][i] || `<b>${i + 1}.</b>`;
+      const name = esc(l.username || l.first_name || 'Trader');
+      const nw = Number(l.net_worth || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      text += `${medal} ${name}\n └ 💶 ${nw}€\n`;
     });
 
-    // Optional: Top Profit Logik (erfordert die entsprechende DB-Abfrage)
     const { data: topProfit } = await db.supabase
       .from('transactions')
-      .select('profile_id, profiles(first_name)')
+      .select('profiles(first_name, username)')
       .eq('type', 'sell')
       .order('total_eur', { ascending: false })
       .limit(1)
-      .single();
+      .maybeSingle();
 
     if (topProfit && topProfit.profiles) {
-      text += `\n🏅 Meister-Trader: ${esc(topProfit.profiles.first_name)}`;
+      const topName = esc(topProfit.profiles.username || topProfit.profiles.first_name || 'Unbekannt');
+      text += `\n🏅 <b>Top-Trade:</b> ${topName}`;
     }
 
     await ctx.reply(text, { parse_mode: 'HTML' });
   } catch (err) {
-    console.error('Leaderboard Error:', err);
     ctx.reply('❌ Rangliste konnte nicht geladen werden.');
   }
 }
 
-/**
- * /bailout - Der Rettungsschirm von Onkel Heinrich
- */
 async function handleBailout(ctx) {
   try {
     const profile = await db.getProfile(ctx.from.id);
@@ -61,14 +52,10 @@ async function handleBailout(ctx) {
     const result = await db.processBailout(profile.id);
     return ctx.reply(result.msg);
   } catch (err) {
-    console.error('Bailout Error:', err);
     ctx.reply('❌ Onkel Heinrich ist gerade beschäftigt. Versuch es später nochmal.');
   }
 }
 
-/**
- * /pro - Informationen und Kaufoptionen für die Pro-Version
- */
 async function handlePro(ctx) {
   try {
     const profile = await db.getProfile(ctx.from.id);
@@ -99,9 +86,6 @@ async function handlePro(ctx) {
   }
 }
 
-/**
- * /rent - Mieteinnahmen aus Immobilien einsammeln
- */
 async function handleRent(ctx) {
   try {
     const profile = await db.getProfile(ctx.from.id);
@@ -113,7 +97,6 @@ async function handleRent(ctx) {
     }
     return ctx.reply('⏳ Noch keine Miete verfügbar. (24h-Intervall nach dem letzten Sammeln)');
   } catch (err) {
-    console.error('Rent Command Error:', err);
     ctx.reply('❌ Fehler beim Einsammeln der Miete.');
   }
 }
