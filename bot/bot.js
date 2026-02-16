@@ -49,7 +49,7 @@ bot.on('message:story', async (ctx) => {
 });
 
 bot.on('message:text', async (ctx) => {
-  if (ctx.message.text === 'Portfolio') {
+  if (ctx.message.text.includes('Portfolio')) {
     return portfolioCommand(ctx);
   }
 });

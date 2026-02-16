@@ -4,7 +4,6 @@ const { db } = require('../../core/database');
 const { parseTelegramUser } = require('../auth');
 const { COINS, FEE_RATE } = require('../../core/config');
 
-// Ticker-Preise (falls useGameData diese Route nutzt)
 router.get('/prices', async (req, res) => {
   try {
     const prices = await db.getAllPrices();
@@ -14,7 +13,6 @@ router.get('/prices', async (req, res) => {
   }
 });
 
-// Chart-Daten (redundant zu economy.js, aber sicherheitshalber hier stabilisiert)
 router.get('/chart/:symbol', async (req, res) => {
   const { symbol } = req.params;
   const range = req.query.range || '3h';
@@ -25,7 +23,7 @@ router.get('/chart/:symbol', async (req, res) => {
 
   try {
     const { data, error } = await db.supabase
-      .from('market_history') // Prüfe ob Tabelle 'market_history' oder 'price_history' heißt
+      .from('market_history')
       .select('price_eur, recorded_at')
       .eq('symbol', symbol.toUpperCase())
       .gte('recorded_at', since)
@@ -38,8 +36,6 @@ router.get('/chart/:symbol', async (req, res) => {
   }
 });
 
-// Haupt-Route für Trades (Kauf & Verkauf)
-// Route geändert von /execute auf / (da die WebApp /api/trade aufruft)
 router.post('/', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -68,11 +64,15 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'Guthaben unzureichend' });
       }
 
-      // Datenbank-Updates
+      const existingAsset = await db.getAsset(profile.id, symbol);
+      if (existingAsset && Number(existingAsset.amount) <= 0) {
+        await db.supabase.from('assets').update({ first_buy: new Date().toISOString() }).eq('id', existingAsset.id);
+      }
+
       await db.updateBalance(profile.id, Number(profile.balance) - euroAmount);
       await db.upsertAsset(profile.id, symbol, cryptoAmount, price);
       if (db.addToFeePool) await db.addToFeePool(fee);
-      await db.addVolume(profile.id, euroAmount);
+      
       await db.logTransaction(profile.id, 'buy', symbol, cryptoAmount, price, fee, euroAmount);
 
       res.json({ 
@@ -89,7 +89,6 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'Kein Bestand zum Verkaufen vorhanden' });
       }
 
-      // Wenn amount_crypto nicht gesendet wird, verkaufe alles
       const sellAmount = amount_crypto ? Math.min(Number(amount_crypto), Number(asset.amount)) : Number(asset.amount);
       if (sellAmount <= 0) return res.status(400).json({ error: 'Ungültige Menge' });
 
@@ -97,11 +96,15 @@ router.post('/', async (req, res) => {
       const fee = grossEuro * (FEE_RATE || 0.005);
       const netEuro = grossEuro - fee;
 
-      // Datenbank-Updates
       await db.upsertAsset(profile.id, symbol, -sellAmount, 0);
       await db.updateBalance(profile.id, Number(profile.balance) + netEuro);
       if (db.addToFeePool) await db.addToFeePool(fee);
-      await db.addVolume(profile.id, grossEuro);
+
+      const holdTimeMs = Date.now() - new Date(asset.first_buy || Date.now()).getTime();
+      if (holdTimeMs >= 60 * 60 * 1000) {
+        await db.addVolume(profile.id, grossEuro * 2);
+      }
+
       await db.logTransaction(profile.id, 'sell', symbol, sellAmount, price, fee, netEuro);
 
       res.json({ 
