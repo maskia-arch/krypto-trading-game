@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../../core/database');
-const { parseTelegramUser } = require('../api/server');
+const { parseTelegramUser } = require('../auth');
 
 router.get('/chart/:symbol', async (req, res) => {
   const { symbol } = req.params;
@@ -44,7 +44,7 @@ router.get('/leaderboard', async (req, res) => {
   try {
     const { data, error } = await db.supabase
       .from('profiles')
-      .select('username, first_name, balance, total_volume')
+      .select('username, first_name, balance, total_volume, telegram_id')
       .order('balance', { ascending: false })
       .limit(20);
 
@@ -108,7 +108,11 @@ router.post('/realestate/buy', async (req, res) => {
     }
 
     await db.updateBalance(profile.id, Number(profile.balance) - Number(reType.price_eur));
-    await db.supabase.from('real_estate').insert({ profile_id: profile.id, type_id, last_collect: new Date().toISOString() });
+    await db.supabase.from('real_estate').insert({ 
+      profile_id: profile.id, 
+      type_id, 
+      last_collect: new Date().toISOString() 
+    });
 
     res.json({ success: true });
   } catch (err) {
