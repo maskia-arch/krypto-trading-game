@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import useStore from '../lib/store';
-import client from '../api/client';
+import { api, getTelegramId } from '../lib/api';
 
 export default function RankView() {
   const { leaderboard, season, feePool, fetchProfile } = useStore();
@@ -8,8 +8,7 @@ export default function RankView() {
   const [sub, setSub] = useState('rank');
   const [loading, setLoading] = useState(true);
   
-  const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
-  const myId = tgUser?.id;
+  const myId = getTelegramId();
 
   useEffect(() => {
     loadData();
@@ -17,13 +16,11 @@ export default function RankView() {
 
   const loadData = async () => {
     setLoading(true);
-    // Wir rufen fetchProfile auf, falls Leaderboard-Daten im Store zusammen mit dem Profil aktualisiert werden
-    // Andernfalls müsste hier ein dedizierter API Call für das Leaderboard hin (z.B. client.get('/api/economy/leaderboard'))
     await fetchProfile(); 
     
     try {
-      const res = await client.get('/api/profile/transactions');
-      setTxs(res.data.transactions || []);
+      const data = await api.getTransactions();
+      setTxs(data.transactions || []);
     } catch (e) {
       console.error("Failed to load transactions", e);
     }

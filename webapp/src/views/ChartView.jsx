@@ -16,6 +16,19 @@ const COIN_THEME = {
   LTC: { stroke: '#bfbbbb', gradStart: 'rgba(191,187,187,0.20)', gradEnd: 'rgba(191,187,187,0)' },
 };
 
+const CustomTooltip = ({ active, payload, theme }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-xl px-3 py-2 text-xs shadow-xl backdrop-blur-md"
+         style={{ background: 'rgba(12,16,25,0.92)', border: '1px solid rgba(255,255,255,0.06)' }}>
+      <p style={{ color: 'var(--text-dim)' }}>{payload[0].payload.time}</p>
+      <p className="font-mono font-bold text-sm" style={{ color: theme.stroke }}>
+        {Number(payload[0].value).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
+      </p>
+    </div>
+  );
+};
+
 export default function ChartView() {
   const { chartData, chartSymbol, chartRange, prices, loadChart, setChartSymbol, setChartRange } = useStore();
   const [loading, setLoading] = useState(false);
@@ -54,19 +67,6 @@ export default function ChartView() {
 
   const theme = COIN_THEME[chartSymbol] || COIN_THEME.BTC;
   const livePrice = prices[chartSymbol] || last;
-
-  const CustomTooltip = ({ active, payload }) => {
-    if (!active || !payload?.length) return null;
-    return (
-      <div className="rounded-xl px-3 py-2 text-xs shadow-xl backdrop-blur-md"
-           style={{ background: 'rgba(12,16,25,0.92)', border: '1px solid rgba(255,255,255,0.06)' }}>
-        <p style={{ color: 'var(--text-dim)' }}>{payload[0].payload.time}</p>
-        <p className="font-mono font-bold text-sm" style={{ color: theme.stroke }}>
-          {Number(payload[0].value).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
-        </p>
-      </div>
-    );
-  };
 
   return (
     <div className="space-y-3 pb-4">
@@ -169,7 +169,7 @@ export default function ChartView() {
                   tickLine={false}
                 />
                 <ReferenceLine y={first} stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
-                <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.08)' }} />
+                <Tooltip content={<CustomTooltip theme={theme} />} cursor={{ stroke: 'rgba(255,255,255,0.08)' }} />
                 <Area
                   type="monotone"
                   dataKey="price"

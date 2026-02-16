@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import client from '../api/client';
+import { api } from './api';
 
 const useStore = create((set, get) => ({
   version: '0.1',
@@ -29,16 +29,15 @@ const useStore = create((set, get) => ({
 
   loadVersion: async () => {
     try {
-      const res = await client.get('/api/version');
-      set({ version: res.data.version });
+      const data = await api.getVersion();
+      set({ version: data.version });
     } catch (e) {}
   },
 
   fetchProfile: async () => {
     try {
       set({ loading: true, error: null });
-      const res = await client.get('/api/profile');
-      const data = res.data;
+      const data = await api.getProfile();
       const priceMap = {};
       (data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
       set({
@@ -60,9 +59,9 @@ const useStore = create((set, get) => ({
   refreshPrices: async () => {
     try {
       const old = { ...get().prices };
-      const res = await client.get('/api/prices');
+      const data = await api.getPrices();
       const priceMap = {};
-      (res.data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
+      (data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
       set({ prices: priceMap, prevPrices: old });
     } catch (e) {}
   },
@@ -71,27 +70,27 @@ const useStore = create((set, get) => ({
     try {
       const s = symbol || get().chartSymbol;
       const r = range || get().chartRange;
-      const res = await client.get(`/api/prices/chart?symbol=${s}&range=${r}`);
-      set({ chartData: res.data.data || [], chartSymbol: s, chartRange: r });
+      const data = await api.getChart(s, r);
+      set({ chartData: data.data || [], chartSymbol: s, chartRange: r });
     } catch (e) {}
   },
 
   buyCrypto: async (symbol, amountEur) => {
-    const res = await client.post('/api/trading/buy', { symbol, amount_eur: amountEur });
+    const data = await api.buy(symbol, amountEur);
     await get().fetchProfile();
-    return res.data;
+    return data;
   },
 
   sellCrypto: async (symbol, amountCrypto) => {
-    const res = await client.post('/api/trading/sell', { symbol, amount_crypto: amountCrypto });
+    const data = await api.sell(symbol, amountCrypto);
     await get().fetchProfile();
-    return res.data;
+    return data;
   },
 
   loadLeaderboard: async () => {
     try {
-      const res = await client.get('/api/economy/leaderboard');
-      set({ leaderboard: res.data.leaders || [], season: res.data.season, feePool: res.data.pool || 0 });
+      const data = await api.getLeaderboard();
+      set({ leaderboard: data.leaders || [], season: data.season, feePool: data.pool || 0 });
     } catch (e) {}
   },
 }));

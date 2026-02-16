@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import client from '../api/client';
+import { api } from '../lib/api';
 import useStore from '../lib/store';
 
 export default function AssetsView() {
@@ -19,18 +19,16 @@ export default function AssetsView() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Wenn die Endpunkte für Collectibles in deinem Backend existieren,
-      // müssen die URLs hier ggf. angepasst werden.
       const [a, b, c, d] = await Promise.all([
-        client.get('/api/economy/realestate/types'),
-        client.get('/api/economy/realestate/mine'),
-        client.get('/api/economy/collectibles/types').catch(() => ({ data: { types: [] } })),
-        client.get('/api/economy/collectibles/mine').catch(() => ({ data: { collectibles: [] } })),
+        api.getRealEstateTypes(),
+        api.getMyRealEstate(),
+        api.getCollectibleTypes().catch(() => ({ types: [] })),
+        api.getMyCollectibles().catch(() => ({ collectibles: [] })),
       ]);
-      setReTypes(a.data.types || []); 
-      setMyRE(b.data.properties || []);
-      setCTypes(c.data.types || []); 
-      setMyColl(d.data.collectibles || []);
+      setReTypes(a.types || []); 
+      setMyRE(b.properties || []);
+      setCTypes(c.types || []); 
+      setMyColl(d.collectibles || []);
     } catch (e) {
       console.error("Failed to load assets data", e);
     }
@@ -39,35 +37,35 @@ export default function AssetsView() {
 
   const buyRE = async (id) => {
     try {
-      const r = await client.post('/api/economy/realestate/buy', { type_id: id });
-      showToast(`🏠 ${r.data.property} gekauft!`);
+      const r = await api.buyRealEstate(id);
+      showToast(`🏠 ${r.property} gekauft!`);
       await fetchProfile(); 
       await loadData();
     } catch (e) { 
-      showToast(`❌ ${e.response?.data?.error || e.message}`, 'error'); 
+      showToast(`❌ ${e.message}`, 'error'); 
     }
   };
 
   const collectRent = async () => {
     try {
-      const r = await client.post('/api/profile/collect-rent');
-      r.data.rent_collected > 0
-        ? showToast(`💰 ${r.data.rent_collected.toFixed(2)}€ Miete!`)
+      const r = await api.collectRent();
+      r.rent_collected > 0
+        ? showToast(`💰 ${r.rent_collected.toFixed(2)}€ Miete!`)
         : showToast('⏳ Noch keine Miete (24h)', 'error');
-      if (r.data.rent_collected > 0) await fetchProfile();
+      if (r.rent_collected > 0) await fetchProfile();
     } catch (e) { 
-      showToast(`❌ ${e.response?.data?.error || e.message}`, 'error'); 
+      showToast(`❌ ${e.message}`, 'error'); 
     }
   };
 
   const buyColl = async (id) => {
     try {
-      const r = await client.post('/api/economy/collectibles/buy', { type_id: id });
-      showToast(`💎 ${r.data.item} gekauft!`);
+      const r = await api.buyCollectible(id);
+      showToast(`💎 ${r.item} gekauft!`);
       await fetchProfile(); 
       await loadData();
     } catch (e) { 
-      showToast(`❌ ${e.response?.data?.error || e.message}`, 'error'); 
+      showToast(`❌ ${e.message}`, 'error'); 
     }
   };
 
