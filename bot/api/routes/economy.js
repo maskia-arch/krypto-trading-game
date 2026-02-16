@@ -4,6 +4,33 @@ const { db } = require('../../core/database');
 const { parseTelegramUser } = require('../auth');
 const { COINS } = require('../../core/config');
 
+// ─── CHARTS ─────────────────────────────────────────────────
+
+router.get('/chart/:symbol', async (req, res) => {
+  const { symbol } = req.params;
+  const { range } = req.query; // z.B. 3h, 12h, 24h
+
+  try {
+    // Holt die historischen Preisdaten aus der Supabase-Tabelle 'price_history'
+    const { data, error } = await db.supabase
+      .from('price_history')
+      .select('price_eur, recorded_at')
+      .eq('symbol', symbol.toUpperCase())
+      .order('recorded_at', { ascending: true })
+      .limit(100);
+
+    if (error) throw error;
+
+    // Die WebApp erwartet die Daten im Feld "data"
+    res.json({ data: data || [] });
+  } catch (err) {
+    console.error('Chart-Fehler:', err);
+    res.status(500).json({ error: 'Chart-Daten konnten nicht geladen werden' });
+  }
+});
+
+// ─── REAL ESTATE (IMMOBILIEN) ───────────────────────────────
+
 router.get('/realestate/types', async (req, res) => {
   try {
     const types = await db.getRealEstateTypes();
@@ -46,19 +73,38 @@ router.post('/realestate/buy', async (req, res) => {
 
     if (!reType) return res.status(404).json({ error: 'Immobilientyp nicht gefunden' });
     
+    // Validierung gegen den aktuellen Profil-Umsatz
     if (Number(profile.total_volume) < Number(reType.min_volume)) {
-      return res.status(400).json({ error: `Mindest-Umsatz: ${reType.min_volume}€ benötigt` });
+      return res.status(400).json({ error: `Mindest-Umsatz von ${reType.min_volume}€ benötigt!` });
     }
+    
     if (Number(profile.balance) < Number(reType.price_eur)) {
-      return res.status(400).json({ error: 'Nicht genug Guthaben' });
+      return res.status(400).json({ error: 'Nicht genug Guthaben auf dem Konto.' });
     }
 
+    // Transaktion durchführen
     await db.updateBalance(profile.id, Number(profile.balance) - Number(reType.price_eur));
     await db.supabase.from('real_estate').insert({ profile_id: profile.id, type_id });
 
     res.json({ success: true, property: reType.name, cost: reType.price_eur });
   } catch (err) {
     res.status(500).json({ error: 'Kauf fehlgeschlagen' });
+  }
+});
+
+// ─── COLLECTIBLES (BESITZTÜMER) ─────────────────────────────
+
+router.get('/collectibles/types', async (req, res) => {
+  try {
+    const { data, error } = await db.supabase
+      .from('collectible_types')
+      .select('*')
+      .order('price_eur', { ascending: true });
+    
+    if (error) throw error;
+    res.json({ types: data || [] });
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Laden der Besitztümer' });
   }
 });
 
@@ -74,9 +120,11 @@ router.get('/collectibles/mine', async (req, res) => {
       .eq('profile_id', profile.id);
     res.json({ collectibles: data });
   } catch (err) {
-    res.status(500).json({ error: 'Fehler beim Laden der Collectibles' });
+    res.status(500).json({ error: 'Fehler beim Laden deiner Sammlung' });
   }
 });
+
+// ─── LEVERAGE (HEBEL) ───────────────────────────────────────
 
 router.get('/leverage/positions', async (req, res) => {
   const tgId = parseTelegramUser(req);

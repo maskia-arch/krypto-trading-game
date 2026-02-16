@@ -34,24 +34,39 @@ export default function TradeView() {
   const sellNet = sellGross - sellFee;
 
   const handleBuy = async () => {
-    if (euroAmt <= 0 || euroAmt > balance) return;
+    // Toleranz von 0.01€ hinzugefügt, falls Rundungsfehler bei 100% Max-Button auftreten
+    if (euroAmt <= 0 || euroAmt > balance + 0.01) return;
     setBusy(true);
     try {
       const r = await buyCrypto(coin, euroAmt);
-      showToast(`✅ ${r.crypto_amount.toFixed(6)} ${coin} gekauft!`);
+      const amount = r?.crypto_amount || r?.amount;
+      if (amount) {
+        showToast(`✅ ${Number(amount).toFixed(6)} ${coin} gekauft!`);
+      } else {
+        showToast(`✅ ${coin} erfolgreich gekauft!`);
+      }
       setEuroIn('');
-    } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
+    } catch (e) { 
+      showToast(`❌ ${e.message || 'Fehler beim Kauf'}`, 'error'); 
+    }
     setBusy(false);
   };
 
   const handleSell = async () => {
-    if (sellAmt <= 0 || sellAmt > holding) return;
+    if (sellAmt <= 0 || sellAmt > holding + 0.000001) return;
     setBusy(true);
     try {
       const r = await sellCrypto(coin, sellAmt);
-      showToast(`✅ ${sellAmt.toFixed(6)} ${coin} verkauft für ${r.euro_received.toFixed(2)}€`);
+      const eur = r?.euro_received || r?.total_eur || r?.eur;
+      if (eur) {
+        showToast(`✅ ${coin} verkauft für ${Number(eur).toFixed(2)}€`);
+      } else {
+        showToast(`✅ ${coin} erfolgreich verkauft!`);
+      }
       setCryptoIn('');
-    } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
+    } catch (e) { 
+      showToast(`❌ ${e.message || 'Fehler beim Verkauf'}`, 'error'); 
+    }
     setBusy(false);
   };
 
@@ -159,9 +174,9 @@ export default function TradeView() {
             )}
 
             <button onClick={handleBuy}
-              disabled={busy || euroAmt <= 0 || euroAmt > balance}
+              disabled={busy || euroAmt <= 0 || euroAmt > balance + 0.01}
               className={`btn-press w-full py-3.5 rounded-2xl text-base font-bold transition-all ${
-                busy || euroAmt <= 0 || euroAmt > balance
+                busy || euroAmt <= 0 || euroAmt > balance + 0.01
                   ? 'bg-white/[0.03] text-[var(--text-dim)] cursor-not-allowed'
                   : 'bg-neon-green/20 text-neon-green border border-neon-green/25 active:bg-neon-green/30'
               }`}>
@@ -213,9 +228,9 @@ export default function TradeView() {
             )}
 
             <button onClick={handleSell}
-              disabled={busy || sellAmt <= 0 || sellAmt > holding}
+              disabled={busy || sellAmt <= 0 || sellAmt > holding + 0.000001}
               className={`btn-press w-full py-3.5 rounded-2xl text-base font-bold transition-all ${
-                busy || sellAmt <= 0 || sellAmt > holding
+                busy || sellAmt <= 0 || sellAmt > holding + 0.000001
                   ? 'bg-white/[0.03] text-[var(--text-dim)] cursor-not-allowed'
                   : 'bg-neon-red/20 text-neon-red border border-neon-red/25 active:bg-neon-red/30'
               }`}>
