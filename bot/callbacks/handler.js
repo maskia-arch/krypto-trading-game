@@ -1,22 +1,14 @@
-// ============================================================
-// CALLBACK HANDLER (callbacks/handler.js)
-// ============================================================
-
 const { db } = require('../core/database');
 const { priceService } = require('../services/priceService');
-const { handlePortfolio } = require('../commands/portfolio');
+const handlePortfolio = require('../commands/portfolio');
 const { handleLeaderboard } = require('../commands/economy');
 const { esc } = require('../core/utils');
 const { InlineKeyboard } = require('grammy');
 
-/**
- * Zentraler Handler für alle Callback-Queries
- */
 module.exports = async (ctx) => {
   const data = ctx.callbackQuery.data;
   const adminId = Number(process.env.ADMIN_ID);
 
-  // 1. Portfolio & Leaderboard Refreshes
   if (data === 'portfolio') {
     await ctx.answerCallbackQuery();
     return handlePortfolio(ctx);
@@ -27,7 +19,6 @@ module.exports = async (ctx) => {
     return handleLeaderboard(ctx);
   }
 
-  // 2. Hilfe & Info
   if (data === 'help') {
     await ctx.answerCallbackQuery();
     return ctx.reply(
@@ -43,7 +34,6 @@ module.exports = async (ctx) => {
     );
   }
 
-  // 3. Pro-Version Anfragen
   if (data === 'buy_pro') {
     await ctx.answerCallbackQuery();
     const profile = await db.getProfile(ctx.from.id);
@@ -66,13 +56,11 @@ module.exports = async (ctx) => {
     return ctx.reply('✅ Anfrage gesendet! Du wirst benachrichtigt, sobald dein Pro-Zugang aktiviert wird.');
   }
 
-  // 4. Admin-Aktionen (Pro-Freischaltung)
   if (data.startsWith('approve_pro:')) {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌ Keine Admin-Rechte');
     const profileId = data.split(':')[1];
     
-    // Logik zur Freischaltung
-    const success = await db.approveProRequestForUser(profileId); // Benötigt Helper in database.js
+    const success = await db.approveProRequestForUser(profileId); 
     
     if (success) {
       const p = await db.supabase.from('profiles').select('telegram_id, first_name').eq('id', profileId).single();
@@ -84,7 +72,6 @@ module.exports = async (ctx) => {
     return ctx.answerCallbackQuery('✅ Erledigt');
   }
 
-  // 5. Admin-Dashboard Funktionen
   if (data === 'admin_fetch') {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
     await ctx.answerCallbackQuery('Fetching prices...');
@@ -105,7 +92,6 @@ module.exports = async (ctx) => {
     return ctx.reply(`👥 <b>Top 10 User</b>\n\n${list}`, { parse_mode: 'HTML' });
   }
 
-  // Nachricht schließen
   if (data === 'close') {
     await ctx.answerCallbackQuery();
     return ctx.deleteMessage();
