@@ -4,7 +4,6 @@ import {
 } from 'recharts';
 import useStore from '../lib/store';
 
-// Live-Option (1M) hinzugefügt
 const RANGES = [
   { key: '1m',  label: 'LIVE' },
   { key: '3h',  label: '3H' },
@@ -44,7 +43,6 @@ export default function ChartView() {
 
   useEffect(() => {
     doLoad(chartSymbol, chartRange);
-    // Intervall auf 60s angepasst, um perfekt mit der 45s Backend-Engine zu synchronisieren
     refreshTimer.current = setInterval(() => doLoad(chartSymbol, chartRange), 60000);
     return () => clearInterval(refreshTimer.current);
   }, [chartSymbol, chartRange, doLoad]);
@@ -52,8 +50,10 @@ export default function ChartView() {
   const switchCoin = (sym) => { setChartSymbol(sym); };
   const switchRange = (r) => { setChartRange(r); };
 
-  // Daten-Mapping mit Sekunden für den Live-Modus
-  const data = chartData.map(d => {
+  const now = Date.now();
+  const oneHourAgo = now - (60 * 60 * 1000);
+
+  let data = chartData.map(d => {
     const date = new Date(d.recorded_at);
     return {
       time: date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
@@ -62,6 +62,10 @@ export default function ChartView() {
       ts: date.getTime(),
     };
   });
+
+  if (chartRange === '1m') {
+    data = data.filter(d => d.ts >= oneHourAgo);
+  }
 
   const priceVals = data.map(d => d.price);
   const minP = priceVals.length ? Math.min(...priceVals) : 0;
@@ -78,7 +82,6 @@ export default function ChartView() {
 
   return (
     <div className="space-y-3 pb-4 tab-enter">
-      {/* Coin Selector */}
       <div className="flex gap-1.5">
         {Object.entries(COIN_THEME).map(([sym, t]) => {
           const active = chartSymbol === sym;
@@ -98,7 +101,6 @@ export default function ChartView() {
         })}
       </div>
 
-      {/* Price Header */}
       <div className="card p-4">
         <div className="flex items-end justify-between">
           <div>
@@ -120,7 +122,6 @@ export default function ChartView() {
         </div>
       </div>
 
-      {/* Range Selector */}
       <div className="flex gap-1.5">
         {RANGES.map(r => {
           const active = chartRange === r.key;
@@ -140,7 +141,6 @@ export default function ChartView() {
         })}
       </div>
 
-      {/* Chart Canvas */}
       <div className="card overflow-hidden" style={{ padding: '12px 4px 4px 0' }}>
         {loading && data.length === 0 ? (
           <div className="flex items-center justify-center h-72">
@@ -160,9 +160,9 @@ export default function ChartView() {
                   dataKey="time"
                   stroke="transparent"
                   tick={{ fontSize: 9, fill: '#4b5c72', fontFamily: 'JetBrains Mono' }}
-                  interval="preserveStartEnd"
                   axisLine={false}
                   tickLine={false}
+                  minTickGap={30}
                 />
                 <YAxis
                   domain={[minP - pad, maxP + pad]}
@@ -192,12 +192,11 @@ export default function ChartView() {
           <div className="flex flex-col items-center justify-center h-72 gap-2">
             <span className="text-4xl">📊</span>
             <p className="text-xs" style={{ color: 'var(--text-dim)' }}>ValueTrade Engine lädt...</p>
-            <p className="text-[10px]" style={{ color: 'var(--text-dim)' }}>Prüfe Synchronisation mit Serverzeit</p>
+            <p className="text-[10px]" style={{ color: 'var(--text-dim)' }}>Daten für den gewählten Zeitraum sammeln</p>
           </div>
         )}
       </div>
 
-      {/* Stats Grid */}
       {data.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {[
