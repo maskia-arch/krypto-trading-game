@@ -22,16 +22,15 @@ router.get('/chart/:symbol', async (req, res) => {
     const minutes = rangeMap[range] || 180;
     
     /**
-     * ZEITKORREKTUR: 
-     * Da der Server 1h (60 Min) zurückliegt, berechnen wir den Startpunkt
-     * basierend auf UTC, um Synchronisationsfehler mit deinem Standort zu vermeiden.
+     * ZEITKORREKTUR & ENGINE-SYNC: 
+     * Wir fügen +120 Minuten Puffer hinzu, um den Server-Zeitversatz (UTC vs. lokaler Zeit) 
+     * sicher zu überbrücken.
      */
-    const now = new Date();
-    const startTime = new Date(now.getTime() - (minutes * 60 * 1000)).toISOString();
+    const startTime = new Date(Date.now() - ((minutes + 120) * 60 * 1000)).toISOString();
 
-    // Abfrage der historischen Preisdaten
+    // Abfrage der historischen Preisdaten aus 'market_history' (passend zum priceService)
     const { data, error } = await db.supabase
-      .from('price_history')
+      .from('market_history')
       .select('price_eur, recorded_at')
       .eq('symbol', symbol.toUpperCase())
       .gte('recorded_at', startTime) // Filtert ab dem berechneten Zeitpunkt

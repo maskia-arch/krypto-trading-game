@@ -4,14 +4,14 @@ import { api } from './api';
 const useStore = create((set, get) => ({
   // Branding & Status
   appName: 'ValueTradeGame',
-  version: 'Lädt...',
+  version: '0.1', // Initialer Fallback-Wert
   profile: null,
   assets: [],
   prices: {},
   prevPrices: {},
   chartData: [],
   chartSymbol: 'BTC',
-  chartRange: '3h', // Standard-Range
+  chartRange: '3h',
   leaderboard: [],
   season: null,
   feePool: 0,
@@ -20,7 +20,6 @@ const useStore = create((set, get) => ({
   tab: 'trade',
   toast: null,
 
-  // Actions
   setTab: (tab) => set({ tab }),
   setChartSymbol: (s) => set({ chartSymbol: s }),
   setChartRange: (r) => set({ chartRange: r }),
@@ -30,21 +29,30 @@ const useStore = create((set, get) => ({
     setTimeout(() => set({ toast: null }), 3000);
   },
 
-  // Dynamisches Laden der Version aus der version.txt
+  // Verbessertes Laden der Version
   loadVersion: async () => {
     try {
-      // t Parameter verhindert Browser-Caching der Textdatei
-      const res = await fetch('/version.txt?t=' + Date.now());
+      // t-Parameter erzwingt das Umgehen von Browser-Caches
+      const res = await fetch('/version.txt?t=' + Date.now(), {
+        cache: 'no-store'
+      });
+      
       if (res.ok) {
         const text = await res.text();
-        set({ version: text.trim() });
-      } else {
-        // Fallback falls api.getVersion existiert
-        const data = await api.getVersion();
-        set({ version: data.version });
+        const cleanVersion = text.trim();
+        if (cleanVersion) {
+          set({ version: cleanVersion });
+          return;
+        }
       }
+      
+      // Fallback auf API falls Datei nicht lesbar
+      const data = await api.getVersion().catch(() => null);
+      if (data?.version) set({ version: data.version });
+      
     } catch (e) {
-      set({ version: 'v1.0.0' });
+      console.warn("Version-Fetch fehlgeschlagen, nutze Default.");
+      set({ version: 'v0.1.25' }); // Dein aktueller Stand
     }
   },
 
@@ -80,21 +88,28 @@ const useStore = create((set, get) => ({
     } catch (e) {}
   },
 
+  // ValueTrade Engine Chart-Loader
   loadChart: async (symbol, range) => {
+    const s = symbol || get().chartSymbol;
+    const r = range || get().chartRange;
+    
     try {
-      const s = symbol || get().chartSymbol;
-      const r = range || get().chartRange;
-      
-      // Das Backend verarbeitet nun auch '1m' für Live-Daten
       const data = await api.getChart(s, r);
       
-      set({ 
-        chartData: data.data || [], 
-        chartSymbol: s, 
-        chartRange: r 
-      });
+      // Wenn Daten kommen, aktualisieren wir den State
+      if (data && data.data) {
+        set({ 
+          chartData: data.data, 
+          chartSymbol: s, 
+          chartRange: r 
+        });
+      } else {
+        // Falls das Array leer ist (Engine liefert noch nichts)
+        set({ chartData: [], chartSymbol: s, chartRange: r });
+      }
     } catch (e) {
-      console.error("Chart-Load Fehler:", e);
+      console.error("ValueTrade Engine: Chart-Verbindung unterbrochen");
+      set({ chartData: [] });
     }
   },
 

@@ -25,7 +25,12 @@ const priceService = {
 
       for (const [symbol, info] of Object.entries(COINS)) {
         const price = data[info.gecko]?.eur;
-        if (!price) continue;
+        
+        // ENGINE-CHECK: Nur speichern, wenn ein gültiger Preis existiert
+        if (price === undefined || price === null || price <= 0) {
+          console.warn(`⚠️ Ungültiger Preis für ${symbol} ignoriert.`);
+          continue;
+        }
 
         // 1. Aktuellen Preis in 'current_prices' aktualisieren (Upsert)
         await db.supabase
@@ -37,15 +42,17 @@ const priceService = {
           });
 
         // 2. Preis in 'market_history' für Charts archivieren (Insert)
+        // WICHTIG: Die Tabelle muss mit der economy.js übereinstimmen!
         await db.supabase
           .from('market_history')
           .insert({ 
             symbol, 
-            price_eur: price 
+            price_eur: price,
+            recorded_at: new Date().toISOString() // Expliziter Zeitstempel für die Engine
           });
       }
       
-      console.log(`✅ Preise aktualisiert: ${new Date().toLocaleTimeString('de-DE')}`);
+      console.log(`✅ ValueTrade Engine: Preise archiviert (${new Date().toLocaleTimeString('de-DE')})`);
     } catch (err) {
       console.error('❌ Preis-Fetch Fehler:', err.message);
     }
