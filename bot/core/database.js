@@ -22,7 +22,10 @@ const db = {
         telegram_id: telegramId,
         username: username || null,
         first_name: firstName || 'Trader',
-        balance: 10000.00
+        balance: 10000.00,
+        feedback_sent: false,
+        story_bonus_claimed: false,
+        created_at: new Date().toISOString()
       })
       .select()
       .single();
