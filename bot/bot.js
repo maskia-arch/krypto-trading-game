@@ -14,7 +14,7 @@ const path = require('path');
 // ── Version (Single Source of Truth) ─────────────────────────
 let VERSION = '0.1';
 try { VERSION = fs.readFileSync(path.join(__dirname, 'version.txt'), 'utf8').trim(); } catch (e) {
-  try { VERSION = fs.readFileSync(path.join(__dirname, '..', 'version.txt'), 'utf8').trim(); } catch (e2) { /* fallback */ }
+  try { VERSION = fs.readFileSync(path.join(__dirname, '..', 'version.txt'), 'utf8').trim(); } catch (e2) { /<b> fallback </b>/ }
 }
 
 // ── Config ───────────────────────────────────────────────────
@@ -37,6 +37,12 @@ const COINS = {
   LTC: { name: 'Litecoin', gecko: 'litecoin', emoji: 'Ł' }
 };
 const FEE_RATE = 0.005; // 0.5%
+
+// HTML-Escape für Telegram (verhindert Crashes bei Sonderzeichen in Namen)
+function esc(text) {
+  if (!text) return '';
+  return String(text).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 // ============================================================
 // HELPER: Supabase DB Functions
@@ -372,10 +378,10 @@ async function checkLiquidations() {
 
       try {
         await bot.api.sendMessage(pos.profiles.telegram_id,
-          `💥 *LIQUIDIERT!*\n\nDeine ${pos.leverage}x ${pos.direction.toUpperCase()} Position auf ${pos.symbol} wurde liquidiert!\nVerlust: -${Number(pos.amount_eur).toFixed(2)}€`,
-          { parse_mode: 'Markdown' }
+          `💥 <b>LIQUIDIERT!</b>\n\nDeine ${pos.leverage}x ${pos.direction.toUpperCase()} Position auf ${pos.symbol} wurde liquidiert!\nVerlust: -${Number(pos.amount_eur).toFixed(2)}€`,
+          { parse_mode: 'HTML' }
         );
-      } catch (e) { /* User hat Bot blockiert */ }
+      } catch (e) { /<b> User hat Bot blockiert </b>/ }
     }
   }
 }
@@ -409,10 +415,10 @@ async function checkPriceAlerts() {
       try {
         const dir = alert.direction === 'above' ? '📈 über' : '📉 unter';
         await bot.api.sendMessage(alert.profiles.telegram_id,
-          `🔔 *PREIS-ALARM!*\n\n${alert.symbol} ist ${dir} ${Number(alert.target_price).toFixed(2)}€!\nAktuell: ${current.toFixed(2)}€`,
-          { parse_mode: 'Markdown' }
+          `🔔 <b>PREIS-ALARM!</b>\n\n${alert.symbol} ist ${dir} ${Number(alert.target_price).toFixed(2)}€!\nAktuell: ${current.toFixed(2)}€`,
+          { parse_mode: 'HTML' }
         );
-      } catch (e) { /* Ignore */ }
+      } catch (e) { /<b> Ignore </b>/ }
     }
   }
 }
@@ -433,8 +439,8 @@ bot.command('start', async (ctx) => {
       .text('📊 Portfolio', 'portfolio')
       .text('🏆 Rangliste', 'leaderboard');
     return ctx.reply(
-      `Willkommen zurück, *${profile.first_name}*! 💰\n\nDein Kontostand: *${Number(profile.balance).toFixed(2)}€*\n🎮 v${VERSION}`,
-      { parse_mode: 'Markdown', reply_markup: kb }
+      `Willkommen zurück, <b>${esc(profile.first_name)}</b>! 💰\n\nDein Kontostand: <b>${Number(profile.balance).toFixed(2)}€</b>\n🎮 v${VERSION}`,
+      { parse_mode: 'HTML', reply_markup: kb }
     );
   }
 
@@ -443,25 +449,25 @@ bot.command('start', async (ctx) => {
 
   // "Brief vom Onkel" → Anpinnen
   const welcomeMsg = await ctx.reply(
-    `📨 *Ein Brief von Onkel Heinrich*\n\n` +
+    `📨 <b>Ein Brief von Onkel Heinrich</b>\n\n` +
     `━━━━━━━━━━━━━━━━━━━\n\n` +
-    `_Mein lieber ${profile.first_name},_\n\n` +
-    `_Ich habe dir 10.000€ auf dein Konto überwiesen. Mach was Kluges daraus – ` +
-    `investiere in Krypto, kauf dir Immobilien, werde reich!_\n\n` +
-    `_Aber sei vorsichtig... wenn du alles verlierst, kann ich dir nur noch begrenzt helfen._\n\n` +
-    `_Dein Onkel Heinrich_ 👴\n\n` +
+    `<i>Mein lieber ${esc(profile.first_name)},</i>\n\n` +
+    `<i>Ich habe dir 10.000€ auf dein Konto überwiesen. Mach was Kluges daraus – ` +
+    `investiere in Krypto, kauf dir Immobilien, werde reich!</i>\n\n` +
+    `<i>Aber sei vorsichtig... wenn du alles verlierst, kann ich dir nur noch begrenzt helfen.</i>\n\n` +
+    `<i>Dein Onkel Heinrich</i> 👴\n\n` +
     `━━━━━━━━━━━━━━━━━━━\n\n` +
-    `💰 *Startkapital: 10.000,00€*\n` +
+    `💰 <b>Startkapital: 10.000,00€</b>\n` +
     `📈 Verfügbare Coins: BTC, ETH, LTC\n` +
     `💸 Trading-Fee: 0,5%\n\n` +
     `Tippe den Button um loszulegen! 👇`,
-    { parse_mode: 'Markdown' }
+    { parse_mode: 'HTML' }
   );
 
   // Nachricht anpinnen
   try {
     await ctx.api.pinChatMessage(ctx.chat.id, welcomeMsg.message_id);
-  } catch (e) { /* Kann in Gruppen fehlschlagen */ }
+  } catch (e) { /<b> Kann in Gruppen fehlschlagen </b>/ }
 
   // Buttons nach kurzer Pause
   setTimeout(async () => {
@@ -476,9 +482,9 @@ bot.command('start', async (ctx) => {
   // Admin benachrichtigen
   try {
     await bot.api.sendMessage(ADMIN_ID,
-      `🆕 Neuer Spieler!\n👤 ${profile.first_name} (@${profile.username || 'kein Username'})\n🆔 ${tgId}`
+      `🆕 Neuer Spieler!\n👤 ${esc(profile.first_name)} (@${profile.username || 'kein Username'})\n🆔 ${tgId}`
     );
-  } catch (e) { /* Admin nicht erreichbar */ }
+  } catch (e) { /<b> Admin nicht erreichbar </b>/ }
 });
 
 // /portfolio
@@ -512,14 +518,14 @@ bot.command('pro', async (ctx) => {
     .text('❌ Abbrechen', 'close');
 
   return ctx.reply(
-    `⭐ *PRO VERSION - 5€/Monat*\n\n` +
+    `⭐ <b>PRO VERSION - 5€/Monat</b>\n\n` +
     `Features:\n` +
     `🔥 Hebelwetten (2x-10x)\n` +
     `🔔 Preis-Alarme bei Dips\n` +
     `🎨 Exklusive Themes\n` +
     `📊 Erweiterte Charts\n` +
     `⚡ Priority Support`,
-    { parse_mode: 'Markdown', reply_markup: kb }
+    { parse_mode: 'HTML', reply_markup: kb }
   );
 });
 
@@ -555,12 +561,12 @@ bot.command('admin', async (ctx) => {
     .text('🔄 Preise fetchen', 'admin_fetch');
 
   return ctx.reply(
-    `🔧 *ADMIN DASHBOARD* (v${VERSION})\n\n` +
+    `🔧 <b>ADMIN DASHBOARD</b> (v${VERSION})\n\n` +
     `👥 User: ${stats.userCount}\n` +
     `📝 Transaktionen: ${stats.txCount}\n` +
     `💰 Fee Pool: ${pool.toFixed(2)}€\n\n` +
     `Letzte Aktualisierung: ${new Date().toLocaleString('de-DE')}`,
-    { parse_mode: 'Markdown', reply_markup: kb }
+    { parse_mode: 'HTML', reply_markup: kb }
   );
 });
 
@@ -581,8 +587,8 @@ bot.command('user', async (ctx) => {
     .join('\n') || '  (keine)';
 
   return ctx.reply(
-    `👤 *User Info*\n\n` +
-    `Name: ${profile.first_name}\n` +
+    `👤 <b>User Info</b>\n\n` +
+    `Name: ${esc(profile.first_name)}\n` +
     `Username: @${profile.username || '-'}\n` +
     `Telegram ID: ${profile.telegram_id}\n` +
     `Balance: ${Number(profile.balance).toFixed(2)}€\n` +
@@ -591,7 +597,7 @@ bot.command('user', async (ctx) => {
     `Bailouts: ${profile.bailout_count}/3\n` +
     `Registriert: ${new Date(profile.created_at).toLocaleDateString('de-DE')}\n\n` +
     `📦 Assets:\n${assetsText}`,
-    { parse_mode: 'Markdown' }
+    { parse_mode: 'HTML' }
   );
 });
 
@@ -607,7 +613,7 @@ bot.command('setbalance', async (ctx) => {
   if (!profile) return ctx.reply('User nicht gefunden.');
 
   await db.updateBalance(profile.id, amount);
-  return ctx.reply(`✅ Balance von ${profile.first_name} auf ${amount}€ gesetzt.`);
+  return ctx.reply(`✅ Balance von ${esc(profile.first_name)} auf ${amount}€ gesetzt.`);
 });
 
 // Admin: Broadcast
@@ -620,9 +626,9 @@ bot.command('broadcast', async (ctx) => {
   let sent = 0;
   for (const u of users) {
     try {
-      await bot.api.sendMessage(u.telegram_id, `📢 *Ankündigung*\n\n${text}`, { parse_mode: 'Markdown' });
+      await bot.api.sendMessage(u.telegram_id, `📢 <b>Ankündigung</b>\n\n${text}`, { parse_mode: 'HTML' });
       sent++;
-    } catch (e) { /* User hat Bot blockiert */ }
+    } catch (e) { /<b> User hat Bot blockiert </b>/ }
   }
   return ctx.reply(`✅ Nachricht an ${sent}/${users.length} User gesendet.`);
 });
@@ -643,7 +649,7 @@ bot.callbackQuery('leaderboard', async (ctx) => {
 bot.callbackQuery('help', async (ctx) => {
   await ctx.answerCallbackQuery();
   await ctx.reply(
-    `📖 *Hilfe & Befehle*\n\n` +
+    `📖 <b>Hilfe & Befehle</b>\n\n` +
     `/start - Spiel starten\n` +
     `/portfolio - Dein Portfolio\n` +
     `/rank - Rangliste\n` +
@@ -651,7 +657,7 @@ bot.callbackQuery('help', async (ctx) => {
     `/rent - Miete einsammeln\n` +
     `/pro - Pro-Version\n\n` +
     `💡 Nutze die Web App zum Traden!`,
-    { parse_mode: 'Markdown' }
+    { parse_mode: 'HTML' }
   );
 });
 
@@ -668,11 +674,11 @@ bot.callbackQuery('buy_pro', async (ctx) => {
     .text('❌ Ablehnen', `reject_pro:${profile.id}`);
 
   await bot.api.sendMessage(ADMIN_ID,
-    `💳 *PRO-ANFRAGE*\n\n` +
-    `👤 ${profile.first_name} (@${profile.username || '-'})\n` +
+    `💳 <b>PRO-ANFRAGE</b>\n\n` +
+    `👤 ${esc(profile.first_name)} (@${profile.username || '-'})\n` +
     `🆔 ${profile.telegram_id}\n\n` +
     `Freischalten?`,
-    { parse_mode: 'Markdown', reply_markup: kb }
+    { parse_mode: 'HTML', reply_markup: kb }
   );
 
   await ctx.reply('✅ Anfrage gesendet! Du wirst benachrichtigt sobald dein Pro-Zugang aktiviert wird.');
@@ -711,15 +717,15 @@ bot.callbackQuery(/^approve_pro:/, async (ctx) => {
   if (p) {
     try {
       await bot.api.sendMessage(p.telegram_id,
-        `⭐ *PRO AKTIVIERT!*\n\nHerzlichen Glückwunsch! Deine Pro-Version ist jetzt 30 Tage aktiv.\n\n` +
+        `⭐ <b>PRO AKTIVIERT!</b>\n\nHerzlichen Glückwunsch! Deine Pro-Version ist jetzt 30 Tage aktiv.\n\n` +
         `Neue Features:\n🔥 Hebelwetten\n🔔 Preis-Alarme\n🎨 Themes`,
-        { parse_mode: 'Markdown' }
+        { parse_mode: 'HTML' }
       );
-    } catch (e) { /* */ }
+    } catch (e) { /<b> </b>/ }
   }
 
   await ctx.answerCallbackQuery('✅ Freigeschaltet!');
-  await ctx.editMessageText(`✅ Pro für ${p?.first_name} aktiviert.`);
+  await ctx.editMessageText(`✅ Pro für ${esc(p?.first_name)} aktiviert.`);
 });
 
 bot.callbackQuery(/^reject_pro:/, async (ctx) => {
@@ -742,7 +748,7 @@ bot.callbackQuery('admin_users', async (ctx) => {
     `${i + 1}. ${u.first_name} (@${u.username || '-'}) - ${Number(u.balance).toFixed(0)}€`
   ).join('\n');
 
-  await ctx.reply(`👥 *Top 20 User*\n\n${list}`, { parse_mode: 'Markdown' });
+  await ctx.reply(`👥 <b>Top 20 User</b>\n\n${list}`, { parse_mode: 'HTML' });
 });
 
 bot.callbackQuery('admin_fetch', async (ctx) => {
@@ -761,7 +767,7 @@ bot.callbackQuery('admin_prices', async (ctx) => {
   const text = prices.map(p =>
     `${COINS[p.symbol]?.emoji || ''} ${p.symbol}: ${Number(p.price_eur).toFixed(2)}€ (${new Date(p.updated_at).toLocaleTimeString('de-DE')})`
   ).join('\n');
-  await ctx.reply(`📊 *Aktuelle Kurse*\n\n${text}`, { parse_mode: 'Markdown' });
+  await ctx.reply(`📊 <b>Aktuelle Kurse</b>\n\n${text}`, { parse_mode: 'HTML' });
 });
 
 bot.callbackQuery('admin_new_season', async (ctx) => {
@@ -798,7 +804,7 @@ bot.callbackQuery('admin_end_season', async (ctx) => {
 
   const dist = [0.40, 0.25, 0.15, 0.20]; // 40%, 25%, 15%, 20% (Rest)
   const winners = {};
-  let text = `🏆 *SEASON ENDE*\n\n💰 Fee Pool: ${pool.toFixed(2)}€\n\n`;
+  let text = `🏆 <b>SEASON ENDE</b>\n\n💰 Fee Pool: ${pool.toFixed(2)}€\n\n`;
 
   for (let i = 0; i < Math.min(leaders.length, 4); i++) {
     const prize = pool * dist[i];
@@ -806,7 +812,7 @@ bot.callbackQuery('admin_end_season', async (ctx) => {
     winners[i + 1] = { id: p.id, telegram_id: p.telegram_id, amount: prize };
 
     const medal = ['🥇', '🥈', '🥉', '🎖️'][i];
-    text += `${medal} ${p.first_name}: +${prize.toFixed(2)}€\n`;
+    text += `${medal} ${esc(p.first_name)}: +${prize.toFixed(2)}€\n`;
 
     // Auszahlen
     const { data: profile } = await supabase.from('profiles')
@@ -817,10 +823,10 @@ bot.callbackQuery('admin_end_season', async (ctx) => {
 
     try {
       await bot.api.sendMessage(p.telegram_id,
-        `${medal} *Glückwunsch!* Du hast Platz ${i + 1} belegt!\n\n💰 Gewinn: +${prize.toFixed(2)}€`,
-        { parse_mode: 'Markdown' }
+        `${medal} <b>Glückwunsch!</b> Du hast Platz ${i + 1} belegt!\n\n💰 Gewinn: +${prize.toFixed(2)}€`,
+        { parse_mode: 'HTML' }
       );
-    } catch (e) { /* */ }
+    } catch (e) { /<b> </b>/ }
   }
 
   await supabase.from('seasons')
@@ -828,7 +834,7 @@ bot.callbackQuery('admin_end_season', async (ctx) => {
     .eq('id', season.id);
   await supabase.from('fee_pool').update({ total_eur: 0 }).eq('id', 1);
 
-  await ctx.reply(text, { parse_mode: 'Markdown' });
+  await ctx.reply(text, { parse_mode: 'HTML' });
 });
 
 bot.callbackQuery('close', async (ctx) => {
@@ -871,14 +877,14 @@ async function handlePortfolio(ctx) {
     .text('🔄 Aktualisieren', 'portfolio');
 
   await ctx.reply(
-    `📊 *Dein Portfolio*\n\n` +
+    `📊 <b>Dein Portfolio</b>\n\n` +
     `💶 Kontostand: *${Number(profile.balance).toFixed(2)}€*\n` +
     `📦 Portfolio: *${portfolioValue.toFixed(2)}€*\n` +
     `💰 Gesamt: *${netWorth.toFixed(2)}€*\n` +
     `📈 Umsatz: ${Number(profile.total_volume).toFixed(2)}€\n\n` +
     (assetsText || '_Keine Assets_\n') +
     `\n🕐 ${new Date().toLocaleTimeString('de-DE')}`,
-    { parse_mode: 'Markdown', reply_markup: kb }
+    { parse_mode: 'HTML', reply_markup: kb }
   );
 }
 
@@ -887,7 +893,7 @@ async function handleLeaderboard(ctx) {
   const pool = await db.getFeePool();
   const season = await db.getActiveSeason();
 
-  let text = `🏆 *RANGLISTE*\n\n`;
+  let text = `🏆 <b>RANGLISTE</b>\n\n`;
 
   if (season) {
     const end = new Date(season.end_date);
@@ -898,7 +904,7 @@ async function handleLeaderboard(ctx) {
   text += `━━ 💎 Reichste Spieler ━━\n`;
   leaders.forEach((l, i) => {
     const medal = ['🥇', '🥈', '🥉'][i] || `${i + 1}.`;
-    text += `${medal} ${l.first_name}: ${Number(l.net_worth).toFixed(0)}€\n`;
+    text += `${medal} ${esc(l.first_name)}: ${Number(l.net_worth).toFixed(0)}€\n`;
   });
 
   // Meister Gewinn / Verlust
@@ -911,10 +917,10 @@ async function handleLeaderboard(ctx) {
     .single();
 
   if (topProfit) {
-    text += `\n🏅 Meister-Trader: ${topProfit.profiles?.first_name || '?'}`;
+    text += `\n🏅 Meister-Trader: ${esc(topProfit.profiles?.first_name || '?'}`;
   }
 
-  await ctx.reply(text, { parse_mode: 'Markdown' });
+  await ctx.reply(text, { parse_mode: 'HTML' });
 }
 
 // ============================================================
@@ -964,7 +970,7 @@ app.get('/api/chart/:symbol', async (req, res) => {
   const range = req.query.range || '3h';
 
   const hours = { '3h': 3, '12h': 12, '24h': 24 }[range] || 3;
-  const since = new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+  const since = new Date(Date.now() - hours <b> 60 </b> 60 * 1000).toISOString();
 
   const { data } = await supabase
     .from('market_history')
@@ -1219,8 +1225,8 @@ app.post('/api/leverage/open', async (req, res) => {
   if (!price) return res.status(500).json({ error: 'Kein Kurs' });
 
   const liqPrice = direction === 'long'
-    ? price * (1 - 1 / leverage)
-    : price * (1 + 1 / leverage);
+    ? price <b> (1 - 1 / leverage)
+    : price </b> (1 + 1 / leverage);
 
   await db.updateBalance(profile.id, Number(profile.balance) - Number(amount_eur));
 
@@ -1258,7 +1264,7 @@ app.post('/api/leverage/close', async (req, res) => {
   const price = await db.getCurrentPrice(pos.symbol);
   const priceDiff = price - Number(pos.entry_price);
   const pnlMultiplier = pos.direction === 'long' ? 1 : -1;
-  const pnlPercent = (priceDiff / Number(pos.entry_price)) * pos.leverage * pnlMultiplier;
+  const pnlPercent = (priceDiff / Number(pos.entry_price)) <b> pos.leverage </b> pnlMultiplier;
   const pnl = Number(pos.amount_eur) * pnlPercent;
   const payout = Math.max(0, Number(pos.amount_eur) + pnl);
 
@@ -1295,7 +1301,7 @@ app.get('/api/leverage/positions', async (req, res) => {
     const currentPrice = priceMap[pos.symbol] || Number(pos.entry_price);
     const priceDiff = currentPrice - Number(pos.entry_price);
     const pnlMultiplier = pos.direction === 'long' ? 1 : -1;
-    const pnlPercent = (priceDiff / Number(pos.entry_price)) * pos.leverage * pnlMultiplier;
+    const pnlPercent = (priceDiff / Number(pos.entry_price)) <b> pos.leverage </b> pnlMultiplier;
     const pnl = Number(pos.amount_eur) * pnlPercent;
     return { ...pos, current_price: currentPrice, unrealized_pnl: pnl };
   });
@@ -1339,27 +1345,27 @@ app.get('/api/transactions', async (req, res) => {
 // ============================================================
 
 // Preise alle 60 Sekunden aktualisieren
-cron.schedule('* * * * *', async () => {
+cron.schedule('<b> </b> <b> </b> *', async () => {
   await fetchAndStorePrices();
   await checkLiquidations();
   await checkPriceAlerts();
 });
 
 // Alte Market History aufräumen (älter als 7 Tage)
-cron.schedule('0 3 * * *', async () => {
-  const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+cron.schedule('0 3 <b> </b> *', async () => {
+  const cutoff = new Date(Date.now() - 7 <b> 24 </b> 60 <b> 60 </b> 1000).toISOString();
   await supabase.from('market_history').delete().lt('recorded_at', cutoff);
   console.log('🧹 Alte Markt-Daten bereinigt');
 });
 
 // Season-Check (automatisches Ende)
-cron.schedule('0 0 * * *', async () => {
+cron.schedule('0 0 <b> </b> *', async () => {
   const season = await db.getActiveSeason();
   if (season && new Date(season.end_date) <= new Date()) {
     console.log('🏆 Season automatisch beendet - Admin muss /admin → Season auswerten klicken');
     try {
       await bot.api.sendMessage(ADMIN_ID, '🏆 Die aktuelle Season ist abgelaufen! Bitte auswerten via /admin');
-    } catch (e) { /* */ }
+    } catch (e) { /<b> </b>/ }
   }
 });
 
