@@ -134,12 +134,38 @@ const db = {
     return Number(data?.total_eur || 0);
   },
 
-  async getLeaderboard(limit = 10) {
-    const { data } = await supabase
-      .from('leaderboard')
-      .select('*')
-      .limit(limit);
-    return data || [];
+  async getLeaderboard(limit = 20) {
+    const [ { data: profiles }, { data: assets }, { data: prices } ] = await Promise.all([
+      supabase.from('profiles').select('id, username, first_name, balance, total_volume, telegram_id'),
+      supabase.from('assets').select('profile_id, symbol, amount'),
+      supabase.from('current_prices').select('symbol, price_eur')
+    ]);
+
+    const priceMap = {};
+    (prices || []).forEach(p => priceMap[p.symbol] = Number(p.price_eur));
+
+    const userAssets = {};
+    (assets || []).forEach(a => {
+      if (!userAssets[a.profile_id]) userAssets[a.profile_id] = [];
+      userAssets[a.profile_id].push(a);
+    });
+
+    const leaders = (profiles || []).map(p => {
+      let cryptoValue = 0;
+      if (userAssets[p.id]) {
+        userAssets[p.id].forEach(asset => {
+          const currentPrice = priceMap[asset.symbol] || 0;
+          cryptoValue += Number(asset.amount) * currentPrice;
+        });
+      }
+      return {
+        ...p,
+        net_worth: Number(p.balance) + cryptoValue
+      };
+    });
+
+    leaders.sort((a, b) => b.net_worth - a.net_worth);
+    return leaders.slice(0, limit);
   },
 
   async getActiveSeason() {

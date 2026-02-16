@@ -140,10 +140,10 @@ export default function RankView() {
                   </div>
                   <div className="text-right">
                     <p className={`text-sm font-mono font-bold ${isMe ? 'text-white' : 'text-neon-gold'}`}>
-                      {Number(p.balance || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
+                      {Number(p.net_worth || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
                     </p>
                     <p className="text-[9px] uppercase tracking-wider font-semibold opacity-40 mt-0.5">
-                      Guthaben
+                      Gesamtvermögen
                     </p>
                   </div>
                 </div>

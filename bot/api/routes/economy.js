@@ -42,19 +42,12 @@ router.get('/chart/:symbol', async (req, res) => {
 
 router.get('/leaderboard', async (req, res) => {
   try {
-    const { data, error } = await db.supabase
-      .from('profiles')
-      .select('username, first_name, balance, total_volume, telegram_id')
-      .order('balance', { ascending: false })
-      .limit(20);
-
-    if (error) throw error;
-
+    const leaders = await db.getLeaderboard(20);
     const pool = await db.getFeePool();
     const activeSeason = await db.getActiveSeason();
 
     res.json({ 
-      leaders: data || [],
+      leaders: leaders || [],
       season: activeSeason ? activeSeason.name : "Season 1",
       pool: pool
     });
