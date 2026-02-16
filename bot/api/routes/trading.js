@@ -1,17 +1,9 @@
-// ============================================================
-// API ROUTE: TRADING (api/routes/trading.js)
-// ============================================================
-
 const express = require('express');
 const router = express.Router();
 const { db } = require('../../core/database');
-const { parseTelegramUser } = require('../server');
+const { parseTelegramUser } = require('../auth');
 const { COINS, FEE_RATE } = require('../../core/config');
 
-/**
- * GET /api/trade/prices
- * Liefert die aktuellsten Kurse aller unterstützten Coins
- */
 router.get('/prices', async (req, res) => {
   try {
     const prices = await db.getAllPrices();
@@ -21,10 +13,6 @@ router.get('/prices', async (req, res) => {
   }
 });
 
-/**
- * GET /api/trade/chart/:symbol
- * Liefert historische Daten für Charts (3h, 12h, 24h)
- */
 router.get('/chart/:symbol', async (req, res) => {
   const { symbol } = req.params;
   const range = req.query.range || '3h';
@@ -48,10 +36,6 @@ router.get('/chart/:symbol', async (req, res) => {
   }
 });
 
-/**
- * POST /api/trade/execute
- * Führt einen Kauf oder Verkauf aus
- */
 router.post('/execute', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -80,7 +64,6 @@ router.post('/execute', async (req, res) => {
         return res.status(400).json({ error: 'Nicht genug Guthaben' });
       }
 
-      // Transaktion ausführen
       await db.updateBalance(profile.id, Number(profile.balance) - euroAmount);
       await db.upsertAsset(profile.id, symbol, cryptoAmount, price);
       await db.addToFeePool(fee);
@@ -90,7 +73,6 @@ router.post('/execute', async (req, res) => {
       res.json({ success: true, action: 'buy', crypto_amount: cryptoAmount, fee });
 
     } else {
-      // SELL Logik
       const asset = await db.getAsset(profile.id, symbol);
       if (!asset || Number(asset.amount) <= 0) {
         return res.status(400).json({ error: 'Kein Bestand' });

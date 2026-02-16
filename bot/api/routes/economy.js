@@ -1,16 +1,9 @@
-// ============================================================
-// API ROUTE: ECONOMY (api/routes/economy.js)
-// ============================================================
-
 const express = require('express');
 const router = express.Router();
 const { db } = require('../../core/database');
-const { parseTelegramUser } = require('../server');
+const { parseTelegramUser } = require('../auth');
 const { COINS } = require('../../core/config');
 
-// --- REAL ESTATE (Immobilien) ---
-
-// GET /api/economy/realestate/types - Alle verfügbaren Immobilientypen
 router.get('/realestate/types', async (req, res) => {
   try {
     const types = await db.getRealEstateTypes();
@@ -20,7 +13,6 @@ router.get('/realestate/types', async (req, res) => {
   }
 });
 
-// GET /api/economy/realestate/mine - Eigene Immobilien des Nutzers
 router.get('/realestate/mine', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -36,7 +28,6 @@ router.get('/realestate/mine', async (req, res) => {
   }
 });
 
-// POST /api/economy/realestate/buy - Immobilie kaufen
 router.post('/realestate/buy', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -47,7 +38,6 @@ router.post('/realestate/buy', async (req, res) => {
     const profile = await db.getProfile(tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
-    // Typ-Details direkt aus DB holen (dafür ist kein Helper im db-Objekt definiert, wir nutzen supabase direkt)
     const { data: reType } = await db.supabase
       .from('real_estate_types')
       .select('*')
@@ -72,8 +62,6 @@ router.post('/realestate/buy', async (req, res) => {
   }
 });
 
-// --- COLLECTIBLES (Sammlerstücke) ---
-
 router.get('/collectibles/mine', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -90,9 +78,6 @@ router.get('/collectibles/mine', async (req, res) => {
   }
 });
 
-// --- LEVERAGE (Hebel-Trading) ---
-
-// GET /api/economy/leverage/positions - Offene Positionen
 router.get('/leverage/positions', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -124,7 +109,6 @@ router.get('/leverage/positions', async (req, res) => {
   }
 });
 
-// POST /api/economy/leverage/open - Position eröffnen
 router.post('/leverage/open', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });

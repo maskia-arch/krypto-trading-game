@@ -1,16 +1,8 @@
-// ============================================================
-// API ROUTE: PROFILE (api/routes/profile.js)
-// ============================================================
-
 const express = require('express');
 const router = express.Router();
 const { db } = require('../../core/database');
-const { parseTelegramUser } = require('../server');
+const { parseTelegramUser } = require('../auth');
 
-/**
- * GET /api/profile
- * Liefert das vollständige Nutzerprofil inkl. Assets und aktuellen Kursen
- */
 router.get('/', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -33,10 +25,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-/**
- * GET /api/profile/transactions
- * Liefert die letzten 50 Transaktionen des Nutzers
- */
 router.get('/transactions', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -60,10 +48,6 @@ router.get('/transactions', async (req, res) => {
   }
 });
 
-/**
- * POST /api/profile/collect-rent
- * Manuelles Einsammeln der Miete über die Web App
- */
 router.post('/collect-rent', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
