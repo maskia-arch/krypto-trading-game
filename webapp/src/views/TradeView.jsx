@@ -8,7 +8,7 @@ const COINS = {
 };
 const FEE = 0.005;
 
-export default function TradePanel() {
+export default function TradeView() {
   const { profile, assets, prices, buyCrypto, sellCrypto, showToast } = useStore();
   const [coin, setCoin] = useState('BTC');
   const [action, setAction] = useState('buy');
@@ -24,12 +24,10 @@ export default function TradePanel() {
   const avgBuy = Number(asset?.avg_buy || 0);
   const pnl = holding > 0 ? holdVal - holding * avgBuy : 0;
 
-  // Buy calc
   const euroAmt = Number(euroIn) || 0;
   const fee = euroAmt * FEE;
   const cryptoGet = price > 0 ? (euroAmt - fee) / price : 0;
 
-  // Sell calc
   const sellAmt = Number(cryptoIn) || 0;
   const sellGross = sellAmt * price;
   const sellFee = sellGross * FEE;
@@ -61,8 +59,6 @@ export default function TradePanel() {
 
   return (
     <div className="space-y-3 pb-4">
-
-      {/* ── Coin Selector ──────────────────────── */}
       <div className="flex gap-2">
         {Object.entries(COINS).map(([sym, info]) => {
           const active = coin === sym;
@@ -86,7 +82,6 @@ export default function TradePanel() {
         })}
       </div>
 
-      {/* ── Price + Holding Card ──────────────── */}
       <div className="card p-4">
         <div className="flex items-end justify-between">
           <div>
@@ -109,7 +104,6 @@ export default function TradePanel() {
         </div>
       </div>
 
-      {/* ── Buy / Sell Toggle ────────────────── */}
       <div className="flex rounded-2xl p-1" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-dim)' }}>
         {['buy', 'sell'].map(a => {
           const active = action === a;
@@ -127,12 +121,9 @@ export default function TradePanel() {
         })}
       </div>
 
-      {/* ── Trade Form ───────────────────────── */}
       <div className="card p-4 space-y-3">
-
         {action === 'buy' ? (
           <>
-            {/* Euro Input */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[11px] font-semibold" style={{ color: 'var(--text-dim)' }}>Betrag in EUR</label>
@@ -147,7 +138,6 @@ export default function TradePanel() {
               />
             </div>
 
-            {/* Quick % Buttons */}
             <div className="grid grid-cols-4 gap-2">
               {[10, 25, 50, 100].map(pct => (
                 <button key={pct} onClick={() => setEuroIn((balance * pct / 100).toFixed(2))}
@@ -155,7 +145,6 @@ export default function TradePanel() {
               ))}
             </div>
 
-            {/* Calculation */}
             {euroAmt > 0 && (
               <div className="rounded-xl p-3 space-y-1.5" style={{ background: 'rgba(255,255,255,0.015)' }}>
                 <div className="flex justify-between text-[11px]">
@@ -181,7 +170,6 @@ export default function TradePanel() {
           </>
         ) : (
           <>
-            {/* Crypto Input */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
                 <label className="text-[11px] font-semibold" style={{ color: 'var(--text-dim)' }}>Menge {coin}</label>
@@ -237,7 +225,6 @@ export default function TradePanel() {
         )}
       </div>
 
-      {/* ── Portfolio Quick View ─────────────── */}
       {assets.filter(a => Number(a.amount) > 0).length > 0 && (
         <div className="card p-4">
           <p className="text-[10px] uppercase tracking-wider font-semibold mb-3" style={{ color: 'var(--text-dim)' }}>

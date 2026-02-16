@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import client from '../api/client';
 import useStore from '../lib/store';
 
-export default function AssetsPanel() {
-  const { profile, loadProfile, showToast } = useStore();
+export default function AssetsView() {
+  const { profile, fetchProfile, showToast } = useStore();
   const [sub, setSub] = useState('realestate');
   const [reTypes, setReTypes] = useState([]);
   const [myRE, setMyRE] = useState([]);
@@ -14,45 +14,61 @@ export default function AssetsPanel() {
   const vol = Number(profile?.total_volume || 0);
   const bal = Number(profile?.balance || 0);
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { loadData(); }, []);
 
-  const load = async () => {
+  const loadData = async () => {
     setLoading(true);
     try {
+      // Wenn die Endpunkte für Collectibles in deinem Backend existieren,
+      // müssen die URLs hier ggf. angepasst werden.
       const [a, b, c, d] = await Promise.all([
-        api.getRealEstateTypes(), api.getMyRealEstate(),
-        api.getCollectibleTypes(), api.getMyCollectibles(),
+        client.get('/api/economy/realestate/types'),
+        client.get('/api/economy/realestate/mine'),
+        client.get('/api/economy/collectibles/types').catch(() => ({ data: { types: [] } })),
+        client.get('/api/economy/collectibles/mine').catch(() => ({ data: { collectibles: [] } })),
       ]);
-      setReTypes(a.types || []); setMyRE(b.properties || []);
-      setCTypes(c.types || []); setMyColl(d.collectibles || []);
-    } catch (e) { /* */ }
+      setReTypes(a.data.types || []); 
+      setMyRE(b.data.properties || []);
+      setCTypes(c.data.types || []); 
+      setMyColl(d.data.collectibles || []);
+    } catch (e) {
+      console.error("Failed to load assets data", e);
+    }
     setLoading(false);
   };
 
   const buyRE = async (id) => {
     try {
-      const r = await api.buyRealEstate(id);
-      showToast(`🏠 ${r.property} gekauft!`);
-      await loadProfile(); await load();
-    } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
+      const r = await client.post('/api/economy/realestate/buy', { type_id: id });
+      showToast(`🏠 ${r.data.property} gekauft!`);
+      await fetchProfile(); 
+      await loadData();
+    } catch (e) { 
+      showToast(`❌ ${e.response?.data?.error || e.message}`, 'error'); 
+    }
   };
 
-  const collect = async () => {
+  const collectRent = async () => {
     try {
-      const r = await api.collectRent();
-      r.rent_collected > 0
-        ? showToast(`💰 ${r.rent_collected.toFixed(2)}€ Miete!`)
+      const r = await client.post('/api/profile/collect-rent');
+      r.data.rent_collected > 0
+        ? showToast(`💰 ${r.data.rent_collected.toFixed(2)}€ Miete!`)
         : showToast('⏳ Noch keine Miete (24h)', 'error');
-      if (r.rent_collected > 0) await loadProfile();
-    } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
+      if (r.data.rent_collected > 0) await fetchProfile();
+    } catch (e) { 
+      showToast(`❌ ${e.response?.data?.error || e.message}`, 'error'); 
+    }
   };
 
   const buyColl = async (id) => {
     try {
-      const r = await api.buyCollectible(id);
-      showToast(`💎 ${r.item} gekauft!`);
-      await loadProfile(); await load();
-    } catch (e) { showToast(`❌ ${e.message}`, 'error'); }
+      const r = await client.post('/api/economy/collectibles/buy', { type_id: id });
+      showToast(`💎 ${r.data.item} gekauft!`);
+      await fetchProfile(); 
+      await loadData();
+    } catch (e) { 
+      showToast(`❌ ${e.response?.data?.error || e.message}`, 'error'); 
+    }
   };
 
   if (loading) {
@@ -67,8 +83,6 @@ export default function AssetsPanel() {
 
   return (
     <div className="space-y-3 pb-4">
-
-      {/* ── Sub Tabs ─────────────────────────── */}
       <div className="flex gap-1.5">
         {[
           { id: 'realestate', label: '🏠 Immobilien', c: 'neon-blue' },
@@ -77,7 +91,7 @@ export default function AssetsPanel() {
           const act = sub === t.id;
           return (
             <button key={t.id} onClick={() => setSub(t.id)}
-              className={`btn-press flex-1 py-2 rounded-xl text-xs font-bold transition-all`}
+              className="btn-press flex-1 py-2 rounded-xl text-xs font-bold transition-all"
               style={{
                 background: act ? `var(--${t.c})10` : 'var(--bg-card)',
                 border: `1px solid ${act ? `var(--${t.c})25` : 'var(--border-dim)'}`,
@@ -89,7 +103,6 @@ export default function AssetsPanel() {
         })}
       </div>
 
-      {/* ── Stats Bar ────────────────────────── */}
       <div className="card p-3">
         <div className="grid grid-cols-3 gap-3 text-center">
           <div>
@@ -109,14 +122,13 @@ export default function AssetsPanel() {
 
       {sub === 'realestate' ? (
         <>
-          {/* ── My Properties ──────────────────── */}
           {myRE.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center justify-between px-1">
                 <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--text-dim)' }}>
                   Meine Immobilien ({myRE.length})
                 </p>
-                <button onClick={collect}
+                <button onClick={collectRent}
                   className="btn-press px-3 py-1.5 rounded-lg text-[10px] font-bold bg-neon-green/10 text-neon-green border border-neon-green/20">
                   💰 Miete einsammeln
                 </button>
@@ -135,7 +147,6 @@ export default function AssetsPanel() {
             </div>
           )}
 
-          {/* ── Shop ───────────────────────────── */}
           <p className="text-[10px] uppercase tracking-wider font-semibold px-1 pt-1" style={{ color: 'var(--text-dim)' }}>
             Immobilien-Shop
           </p>
@@ -171,7 +182,6 @@ export default function AssetsPanel() {
         </>
       ) : (
         <>
-          {/* ── My Collectibles ────────────────── */}
           {myColl.length > 0 && (
             <div>
               <p className="text-[10px] uppercase tracking-wider font-semibold px-1 mb-2" style={{ color: 'var(--text-dim)' }}>
@@ -188,7 +198,6 @@ export default function AssetsPanel() {
             </div>
           )}
 
-          {/* ── Collectible Shop ───────────────── */}
           <p className="text-[10px] uppercase tracking-wider font-semibold px-1 pt-1" style={{ color: 'var(--text-dim)' }}>
             Besitztümer-Shop
           </p>

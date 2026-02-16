@@ -1,19 +1,32 @@
 import React, { useEffect, useState } from 'react';
 import useStore from '../lib/store';
-import { api, getTelegramId } from '../lib/api';
+import client from '../api/client';
 
-export default function RankPanel() {
-  const { leaderboard, season, feePool, loadLeaderboard } = useStore();
+export default function RankView() {
+  const { leaderboard, season, feePool, fetchProfile } = useStore();
   const [txs, setTxs] = useState([]);
   const [sub, setSub] = useState('rank');
   const [loading, setLoading] = useState(true);
-  const myId = getTelegramId();
+  
+  const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+  const myId = tgUser?.id;
 
-  useEffect(() => { load(); }, []);
-  const load = async () => {
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  const loadData = async () => {
     setLoading(true);
-    await loadLeaderboard();
-    try { const r = await api.getTransactions(); setTxs(r.transactions || []); } catch (e) { /* */ }
+    // Wir rufen fetchProfile auf, falls Leaderboard-Daten im Store zusammen mit dem Profil aktualisiert werden
+    // Andernfalls müsste hier ein dedizierter API Call für das Leaderboard hin (z.B. client.get('/api/economy/leaderboard'))
+    await fetchProfile(); 
+    
+    try {
+      const res = await client.get('/api/profile/transactions');
+      setTxs(res.data.transactions || []);
+    } catch (e) {
+      console.error("Failed to load transactions", e);
+    }
     setLoading(false);
   };
 
@@ -40,8 +53,6 @@ export default function RankPanel() {
 
   return (
     <div className="space-y-3 pb-4">
-
-      {/* ── Sub Tabs ─────────────────────────── */}
       <div className="flex gap-1.5">
         {[
           { id: 'rank', label: '🏆 Rangliste' },
@@ -50,7 +61,7 @@ export default function RankPanel() {
           const act = sub === t.id;
           return (
             <button key={t.id} onClick={() => setSub(t.id)}
-              className={`btn-press flex-1 py-2 rounded-xl text-xs font-bold transition-all`}
+              className="btn-press flex-1 py-2 rounded-xl text-xs font-bold transition-all"
               style={{
                 background: act ? 'rgba(251,191,36,0.08)' : 'var(--bg-card)',
                 border: `1px solid ${act ? 'rgba(251,191,36,0.2)' : 'var(--border-dim)'}`,
@@ -64,7 +75,6 @@ export default function RankPanel() {
 
       {sub === 'rank' ? (
         <>
-          {/* ── Season Card ──────────────────── */}
           {season && (
             <div className="card p-4 relative overflow-hidden"
                  style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.06) 0%, rgba(168,85,247,0.04) 100%)' }}>
@@ -76,11 +86,10 @@ export default function RankPanel() {
                 <div className="text-right">
                   <p className="text-[10px]" style={{ color: 'var(--text-dim)' }}>Noch {daysLeft} Tage</p>
                   <p className="text-xl font-mono font-bold text-neon-gold">
-                    {feePool.toFixed(2)}€
+                    {feePool?.toFixed(2) || '0.00'}€
                   </p>
                 </div>
               </div>
-              {/* Prize Split */}
               <div className="grid grid-cols-4 gap-1.5 mt-3">
                 {[
                   { m: '🥇', pct: 40 },
@@ -90,16 +99,15 @@ export default function RankPanel() {
                 ].map((p, i) => (
                   <div key={i} className="text-center py-1.5 rounded-lg" style={{ background: 'rgba(0,0,0,0.2)' }}>
                     <span className="text-sm">{p.m}</span>
-                    <p className="text-[10px] font-mono text-neon-gold">{(feePool * p.pct / 100).toFixed(0)}€</p>
+                    <p className="text-[10px] font-mono text-neon-gold">{((feePool || 0) * p.pct / 100).toFixed(0)}€</p>
                   </div>
                 ))}
               </div>
             </div>
           )}
 
-          {/* ── Leaderboard ─────────────────── */}
           <div className="space-y-1.5">
-            {leaderboard.map((p, i) => {
+            {leaderboard?.map((p, i) => {
               const medal = ['🥇', '🥈', '🥉'][i];
               const isMe = Number(p.telegram_id) === Number(myId);
               return (
@@ -135,7 +143,7 @@ export default function RankPanel() {
                 </div>
               );
             })}
-            {leaderboard.length === 0 && (
+            {(!leaderboard || leaderboard.length === 0) && (
               <div className="card p-8 text-center">
                 <span className="text-4xl">🏆</span>
                 <p className="text-xs mt-2" style={{ color: 'var(--text-dim)' }}>Noch keine Spieler</p>
@@ -145,7 +153,6 @@ export default function RankPanel() {
         </>
       ) : (
         <>
-          {/* ── Transaction History ──────────── */}
           <div className="space-y-1.5">
             {txs.map(tx => {
               const m = TX_META[tx.type] || { label: tx.type, emoji: '📝', sign: '', color: '' };

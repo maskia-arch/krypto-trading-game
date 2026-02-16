@@ -16,12 +16,11 @@ const COIN_THEME = {
   LTC: { stroke: '#bfbbbb', gradStart: 'rgba(191,187,187,0.20)', gradEnd: 'rgba(191,187,187,0)' },
 };
 
-export default function ChartPanel() {
+export default function ChartView() {
   const { chartData, chartSymbol, chartRange, prices, loadChart, setChartSymbol, setChartRange } = useStore();
   const [loading, setLoading] = useState(false);
   const refreshTimer = useRef(null);
 
-  // Load chart + auto-refresh every 30s
   const doLoad = useCallback(async (sym, range) => {
     setLoading(true);
     await loadChart(sym, range);
@@ -37,7 +36,6 @@ export default function ChartPanel() {
   const switchCoin = (sym) => { setChartSymbol(sym); };
   const switchRange = (r) => { setChartRange(r); };
 
-  // Format data
   const data = chartData.map(d => ({
     time: new Date(d.recorded_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
     price: Number(d.price_eur),
@@ -73,7 +71,6 @@ export default function ChartPanel() {
   return (
     <div className="space-y-3 pb-4">
 
-      {/* ── Coin Tabs ──────────────────────────── */}
       <div className="flex gap-1.5">
         {Object.entries(COIN_THEME).map(([sym, t]) => {
           const active = chartSymbol === sym;
@@ -93,7 +90,6 @@ export default function ChartPanel() {
         })}
       </div>
 
-      {/* ── Live Price Header ────────────────── */}
       <div className="card p-4">
         <div className="flex items-end justify-between">
           <div>
@@ -115,7 +111,6 @@ export default function ChartPanel() {
         </div>
       </div>
 
-      {/* ── Range Selector ───────────────────── */}
       <div className="flex gap-1.5">
         {RANGES.map(r => {
           const active = chartRange === r.key;
@@ -133,7 +128,6 @@ export default function ChartPanel() {
         })}
       </div>
 
-      {/* ── Chart ────────────────────────────── */}
       <div className="card overflow-hidden" style={{ padding: '12px 4px 4px 0' }}>
         {loading && data.length === 0 ? (
           <div className="flex items-center justify-center h-72">
@@ -141,7 +135,6 @@ export default function ChartPanel() {
           </div>
         ) : data.length > 0 ? (
           <div style={{ position: 'relative' }}>
-            {/* Live indicator overlay */}
             {loading && (
               <div className="absolute top-2 right-3 z-10 flex items-center gap-1.5 px-2 py-1 rounded-lg"
                    style={{ background: 'rgba(6,8,15,0.8)' }}>
@@ -175,7 +168,6 @@ export default function ChartPanel() {
                   axisLine={false}
                   tickLine={false}
                 />
-                {/* Opening price reference line */}
                 <ReferenceLine y={first} stroke="rgba(255,255,255,0.06)" strokeDasharray="4 4" />
                 <Tooltip content={<CustomTooltip />} cursor={{ stroke: 'rgba(255,255,255,0.08)' }} />
                 <Area
@@ -200,7 +192,6 @@ export default function ChartPanel() {
         )}
       </div>
 
-      {/* ── Stats Row ────────────────────────── */}
       {data.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {[

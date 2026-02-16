@@ -1,13 +1,12 @@
 import { create } from 'zustand';
-import { api } from './api';
+import client from '../api/client';
 
 const useStore = create((set, get) => ({
-  // ── State ───────────────────────────────────────────
   version: '0.1',
   profile: null,
   assets: [],
   prices: {},
-  prevPrices: {},          // Für Tick-Up / Tick-Down Animation
+  prevPrices: {},
   chartData: [],
   chartSymbol: 'BTC',
   chartRange: '3h',
@@ -16,10 +15,9 @@ const useStore = create((set, get) => ({
   feePool: 0,
   loading: true,
   error: null,
-  tab: 'trade',            // trade | chart | assets | rank
+  tab: 'trade',
   toast: null,
 
-  // ── Actions ─────────────────────────────────────────
   setTab: (tab) => set({ tab }),
   setChartSymbol: (s) => set({ chartSymbol: s }),
   setChartRange: (r) => set({ chartRange: r }),
@@ -31,15 +29,16 @@ const useStore = create((set, get) => ({
 
   loadVersion: async () => {
     try {
-      const { version } = await api.getVersion();
-      set({ version });
-    } catch (e) { /* keep default */ }
+      const res = await client.get('/api/version');
+      set({ version: res.data.version });
+    } catch (e) {}
   },
 
-  loadProfile: async () => {
+  fetchProfile: async () => {
     try {
       set({ loading: true, error: null });
-      const data = await api.getProfile();
+      const res = await client.get('/api/profile');
+      const data = res.data;
       const priceMap = {};
       (data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
       set({
@@ -54,42 +53,46 @@ const useStore = create((set, get) => ({
     }
   },
 
+  loadProfile: async () => {
+    return get().fetchProfile();
+  },
+
   refreshPrices: async () => {
     try {
       const old = { ...get().prices };
-      const data = await api.getPrices();
+      const res = await client.get('/api/prices');
       const priceMap = {};
-      (data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
+      (res.data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
       set({ prices: priceMap, prevPrices: old });
-    } catch (e) { /* silent */ }
+    } catch (e) {}
   },
 
   loadChart: async (symbol, range) => {
     try {
       const s = symbol || get().chartSymbol;
       const r = range || get().chartRange;
-      const data = await api.getChart(s, r);
-      set({ chartData: data.data || [], chartSymbol: s, chartRange: r });
-    } catch (e) { /* silent */ }
+      const res = await client.get(`/api/prices/chart?symbol=${s}&range=${r}`);
+      set({ chartData: res.data.data || [], chartSymbol: s, chartRange: r });
+    } catch (e) {}
   },
 
   buyCrypto: async (symbol, amountEur) => {
-    const result = await api.buy(symbol, amountEur);
-    await get().loadProfile();
-    return result;
+    const res = await client.post('/api/trading/buy', { symbol, amount_eur: amountEur });
+    await get().fetchProfile();
+    return res.data;
   },
 
   sellCrypto: async (symbol, amountCrypto) => {
-    const result = await api.sell(symbol, amountCrypto);
-    await get().loadProfile();
-    return result;
+    const res = await client.post('/api/trading/sell', { symbol, amount_crypto: amountCrypto });
+    await get().fetchProfile();
+    return res.data;
   },
 
   loadLeaderboard: async () => {
     try {
-      const data = await api.getLeaderboard();
-      set({ leaderboard: data.leaders || [], season: data.season, feePool: data.pool || 0 });
-    } catch (e) { /* silent */ }
+      const res = await client.get('/api/economy/leaderboard');
+      set({ leaderboard: res.data.leaders || [], season: res.data.season, feePool: res.data.pool || 0 });
+    } catch (e) {}
   },
 }));
 
