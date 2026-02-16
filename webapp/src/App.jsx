@@ -26,13 +26,28 @@ const COIN_META = {
 };
 
 export default function App() {
-  const { tab, setTab, fetchProfile, prices, prevPrices } = useStore();
+  const { tab, setTab, fetchProfile, refreshPrices, loadVersion, prices, prevPrices } = useStore();
 
   useEffect(() => {
+    // 1. Initialer Load beim Öffnen der WebApp
+    loadVersion();
     fetchProfile();
-    const interval = setInterval(fetchProfile, 10000);
-    return () => clearInterval(interval);
-  }, [fetchProfile]);
+
+    // 2. Der ValueTrade Engine Herzschlag (Ticker alle 60 Sekunden updaten)
+    const priceInterval = setInterval(() => {
+      refreshPrices();
+    }, 60000);
+
+    // 3. Profil-Update (Guthaben) alle 15 Sekunden (für flüssiges Trading)
+    const profileInterval = setInterval(() => {
+      fetchProfile();
+    }, 15000);
+
+    return () => {
+      clearInterval(priceInterval);
+      clearInterval(profileInterval);
+    };
+  }, [fetchProfile, refreshPrices, loadVersion]);
 
   return (
     <div className="min-h-screen text-white pb-24 select-none">
