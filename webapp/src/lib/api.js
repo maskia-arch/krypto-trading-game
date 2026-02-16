@@ -50,7 +50,7 @@ export const api = {
   getChart:             (symbol, range = '3h') => apiCall(`/api/economy/chart/${symbol}?range=${range}`),
   buy:                  (symbol, amount_eur) => apiCall('/api/trade', { method: 'POST', body: JSON.stringify({ action: 'buy', symbol, amount_eur }) }),
   sell:                 (symbol, amount_crypto) => apiCall('/api/trade', { method: 'POST', body: JSON.stringify({ action: 'sell', symbol, amount_crypto }) }),
-  getLeaderboard:       () => apiCall('/api/leaderboard'), 
+  getLeaderboard:       () => apiCall('/api/economy/leaderboard'), 
   getRealEstateTypes:   () => apiCall('/api/economy/realestate/types'),
   getMyRealEstate:      () => apiCall('/api/economy/realestate/mine'),
   buyRealEstate:        (type_id) => apiCall('/api/economy/realestate/buy', { method: 'POST', body: JSON.stringify({ type_id }) }),
