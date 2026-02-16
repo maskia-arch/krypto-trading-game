@@ -44,8 +44,8 @@ export default function ChartView() {
 
   useEffect(() => {
     doLoad(chartSymbol, chartRange);
-    // Intervall auf 15s verkürzt für echtes Live-Gefühl
-    refreshTimer.current = setInterval(() => doLoad(chartSymbol, chartRange), 15000);
+    // Intervall auf 60s angepasst, um perfekt mit der 45s Backend-Engine zu synchronisieren
+    refreshTimer.current = setInterval(() => doLoad(chartSymbol, chartRange), 60000);
     return () => clearInterval(refreshTimer.current);
   }, [chartSymbol, chartRange, doLoad]);
 

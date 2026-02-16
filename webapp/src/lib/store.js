@@ -2,9 +2,8 @@ import { create } from 'zustand';
 import { api } from './api';
 
 const useStore = create((set, get) => ({
-  // Branding & Status
   appName: 'ValueTradeGame',
-  version: '0.1', // Initialer Fallback-Wert
+  version: '0.1',
   profile: null,
   assets: [],
   prices: {},
@@ -29,11 +28,9 @@ const useStore = create((set, get) => ({
     setTimeout(() => set({ toast: null }), 3000);
   },
 
-  // Verbessertes Laden der Version
   loadVersion: async () => {
     try {
-      // t-Parameter erzwingt das Umgehen von Browser-Caches
-      const res = await fetch('/version.txt?t=' + Date.now(), {
+      const res = await fetch('./version.txt?t=' + Date.now(), {
         cache: 'no-store'
       });
       
@@ -42,17 +39,10 @@ const useStore = create((set, get) => ({
         const cleanVersion = text.trim();
         if (cleanVersion) {
           set({ version: cleanVersion });
-          return;
         }
       }
-      
-      // Fallback auf API falls Datei nicht lesbar
-      const data = await api.getVersion().catch(() => null);
-      if (data?.version) set({ version: data.version });
-      
     } catch (e) {
-      console.warn("Version-Fetch fehlgeschlagen, nutze Default.");
-      set({ version: 'v0.1.25' }); // Dein aktueller Stand
+      set({ version: '0.1' });
     }
   },
 
@@ -88,7 +78,6 @@ const useStore = create((set, get) => ({
     } catch (e) {}
   },
 
-  // ValueTrade Engine Chart-Loader
   loadChart: async (symbol, range) => {
     const s = symbol || get().chartSymbol;
     const r = range || get().chartRange;
@@ -96,7 +85,6 @@ const useStore = create((set, get) => ({
     try {
       const data = await api.getChart(s, r);
       
-      // Wenn Daten kommen, aktualisieren wir den State
       if (data && data.data) {
         set({ 
           chartData: data.data, 
@@ -104,11 +92,9 @@ const useStore = create((set, get) => ({
           chartRange: r 
         });
       } else {
-        // Falls das Array leer ist (Engine liefert noch nichts)
         set({ chartData: [], chartSymbol: s, chartRange: r });
       }
     } catch (e) {
-      console.error("ValueTrade Engine: Chart-Verbindung unterbrochen");
       set({ chartData: [] });
     }
   },
