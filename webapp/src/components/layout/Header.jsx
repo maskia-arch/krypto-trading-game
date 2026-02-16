@@ -9,21 +9,23 @@ export default function Header() {
     <div className="px-4 pt-3 pb-2">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
+          {/* Pulsierender Live-Indikator */}
           <div className="live-dot" />
           <div>
             <h1 className="text-sm font-bold tracking-tight">
-              Krypto Game
+              ValueTradeGame
               <span className="text-[10px] font-mono font-normal text-[var(--text-dim)] ml-1.5">
-                v{version || '1.0'}
+                {version ? `v${version}` : 'v1.0'}
               </span>
             </h1>
-            <p className="text-[11px] text-[var(--text-dim)]">
-              {profile?.first_name || 'Trader'}
+            <p className="text-[11px] text-[var(--text-dim)] font-medium">
+              {profile?.username || profile?.first_name || 'Trader'}
             </p>
           </div>
         </div>
+        
         <div className="text-right">
-          <p className={`text-base font-mono font-bold ${
+          <p className={`text-base font-mono font-bold transition-all duration-500 ${
             balance >= 10000 
               ? 'text-neon-green glow-green' 
               : balance > 0 
@@ -32,7 +34,9 @@ export default function Header() {
           }`}>
             {balance.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
           </p>
-          <p className="text-[10px] text-[var(--text-dim)]">Kontostand</p>
+          <p className="text-[10px] uppercase tracking-tighter font-semibold text-[var(--text-dim)]">
+            Kontostand
+          </p>
         </div>
       </div>
     </div>

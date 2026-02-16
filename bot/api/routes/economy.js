@@ -8,21 +8,46 @@ const { COINS } = require('../../core/config');
 
 router.get('/chart/:symbol', async (req, res) => {
   const { symbol } = req.params;
-  const { range } = req.query; // z.B. 3h, 12h, 24h
+  const { range } = req.query; // z.B. 1m, 3h, 12h, 24h
 
   try {
-    // Holt die historischen Preisdaten aus der Supabase-Tabelle 'price_history'
+    // Zeit-Mapping in Minuten
+    const rangeMap = {
+      '1m': 10,   // Zeige die letzten 10 Min für den Live-Ticker
+      '3h': 180,
+      '12h': 720,
+      '24h': 1440
+    };
+
+    const minutes = rangeMap[range] || 180;
+    
+    /**
+     * ZEITKORREKTUR: 
+     * Da der Server 1h (60 Min) zurückliegt, berechnen wir den Startpunkt
+     * basierend auf UTC, um Synchronisationsfehler mit deinem Standort zu vermeiden.
+     */
+    const now = new Date();
+    const startTime = new Date(now.getTime() - (minutes * 60 * 1000)).toISOString();
+
+    // Abfrage der historischen Preisdaten
     const { data, error } = await db.supabase
       .from('price_history')
       .select('price_eur, recorded_at')
       .eq('symbol', symbol.toUpperCase())
-      .order('recorded_at', { ascending: true })
-      .limit(100);
+      .gte('recorded_at', startTime) // Filtert ab dem berechneten Zeitpunkt
+      .order('recorded_at', { ascending: true });
 
     if (error) throw error;
 
-    // Die WebApp erwartet die Daten im Feld "data"
-    res.json({ data: data || [] });
+    // WebApp erwartet Daten im Feld "data"
+    res.json({ 
+      data: data || [],
+      info: {
+        symbol: symbol.toUpperCase(),
+        range: range,
+        count: data?.length || 0
+      }
+    });
   } catch (err) {
     console.error('Chart-Fehler:', err);
     res.status(500).json({ error: 'Chart-Daten konnten nicht geladen werden' });
@@ -73,7 +98,6 @@ router.post('/realestate/buy', async (req, res) => {
 
     if (!reType) return res.status(404).json({ error: 'Immobilientyp nicht gefunden' });
     
-    // Validierung gegen den aktuellen Profil-Umsatz
     if (Number(profile.total_volume) < Number(reType.min_volume)) {
       return res.status(400).json({ error: `Mindest-Umsatz von ${reType.min_volume}€ benötigt!` });
     }
@@ -82,7 +106,6 @@ router.post('/realestate/buy', async (req, res) => {
       return res.status(400).json({ error: 'Nicht genug Guthaben auf dem Konto.' });
     }
 
-    // Transaktion durchführen
     await db.updateBalance(profile.id, Number(profile.balance) - Number(reType.price_eur));
     await db.supabase.from('real_estate').insert({ profile_id: profile.id, type_id });
 

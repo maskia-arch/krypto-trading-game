@@ -1,5 +1,5 @@
 // ============================================================
-// KRYPTO TRADING GAME - Main Entry Point (bot.js)
+// VALUETRADEGAME - Main Entry Point (bot.js)
 // ============================================================
 
 const { Bot } = require('grammy');
@@ -8,9 +8,9 @@ const { db } = require('./core/database');
 const { setupApi } = require('./api/server');
 const { setupCronJobs } = require('./cron/scheduler');
 
-// Handler-Importe (Diese Dateien enthalten die Logik)
+// Handler-Importe
 const startCommand = require('./commands/start');
-const portfolioCommand = require('./commands/portfolio');
+const portfolioCommand = require('./commands/portfolio'); // Hier liegt die Logik für sendPortfolio
 const adminCommands = require('./commands/admin');
 const economyCommands = require('./commands/economy');
 const callbackHandler = require('./callbacks/handler');
@@ -33,10 +33,19 @@ bot.command('user', adminCommands.userInfo);
 bot.command('setbalance', adminCommands.setBalance);
 bot.command('broadcast', adminCommands.broadcast);
 
-// 3. Interaktionen (Callbacks & Buttons)
+// 3. Text-Hörer (Für Menü-Buttons)
+bot.on('message:text', async (ctx) => {
+  // Reagiert auf den Text-Button "Portfolio" in der Tastatur
+  if (ctx.message.text === 'Portfolio') {
+    return portfolioCommand(ctx);
+  }
+});
+
+// 4. Interaktionen (Callbacks & Buttons)
+// Reagiert auf alle Inline-Buttons (inkl. refresh_portfolio)
 bot.on('callback_query:data', callbackHandler);
 
-// 4. Fehlerbehandlung
+// 5. Fehlerbehandlung
 bot.catch((err) => {
   const ctx = err.ctx;
   console.error(`❌ Fehler bei Update ${ctx.update.update_id}:`);
@@ -48,27 +57,27 @@ bot.catch((err) => {
   }
 });
 
-// 5. Start-Sequenz
+// 6. Start-Sequenz
 async function startApp() {
   try {
     // Initialer Preis-Fetch beim Start
     await priceService.fetchAndStorePrices();
-    console.log('✅ Initiale Marktdaten geladen');
+    console.log('✅ Marktdaten für ValueTradeGame geladen');
 
     // Express API Server starten
-    const app = setupApi(bot); // Wir übergeben die bot-Instanz für API-Meldungen
+    const app = setupApi(bot);
     app.listen(botConfig.port, () => {
       console.log(`🌐 API Server läuft auf Port ${botConfig.port}`);
     });
 
     // Cron Jobs aktivieren
     setupCronJobs(bot);
-    console.log('⏰ Scheduler aktiv');
+    console.log('⏰ Scheduler aktiv (1 Min Intervalle für Live-Charts)');
 
     // Bot starten
     bot.start({
       drop_pending_updates: true,
-      onStart: (info) => console.log(`🤖 Bot gestartet: @${info.username}`)
+      onStart: (info) => console.log(`🤖 @${info.username} (ValueTradeGame) ist online!`)
     });
 
   } catch (err) {

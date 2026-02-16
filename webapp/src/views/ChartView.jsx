@@ -4,7 +4,9 @@ import {
 } from 'recharts';
 import useStore from '../lib/store';
 
+// Live-Option (1M) hinzugefügt
 const RANGES = [
+  { key: '1m',  label: 'LIVE' },
   { key: '3h',  label: '3H' },
   { key: '12h', label: '12H' },
   { key: '24h', label: '24H' },
@@ -21,7 +23,7 @@ const CustomTooltip = ({ active, payload, theme }) => {
   return (
     <div className="rounded-xl px-3 py-2 text-xs shadow-xl backdrop-blur-md"
          style={{ background: 'rgba(12,16,25,0.92)', border: '1px solid rgba(255,255,255,0.06)' }}>
-      <p style={{ color: 'var(--text-dim)' }}>{payload[0].payload.time}</p>
+      <p style={{ color: 'var(--text-dim)' }}>{payload[0].payload.fullTime}</p>
       <p className="font-mono font-bold text-sm" style={{ color: theme.stroke }}>
         {Number(payload[0].value).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
       </p>
@@ -42,18 +44,24 @@ export default function ChartView() {
 
   useEffect(() => {
     doLoad(chartSymbol, chartRange);
-    refreshTimer.current = setInterval(() => doLoad(chartSymbol, chartRange), 30000);
+    // Intervall auf 15s verkürzt für echtes Live-Gefühl
+    refreshTimer.current = setInterval(() => doLoad(chartSymbol, chartRange), 15000);
     return () => clearInterval(refreshTimer.current);
   }, [chartSymbol, chartRange, doLoad]);
 
   const switchCoin = (sym) => { setChartSymbol(sym); };
   const switchRange = (r) => { setChartRange(r); };
 
-  const data = chartData.map(d => ({
-    time: new Date(d.recorded_at).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
-    price: Number(d.price_eur),
-    ts: new Date(d.recorded_at).getTime(),
-  }));
+  // Daten-Mapping mit Sekunden für den Live-Modus
+  const data = chartData.map(d => {
+    const date = new Date(d.recorded_at);
+    return {
+      time: date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+      fullTime: date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      price: Number(d.price_eur),
+      ts: date.getTime(),
+    };
+  });
 
   const priceVals = data.map(d => d.price);
   const minP = priceVals.length ? Math.min(...priceVals) : 0;
@@ -69,8 +77,8 @@ export default function ChartView() {
   const livePrice = prices[chartSymbol] || last;
 
   return (
-    <div className="space-y-3 pb-4">
-
+    <div className="space-y-3 pb-4 tab-enter">
+      {/* Coin Selector */}
       <div className="flex gap-1.5">
         {Object.entries(COIN_THEME).map(([sym, t]) => {
           const active = chartSymbol === sym;
@@ -90,13 +98,14 @@ export default function ChartView() {
         })}
       </div>
 
+      {/* Price Header */}
       <div className="card p-4">
         <div className="flex items-end justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <span className="live-dot" />
               <span className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--text-dim)' }}>
-                Live · {chartSymbol}
+                ValueTrade Live · {chartSymbol}
               </span>
             </div>
             <p className="text-3xl font-mono font-bold" style={{ color: theme.stroke }}>
@@ -111,16 +120,19 @@ export default function ChartView() {
         </div>
       </div>
 
+      {/* Range Selector */}
       <div className="flex gap-1.5">
         {RANGES.map(r => {
           const active = chartRange === r.key;
           return (
             <button key={r.key} onClick={() => switchRange(r.key)}
-              className={`btn-press flex-1 py-2 rounded-xl text-xs font-bold transition-all`}
+              className={`btn-press flex-1 py-2 rounded-xl text-[10px] font-bold transition-all ${
+                r.key === '1m' ? 'border-neon-blue/30' : ''
+              }`}
               style={{
                 background: active ? 'rgba(255,255,255,0.06)' : 'var(--bg-card)',
-                border: `1px solid ${active ? 'rgba(255,255,255,0.1)' : 'var(--border-dim)'}`,
-                color: active ? 'var(--text-primary)' : 'var(--text-dim)',
+                border: `1px solid ${active ? (r.key === '1m' ? 'var(--neon-blue)' : 'rgba(255,255,255,0.1)') : 'var(--border-dim)'}`,
+                color: active ? (r.key === '1m' ? 'var(--neon-blue)' : 'var(--text-primary)') : 'var(--text-dim)',
               }}>
               {r.label}
             </button>
@@ -128,6 +140,7 @@ export default function ChartView() {
         })}
       </div>
 
+      {/* Chart Canvas */}
       <div className="card overflow-hidden" style={{ padding: '12px 4px 4px 0' }}>
         {loading && data.length === 0 ? (
           <div className="flex items-center justify-center h-72">
@@ -135,13 +148,6 @@ export default function ChartView() {
           </div>
         ) : data.length > 0 ? (
           <div style={{ position: 'relative' }}>
-            {loading && (
-              <div className="absolute top-2 right-3 z-10 flex items-center gap-1.5 px-2 py-1 rounded-lg"
-                   style={{ background: 'rgba(6,8,15,0.8)' }}>
-                <div className="live-dot" style={{ width: 5, height: 5 }} />
-                <span className="text-[9px] font-semibold" style={{ color: 'var(--text-dim)' }}>Aktualisiert…</span>
-              </div>
-            )}
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <defs>
@@ -155,7 +161,6 @@ export default function ChartView() {
                   stroke="transparent"
                   tick={{ fontSize: 9, fill: '#4b5c72', fontFamily: 'JetBrains Mono' }}
                   interval="preserveStartEnd"
-                  tickCount={5}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -186,18 +191,19 @@ export default function ChartView() {
         ) : (
           <div className="flex flex-col items-center justify-center h-72 gap-2">
             <span className="text-4xl">📊</span>
-            <p className="text-xs" style={{ color: 'var(--text-dim)' }}>Noch keine Daten</p>
-            <p className="text-[10px]" style={{ color: 'var(--text-dim)' }}>Preise werden minütlich gespeichert</p>
+            <p className="text-xs" style={{ color: 'var(--text-dim)' }}>ValueTrade Engine lädt...</p>
+            <p className="text-[10px]" style={{ color: 'var(--text-dim)' }}>Prüfe Synchronisation mit Serverzeit</p>
           </div>
         )}
       </div>
 
+      {/* Stats Grid */}
       {data.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {[
             { label: 'Tief', value: `${minP.toLocaleString('de-DE', { maximumFractionDigits: 2 })}€`, color: 'text-neon-red' },
             { label: 'Hoch', value: `${maxP.toLocaleString('de-DE', { maximumFractionDigits: 2 })}€`, color: 'text-neon-green' },
-            { label: 'Datenpunkte', value: data.length, color: 'text-neon-blue' },
+            { label: 'Volatilität', value: `${Math.abs(change).toFixed(2)}%`, color: 'text-neon-blue' },
           ].map(s => (
             <div key={s.label} className="card p-3 text-center">
               <p className="text-[9px] uppercase tracking-wider font-semibold" style={{ color: 'var(--text-dim)' }}>{s.label}</p>

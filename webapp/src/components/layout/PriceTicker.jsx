@@ -1,47 +1,76 @@
 import React, { useEffect, useRef } from 'react';
 
 const COIN_META = {
-  BTC: { emoji: '₿', name: 'Bitcoin' },
-  ETH: { emoji: 'Ξ', name: 'Ethereum' },
-  LTC: { emoji: 'Ł', name: 'Litecoin' },
+  BTC: { emoji: '₿', name: 'Bitcoin', color: '#f7931a' },
+  ETH: { emoji: 'Ξ', name: 'Ethereum', color: '#627eea' },
+  LTC: { emoji: 'Ł', name: 'Litecoin', color: '#bfbbbb' },
 };
 
 export default function PriceTicker({ symbol, price, prevPrice }) {
   const ref = useRef(null);
-  const prev = useRef(price);
+  const lastPrice = useRef(price);
 
   useEffect(() => {
-    if (!ref.current || price === undefined) return;
+    if (!ref.current || price === undefined || price === lastPrice.current) return;
     
-    if (price > prev.current) {
-      ref.current.classList.remove('tick-down');
-      ref.current.classList.add('tick-up');
-    } else if (price < prev.current) {
-      ref.current.classList.remove('tick-up');
-      ref.current.classList.add('tick-down');
+    // Animation basierend auf Preisrichtung
+    const isUp = price > lastPrice.current;
+    
+    // Entferne alte Klassen für sauberen Neustart der Animation
+    ref.current.classList.remove('tick-up', 'tick-down', 'glow-green', 'glow-red');
+    
+    // Trigger Reflow für CSS-Animation
+    void ref.current.offsetWidth; 
+
+    if (isUp) {
+      ref.current.classList.add('tick-up', 'glow-green');
+    } else {
+      ref.current.classList.add('tick-down', 'glow-red');
     }
     
-    prev.current = price;
+    lastPrice.current = price;
     
+    // Animation nach 800ms zurücksetzen
     const t = setTimeout(() => {
       if (ref.current) {
-        ref.current.classList.remove('tick-up', 'tick-down');
+        ref.current.classList.remove('tick-up', 'tick-down', 'glow-green', 'glow-red');
       }
-    }, 600);
+    }, 800);
     
     return () => clearTimeout(t);
   }, [price]);
 
   const displayPrice = price || 0;
+  const meta = COIN_META[symbol] || { emoji: '🪙', name: symbol, color: 'var(--text-dim)' };
 
   return (
-    <div className="flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg"
-         style={{ background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(255,255,255,0.04)' }}>
-      <span className="text-[10px] opacity-50">{COIN_META[symbol]?.emoji || '🪙'}</span>
-      <span className="text-[10px] font-medium opacity-40">{symbol}</span>
-      <span ref={ref} className="text-[11px] font-mono font-semibold">
-        {displayPrice.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€
+    <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all duration-300"
+         style={{ 
+           background: 'rgba(255,255,255,0.03)', 
+           border: '1px solid rgba(255,255,255,0.06)',
+           backdropFilter: 'blur(4px)'
+         }}>
+      
+      {/* Coin Icon mit dezentem Branding-Farbakzent */}
+      <span className="text-[11px] leading-none" style={{ color: meta.color }}>
+        {meta.emoji}
       </span>
+      
+      <div className="flex flex-col">
+        <span className="text-[8px] font-bold uppercase tracking-tighter opacity-30 leading-tight">
+          {symbol}
+        </span>
+        <span 
+          ref={ref} 
+          className="text-[11px] font-mono font-bold transition-colors duration-300"
+          style={{ letterSpacing: '-0.02em' }}
+        >
+          {displayPrice.toLocaleString('de-DE', { 
+            minimumFractionDigits: 2, 
+            maximumFractionDigits: 2 
+          })}€
+        </span>
+      </div>
     </div>
   );
 }

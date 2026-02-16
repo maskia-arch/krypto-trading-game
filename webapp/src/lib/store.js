@@ -2,14 +2,16 @@ import { create } from 'zustand';
 import { api } from './api';
 
 const useStore = create((set, get) => ({
-  version: '0.1',
+  // Branding & Status
+  appName: 'ValueTradeGame',
+  version: 'Lädt...',
   profile: null,
   assets: [],
   prices: {},
   prevPrices: {},
   chartData: [],
   chartSymbol: 'BTC',
-  chartRange: '3h',
+  chartRange: '3h', // Standard-Range
   leaderboard: [],
   season: null,
   feePool: 0,
@@ -18,6 +20,7 @@ const useStore = create((set, get) => ({
   tab: 'trade',
   toast: null,
 
+  // Actions
   setTab: (tab) => set({ tab }),
   setChartSymbol: (s) => set({ chartSymbol: s }),
   setChartRange: (r) => set({ chartRange: r }),
@@ -27,11 +30,22 @@ const useStore = create((set, get) => ({
     setTimeout(() => set({ toast: null }), 3000);
   },
 
+  // Dynamisches Laden der Version aus der version.txt
   loadVersion: async () => {
     try {
-      const data = await api.getVersion();
-      set({ version: data.version });
-    } catch (e) {}
+      // t Parameter verhindert Browser-Caching der Textdatei
+      const res = await fetch('/version.txt?t=' + Date.now());
+      if (res.ok) {
+        const text = await res.text();
+        set({ version: text.trim() });
+      } else {
+        // Fallback falls api.getVersion existiert
+        const data = await api.getVersion();
+        set({ version: data.version });
+      }
+    } catch (e) {
+      set({ version: 'v1.0.0' });
+    }
   },
 
   fetchProfile: async () => {
@@ -70,9 +84,18 @@ const useStore = create((set, get) => ({
     try {
       const s = symbol || get().chartSymbol;
       const r = range || get().chartRange;
+      
+      // Das Backend verarbeitet nun auch '1m' für Live-Daten
       const data = await api.getChart(s, r);
-      set({ chartData: data.data || [], chartSymbol: s, chartRange: r });
-    } catch (e) {}
+      
+      set({ 
+        chartData: data.data || [], 
+        chartSymbol: s, 
+        chartRange: r 
+      });
+    } catch (e) {
+      console.error("Chart-Load Fehler:", e);
+    }
   },
 
   buyCrypto: async (symbol, amountEur) => {
