@@ -1,22 +1,17 @@
-// ============================================================
-// CORE DATABASE WRAPPER (core/database.js)
-// ============================================================
-
 const { createClient } = require('@supabase/supabase-js');
 const { supabaseConfig } = require('./config');
 
 const supabase = createClient(supabaseConfig.url, supabaseConfig.key);
 
 const db = {
-  supabase, // Direkter Zugriff für spezielle Queries in den Routen
+  supabase,
 
-  // --- Profile ---
   async getProfile(telegramId) {
     const { data } = await supabase
       .from('profiles')
       .select('*')
       .eq('telegram_id', telegramId)
-      .single();
+      .maybeSingle();
     return data;
   },
 
@@ -50,11 +45,10 @@ const db = {
       .single();
     await supabase
       .from('profiles')
-      .update({ total_volume: Number(p.total_volume) + amount })
+      .update({ total_volume: Number(p.total_volume || 0) + amount })
       .eq('id', profileId);
   },
 
-  // --- Assets ---
   async getAssets(profileId) {
     const { data } = await supabase
       .from('assets')
@@ -69,7 +63,7 @@ const db = {
       .select('*')
       .eq('profile_id', profileId)
       .eq('symbol', symbol)
-      .single();
+      .maybeSingle();
     return data;
   },
 
@@ -97,13 +91,12 @@ const db = {
     }
   },
 
-  // --- Preise ---
   async getCurrentPrice(symbol) {
     const { data } = await supabase
       .from('current_prices')
       .select('price_eur')
       .eq('symbol', symbol)
-      .single();
+      .maybeSingle();
     return data ? Number(data.price_eur) : null;
   },
 
@@ -114,7 +107,6 @@ const db = {
     return data || [];
   },
 
-  // --- Transaktionen ---
   async logTransaction(profileId, type, symbol, amount, priceEur, feeEur, totalEur) {
     await supabase.from('transactions').insert({
       profile_id: profileId,
@@ -125,21 +117,20 @@ const db = {
     });
   },
 
-  // --- Fee Pool ---
   async addToFeePool(amount) {
-    const { data } = await supabase.from('fee_pool').select('total_eur').eq('id', 1).single();
+    const { data } = await supabase.from('fee_pool').select('total_eur').eq('id', 1).maybeSingle();
+    const currentPool = data ? Number(data.total_eur) : 0;
     await supabase
       .from('fee_pool')
-      .update({ total_eur: Number(data.total_eur) + amount })
+      .update({ total_eur: currentPool + amount })
       .eq('id', 1);
   },
 
   async getFeePool() {
-    const { data } = await supabase.from('fee_pool').select('total_eur').eq('id', 1).single();
+    const { data } = await supabase.from('fee_pool').select('total_eur').eq('id', 1).maybeSingle();
     return Number(data?.total_eur || 0);
   },
 
-  // --- Wirtschaft & Leaderboard ---
   async getLeaderboard(limit = 10) {
     const { data } = await supabase
       .from('leaderboard')
@@ -153,11 +144,10 @@ const db = {
       .from('seasons')
       .select('*')
       .eq('is_active', true)
-      .single();
+      .maybeSingle();
     return data;
   },
 
-  // --- Pro Features ---
   async createProRequest(profileId) {
     await supabase.from('pro_requests').insert({ profile_id: profileId });
   },
@@ -177,7 +167,6 @@ const db = {
     return false;
   },
 
-  // --- Immobilien ---
   async getRealEstateTypes() {
     const { data } = await supabase.from('real_estate_types').select('*').order('price_eur');
     return data || [];
@@ -220,7 +209,6 @@ const db = {
     return totalRent;
   },
 
-  // --- Rettungsschirm (Bailout) ---
   async processBailout(profileId) {
     const { data: p } = await supabase
       .from('profiles')
@@ -260,11 +248,10 @@ const db = {
     }
   },
 
-  // --- Admin Stats ---
   async getStats() {
     const { count: userCount } = await supabase.from('profiles').select('*', { count: 'exact', head: true });
     const { count: txCount } = await supabase.from('transactions').select('*', { count: 'exact', head: true });
-    return { userCount, txCount };
+    return { userCount: userCount || 0, txCount: txCount || 0 };
   }
 };
 
