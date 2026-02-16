@@ -1,30 +1,40 @@
 const { db } = require('../core/database');
 
-const GECKO_MAP = {
-  BTC: 'bitcoin',
-  ETH: 'ethereum',
-  LTC: 'litecoin'
+const BINANCE_MAP = {
+  BTC: 'BTCEUR',
+  ETH: 'ETHEUR',
+  LTC: 'LTCEUR'
 };
 
 const priceService = {
   async fetchAndStorePrices() {
     try {
-      const ids = Object.values(GECKO_MAP).join(',');
-      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=eur`;
+      const symbols = JSON.stringify(Object.values(BINANCE_MAP));
+      const url = `https://api.binance.com/api/v3/ticker/price?symbols=${encodeURIComponent(symbols)}`;
       
       const res = await fetch(url);
+      
+      if (!res.ok) {
+        throw new Error(`API Error: ${res.status}`);
+      }
+      
       const data = await res.json();
 
-      if (!data || Object.keys(data).length === 0) {
-        throw new Error('Keine Daten von CoinGecko erhalten');
+      if (!data || data.length === 0) {
+        throw new Error('Keine Daten erhalten');
       }
 
-      for (const symbol of Object.keys(GECKO_MAP)) {
-        const geckoId = GECKO_MAP[symbol];
-        const price = data[geckoId]?.eur;
+      const priceMap = {};
+      data.forEach(item => {
+        priceMap[item.symbol] = Number(item.price);
+      });
+
+      for (const symbol of Object.keys(BINANCE_MAP)) {
+        const binanceSymbol = BINANCE_MAP[symbol];
+        const price = priceMap[binanceSymbol];
         
-        if (price === undefined || price === null || price <= 0) {
-          console.warn(`⚠️ Ungültiger Preis für ${symbol} ignoriert. (Gesucht nach: ${geckoId})`);
+        if (price === undefined || price === null || price <= 0 || isNaN(price)) {
+          console.warn(`⚠️ Ungültiger Preis für ${symbol} ignoriert.`);
           continue;
         }
 
