@@ -1364,6 +1364,20 @@ cron.schedule('0 0 * * *', async () => {
 });
 
 // ============================================================
+// ERROR HANDLER (verhindert Crashes bei alten Callbacks etc.)
+// ============================================================
+bot.catch((err) => {
+  const ctx = err.ctx;
+  console.error(`❌ Fehler bei Update ${ctx.update.update_id}:`);
+  const e = err.error;
+  if (e.description?.includes('query is too old')) {
+    console.log('  → Alte Callback-Query ignoriert (normal nach Neustart)');
+  } else {
+    console.error('  →', e.message || e);
+  }
+});
+
+// ============================================================
 // START
 // ============================================================
 async function start() {
@@ -1376,8 +1390,9 @@ async function start() {
     console.log(`🌐 API Server läuft auf Port ${PORT}`);
   });
 
-  // Bot starten (Long Polling für Render.com)
+  // Bot starten – drop_pending_updates überspringt alte Nachrichten vom letzten Crash
   bot.start({
+    drop_pending_updates: true,
     onStart: (info) => console.log(`🤖 Bot gestartet: @${info.username}`)
   });
 }
