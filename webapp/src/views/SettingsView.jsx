@@ -8,11 +8,22 @@ export default function SettingsView() {
   const [deleteStep, setDeleteStep] = useState(1);
   const [busy, setBusy] = useState(false);
 
-  const isPro = profile?.is_pro && new Date(profile.pro_until) > new Date();
+  const isPro = profile?.is_admin || (profile?.is_pro && new Date(profile.pro_until) > new Date());
   const canChangeName = isPro || (profile?.username_changes || 0) < 1;
 
+  const isTyping = newName.length > 0;
+  const isValidLength = newName.length >= 4 && newName.length <= 16;
+  const isValidChars = /^[a-zA-Z0-9]+$/.test(newName);
+  const isValidName = isValidLength && isValidChars;
+  const showValidationError = isTyping && !isValidName;
+
+  let inputBorderClass = "border-white/10";
+  if (isTyping) {
+    inputBorderClass = isValidName ? "border-[#4ade80]/50" : "border-[#f87171]/50";
+  }
+
   const handleUpdateName = async () => {
-    if (!newName.trim() || !canChangeName) return;
+    if (!isValidName || !canChangeName) return;
     setBusy(true);
     try {
       await api.updateUsername(newName.trim());
@@ -53,19 +64,24 @@ export default function SettingsView() {
               onChange={(e) => setNewName(e.target.value)}
               placeholder={profile?.username || 'Neuer Name...'}
               disabled={!canChangeName || busy}
-              className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2 text-sm"
+              className={`flex-1 bg-white/5 border ${inputBorderClass} outline-none transition-colors rounded-xl px-3 py-2 text-sm`}
             />
             <button 
               onClick={handleUpdateName}
-              disabled={!canChangeName || busy || !newName.trim()}
-              className="bg-neon-blue/20 text-neon-blue border border-neon-blue/30 px-4 rounded-xl text-xs font-bold disabled:opacity-30"
+              disabled={!canChangeName || busy || !isValidName}
+              className="bg-neon-blue/20 text-neon-blue border border-neon-blue/30 px-4 rounded-xl text-xs font-bold disabled:opacity-30 disabled:grayscale transition-all"
             >
               Update
             </button>
           </div>
-          <p className="text-[9px] mt-1.5 text-[var(--text-dim)]">
+          
+          <p className={`text-[10px] mt-2 transition-colors ${showValidationError ? 'text-[#f87171]' : 'text-[var(--text-dim)]'}`}>
+            ✏️ Erlaubt: 4-16 Zeichen, nur Buchstaben (a-z, A-Z) und Zahlen (0-9). Keine Leer- oder Sonderzeichen.
+          </p>
+
+          <p className="text-[9px] mt-1.5 opacity-60">
             {isPro 
-              ? '✨ Als Pro-User kannst du deinen Namen alle 30 Tage ändern.' 
+              ? '✨ Als Pro-User / Admin kannst du deinen Namen unbegrenzt oft ändern.' 
               : 'ℹ️ In der Standard-Version ist nur eine Namensänderung möglich.'}
           </p>
         </div>

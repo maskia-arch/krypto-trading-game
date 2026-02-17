@@ -29,7 +29,7 @@ module.exports = (db) => ({
     const { data } = await db.supabase
       .from('profiles')
       .select('id')
-      .eq('username', username)
+      .ilike('username', username)
       .maybeSingle();
     return !!data;
   },
@@ -67,14 +67,18 @@ module.exports = (db) => ({
     return data;
   },
 
-  async updateUsername(profileId, newUsername, isPro) {
+  async updateUsername(telegramId, newUsername, isPro) {
     const { data: profile } = await db.supabase
       .from('profiles')
-      .select('username_changes, is_pro')
-      .eq('id', profileId)
+      .select('id, username_changes')
+      .eq('telegram_id', telegramId)
       .single();
 
-    const canChange = isPro ? true : (profile.username_changes < 1);
+    if (!profile) throw new Error('Profil in der Datenbank nicht gefunden.');
+
+    const changes = profile.username_changes || 0;
+    const canChange = isPro ? true : (changes < 1);
+    
     if (!canChange) throw new Error('Namensänderung bereits verbraucht.');
 
     const taken = await db.isUsernameTaken(newUsername);
@@ -84,10 +88,10 @@ module.exports = (db) => ({
       .from('profiles')
       .update({ 
         username: newUsername, 
-        username_changes: profile.username_changes + 1,
+        username_changes: changes + 1,
         last_name_change: new Date().toISOString()
       })
-      .eq('id', profileId);
+      .eq('id', profile.id);
     
     if (error) throw error;
     return true;

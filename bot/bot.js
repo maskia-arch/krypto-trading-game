@@ -107,14 +107,18 @@ bot.on('message:text', async (ctx) => {
   }
 
   if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('✍️')) {
-    if (text.length < 3) return ctx.reply("❌ Der Name muss mindestens 3 Zeichen lang sein.");
-    if (text.length > 20) return ctx.reply("❌ Der Name darf maximal 20 Zeichen lang sein.");
+    if (text.length < 4 || text.length > 16) {
+      return ctx.reply("❌ Der Name muss zwischen 4 und 16 Zeichen lang sein.");
+    }
+    if (!/^[a-zA-Z0-9]+$/.test(text)) {
+      return ctx.reply("❌ Nur Buchstaben und Zahlen sind erlaubt. Keine Leer- oder Sonderzeichen.");
+    }
 
     try {
       const profile = await db.getProfile(userId);
       const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
       
-      await db.updateUsername(profile.id, text, isPro);
+      await db.updateUsername(userId, text, isPro);
       return ctx.reply(`✅ Dein Name wurde erfolgreich in <b>${text}</b> geändert!`, { parse_mode: 'HTML' });
     } catch (e) {
       return ctx.reply(`❌ Fehler: ${e.message}`);
