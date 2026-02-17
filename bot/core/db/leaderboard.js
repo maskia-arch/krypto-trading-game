@@ -117,7 +117,7 @@ module.exports = (db) => ({
   async getActiveSeason() {
     const { data } = await db.supabase
       .from('seasons')
-      .select('*')
+      .select('id, name, start_date, end_date, is_active')
       .eq('is_active', true)
       .maybeSingle();
     return data;
