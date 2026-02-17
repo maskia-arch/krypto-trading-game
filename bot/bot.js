@@ -89,7 +89,6 @@ bot.on('message:text', async (ctx) => {
       await db.updateUsername(profile.id, text, isPro);
       return ctx.reply(`✅ Dein Name wurde erfolgreich in <b>${text}</b> geändert!`, { parse_mode: 'HTML' });
     } catch (e) {
-      // Hier wird der Error "Dieser Username ist bereits vergeben" aus der db.js abgefangen
       return ctx.reply(`❌ Fehler: ${e.message}`);
     }
   }
@@ -162,9 +161,8 @@ const checkFeedbackUsers = async () => {
 };
 
 bot.catch((err) => {
-  const ctx = err.ctx;
   const e = err.error;
-  if (!e.description?.includes('query is too old')) {
+  if (!e.description?.includes('query is too old') && !e.description?.includes('message is not modified')) {
     console.error(`❌ Fehler:`, e.message || e);
   }
 });

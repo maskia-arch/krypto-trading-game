@@ -1,6 +1,7 @@
 const { InlineKeyboard } = require('grammy');
 const { db } = require('../core/database');
 const { esc } = require('../core/utils');
+const { WEBAPP_URL } = require('../core/config');
 
 async function handleLeaderboard(ctx) {
   try {
@@ -33,8 +34,6 @@ async function handleLeaderboard(ctx) {
     leaders.slice(0, 10).forEach((l, i) => {
       const medal = ['🥇', '🥈', '🥉'][i] || `<b>${i + 1}.</b>`;
       const name = esc(l.username || l.first_name || 'Trader');
-      
-      // FIX: Nutzt jetzt die neuen Bezeichnungen aus der database.js
       const perfEuro = Number(l.performance_euro || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const perfPercent = Number(l.performance_percent || 0).toFixed(2);
       const nw = Number(l.net_worth || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -60,7 +59,24 @@ async function handleLeaderboard(ctx) {
       }
     }
 
-    await ctx.reply(text, { parse_mode: 'HTML' });
+    text += `\n🕒 Stand: ${new Date().toLocaleTimeString('de-DE')}`;
+
+    const kb = new InlineKeyboard()
+      .webApp('🎮 Jetzt traden', WEBAPP_URL)
+      .row()
+      .text('🔄 Aktualisieren', 'refresh_leaderboard');
+
+    if (ctx.callbackQuery) {
+      try {
+        await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
+        await ctx.answerCallbackQuery('Rangliste aktualisiert! 🏆');
+      } catch (e) {
+        // Falls Nachricht identisch, nur Quittung senden
+        await ctx.answerCallbackQuery();
+      }
+    } else {
+      await ctx.reply(text, { parse_mode: 'HTML', reply_markup: kb });
+    }
   } catch (err) {
     console.error('Bot Leaderboard Error:', err);
     ctx.reply('❌ Rangliste konnte nicht geladen werden.');
@@ -71,7 +87,6 @@ async function handleBailout(ctx) {
   try {
     const profile = await db.getProfile(ctx.from.id);
     if (!profile) return ctx.reply('Starte zuerst mit /start');
-
     const result = await db.processBailout(profile.id);
     return ctx.reply(result.msg);
   } catch (err) {
@@ -83,17 +98,14 @@ async function handlePro(ctx) {
   try {
     const profile = await db.getProfile(ctx.from.id);
     if (!profile) return ctx.reply('Starte zuerst mit /start');
-
     if (profile.is_pro) {
       const until = new Date(profile.pro_until).toLocaleDateString('de-DE');
       return ctx.reply(`✅ Du bist bereits Pro-Mitglied!\nAktiv bis: ${until}`);
     }
-
     const kb = new InlineKeyboard()
       .text('💳 Pro kaufen (5€/Monat)', 'buy_pro')
       .row()
       .text('❌ Abbrechen', 'close');
-
     return ctx.reply(
       `⭐ <b>PRO VERSION - 5€/Monat</b>\n\n` +
       `Features:\n` +
@@ -113,7 +125,6 @@ async function handleRent(ctx) {
   try {
     const profile = await db.getProfile(ctx.from.id);
     if (!profile) return ctx.reply('Starte zuerst mit /start');
-
     const rent = await db.collectRent(profile.id);
     if (rent > 0) {
       return ctx.reply(`🏠 Mieteinnahmen eingesammelt: +${rent.toFixed(2)}€`);

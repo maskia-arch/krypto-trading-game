@@ -1,10 +1,27 @@
+let leaderboardCache = {
+  data: null,
+  lastUpdate: 0
+};
+
 module.exports = (db) => ({
   async getLeaderboard(filter = 'profit_season', limit = 20) {
-    const [ profilesRes, assetsRes, pricesRes, season ] = await Promise.all([
+    const CACHE_DURATION = 30 * 60 * 1000;
+    const now = Date.now();
+
+    if (leaderboardCache.data && (now - leaderboardCache.lastUpdate) < CACHE_DURATION) {
+      return {
+        ...leaderboardCache.data,
+        leaders: leaderboardCache.data.leaders.slice(0, limit),
+        fromCache: true
+      };
+    }
+
+    const [profilesRes, assetsRes, pricesRes, season, pool] = await Promise.all([
       db.supabase.from('profiles').select('*'),
       db.supabase.from('assets').select('profile_id, symbol, amount'),
       db.supabase.from('current_prices').select('symbol, price_eur'),
-      db.getActiveSeason()
+      this.getActiveSeason(),
+      db.getFeePool()
     ]);
 
     const profiles = profilesRes.data || [];
@@ -62,10 +79,21 @@ module.exports = (db) => ({
       leaders.sort((a, b) => b.net_worth - a.net_worth);
     }
 
-    return {
-      leaders: leaders.slice(0, limit),
+    const result = {
+      leaders: leaders,
       season: season,
-      pool: await db.getFeePool()
+      pool: pool
+    };
+
+    leaderboardCache = {
+      data: result,
+      lastUpdate: now
+    };
+
+    return {
+      ...result,
+      leaders: leaders.slice(0, limit),
+      fromCache: false
     };
   },
 

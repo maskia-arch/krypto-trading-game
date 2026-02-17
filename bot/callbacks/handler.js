@@ -14,8 +14,9 @@ module.exports = async (ctx) => {
     return handlePortfolio(ctx);
   }
 
-  if (data === 'leaderboard') {
-    await ctx.answerCallbackQuery();
+  if (data === 'leaderboard' || data === 'refresh_leaderboard') {
+    // Bei refresh_leaderboard wird kein answerCallbackQuery benötigt, 
+    // da handleLeaderboard dies bereits intern verarbeitet.
     return handleLeaderboard(ctx);
   }
 

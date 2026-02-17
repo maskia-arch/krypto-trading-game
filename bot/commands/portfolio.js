@@ -50,7 +50,7 @@ async function handlePortfolio(ctx) {
     const netWorth = Number(profile.balance) + portfolioValue;
 
     const kb = new InlineKeyboard()
-      .webApp('📈 Jetzt traden', WEBAPP_URL)
+      .webApp('🎮 Jetzt traden', WEBAPP_URL)
       .row()
       .text('🔄 Aktualisieren', 'portfolio');
 
@@ -58,17 +58,18 @@ async function handlePortfolio(ctx) {
       `💶 Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>\n` +
       `📦 Asset-Wert: <b>${portfolioValue.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>\n` +
       `💰 Gesamtvermögen: <b>${netWorth.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>\n` +
-      `🔄 Handelsvolumen: ${Number(profile.total_volume).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€\n\n` +
+      `🔄 Handelsvolumen: ${Number(profile.total_volume || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€\n\n` +
       `━━ <b>Deine Assets</b> ━━\n\n` +
       (assetsText || '<i>Keine Assets im Besitz</i>\n') +
-      `\n🕐 Stand: ${new Date().toLocaleTimeString('de-DE')}`;
+      `\n🕒 Stand: ${new Date().toLocaleTimeString('de-DE')}`;
 
     if (ctx.callbackQuery) {
       try {
         await ctx.editMessageText(messageText, { parse_mode: 'HTML', reply_markup: kb });
+        await ctx.answerCallbackQuery('Portfolio aktualisiert! 🔄');
       } catch (e) {
         if (e.description && e.description.includes('message is not modified')) {
-          // Ignorieren, wenn sich der Text seit der letzten Sekunde nicht geändert hat
+          await ctx.answerCallbackQuery();
         } else {
           throw e;
         }
@@ -77,8 +78,9 @@ async function handlePortfolio(ctx) {
       await ctx.reply(messageText, { parse_mode: 'HTML', reply_markup: kb });
     }
   } catch (err) {
+    console.error('Portfolio Error:', err);
     if (ctx.callbackQuery) {
-      ctx.answerCallbackQuery('❌ Fehler beim Laden deines Portfolios.');
+      ctx.answerCallbackQuery('❌ Fehler beim Laden.');
     } else {
       ctx.reply('❌ Fehler beim Laden deines Portfolios.');
     }
