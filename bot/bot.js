@@ -84,6 +84,28 @@ bot.on('message:text', async (ctx) => {
     return portfolioCommand(ctx);
   }
 
+  if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('InGame-Namen')) {
+    if (text.length < 4 || text.length > 16) {
+      return ctx.reply("❌ Der Name muss zwischen 4 und 16 Zeichen lang sein. Bitte antworte erneut auf meine vorherige Nachricht.", { reply_markup: { force_reply: true } });
+    }
+    
+    if (!/^[a-zA-Z0-9]+$/.test(text)) {
+      return ctx.reply("❌ Nur Buchstaben (a-z, A-Z) und Zahlen (0-9) sind erlaubt. Bitte antworte erneut auf meine vorherige Nachricht.", { reply_markup: { force_reply: true } });
+    }
+
+    try {
+      const taken = await db.isUsernameTaken(text);
+      if (taken) {
+        return ctx.reply("❌ Dieser Name ist bereits vergeben. Bitte wähle einen anderen und antworte erneut auf meine Nachricht.", { reply_markup: { force_reply: true } });
+      }
+
+      const profile = await db.createProfile(userId, text, ctx.from.first_name);
+      return startCommand.sendWelcomeMessage(ctx, profile);
+    } catch (e) {
+      return ctx.reply(`❌ Fehler bei der Registrierung: ${e.message}`);
+    }
+  }
+
   if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('✍️')) {
     if (text.length < 3) return ctx.reply("❌ Der Name muss mindestens 3 Zeichen lang sein.");
     if (text.length > 20) return ctx.reply("❌ Der Name darf maximal 20 Zeichen lang sein.");
