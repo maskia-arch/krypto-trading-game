@@ -34,7 +34,6 @@ export default function TradeView() {
   const sellNet = sellGross - sellFee;
 
   const handleBuy = async () => {
-    // Toleranz von 0.01€ hinzugefügt, falls Rundungsfehler bei 100% Max-Button auftreten
     if (euroAmt <= 0 || euroAmt > balance + 0.01) return;
     setBusy(true);
     try {
@@ -120,20 +119,18 @@ export default function TradeView() {
       </div>
 
       <div className="flex rounded-2xl p-1" style={{ background: 'var(--bg-card)', border: '1px solid var(--border-dim)' }}>
-        {['buy', 'sell'].map(a => {
-          const active = action === a;
-          const isBuy = a === 'buy';
-          return (
-            <button key={a} onClick={() => setAction(a)}
-              className={`btn-press flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
-                active
-                  ? isBuy ? 'bg-neon-green/15 text-neon-green' : 'bg-neon-red/15 text-neon-red'
-                  : 'text-[var(--text-dim)]'
-              }`}>
-              {isBuy ? '📈 Kaufen' : '📉 Verkaufen'}
-            </button>
-          );
-        })}
+        <button onClick={() => setAction('buy')}
+          className={`btn-press flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            action === 'buy' ? 'bg-neon-green/15 text-neon-green' : 'text-[var(--text-dim)]'
+          }`}>
+          📈 Kaufen
+        </button>
+        <button onClick={() => setAction('sell')}
+          className={`btn-press flex-1 py-2.5 rounded-xl text-sm font-bold transition-all ${
+            action === 'sell' ? 'bg-neon-red/15 text-neon-red' : 'text-[var(--text-dim)]'
+          }`}>
+          📉 Verkaufen
+        </button>
       </div>
 
       <div className="card p-4 space-y-3">

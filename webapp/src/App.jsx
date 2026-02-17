@@ -1,19 +1,15 @@
 import React, { useEffect } from 'react';
 import useStore from './lib/store';
 
-// Import der neuen Layout-Komponenten
 import Header from './components/layout/Header';
 import Navbar from './components/layout/Navbar';
 import PriceTicker from './components/layout/PriceTicker';
 
-// Import der Views (ehemals Panels)
-import TradeView from './views/TradeView';
 import ChartView from './views/ChartView';
 import AssetsView from './views/AssetsView';
 import RankView from './views/RankView';
 
 const TABS = [
-  { id: 'trade', label: 'Trade',  icon: '📈' },
   { id: 'chart', label: 'Chart',  icon: '📊' },
   { id: 'assets', label: 'Assets', icon: '💎' },
   { id: 'rank',  label: 'Rang',   icon: '🏆' },
@@ -29,16 +25,13 @@ export default function App() {
   const { tab, setTab, fetchProfile, refreshPrices, loadVersion, prices, prevPrices } = useStore();
 
   useEffect(() => {
-    // 1. Initialer Load beim Öffnen der WebApp
     loadVersion();
     fetchProfile();
 
-    // 2. Der ValueTrade Engine Herzschlag (Ticker alle 60 Sekunden updaten)
     const priceInterval = setInterval(() => {
       refreshPrices();
     }, 60000);
 
-    // 3. Profil-Update (Guthaben) alle 15 Sekunden (für flüssiges Trading)
     const profileInterval = setInterval(() => {
       fetchProfile();
     }, 15000);
@@ -48,6 +41,12 @@ export default function App() {
       clearInterval(profileInterval);
     };
   }, [fetchProfile, refreshPrices, loadVersion]);
+
+  useEffect(() => {
+    if (tab === 'trade') {
+      setTab('chart');
+    }
+  }, [tab, setTab]);
 
   return (
     <div className="min-h-screen text-white pb-24 select-none">
@@ -67,7 +66,6 @@ export default function App() {
       </header>
 
       <main className="px-4 pt-4 tab-enter" key={tab}>
-        {tab === 'trade' && <TradeView />}
         {tab === 'chart' && <ChartView />}
         {tab === 'assets' && <AssetsView />}
         {tab === 'rank' && <RankView />}

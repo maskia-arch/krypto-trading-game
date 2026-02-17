@@ -5,7 +5,10 @@ const { COINS, WEBAPP_URL } = require('../core/config');
 async function handlePortfolio(ctx) {
   try {
     const profile = await db.getProfile(ctx.from.id);
-    if (!profile) return ctx.reply('Starte zuerst mit /start');
+    if (!profile) {
+      const msg = 'Starte zuerst mit /start';
+      return ctx.callbackQuery ? ctx.answerCallbackQuery(msg) : ctx.reply(msg);
+    }
 
     const assets = await db.getAssets(profile.id);
     const prices = await db.getAllPrices();
@@ -51,19 +54,34 @@ async function handlePortfolio(ctx) {
       .row()
       .text('🔄 Aktualisieren', 'portfolio');
 
-    return ctx.reply(
-      `📊 <b>Dein Portfolio</b>\n\n` +
+    const messageText = `📊 <b>Dein Portfolio</b>\n\n` +
       `💶 Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>\n` +
       `📦 Asset-Wert: <b>${portfolioValue.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>\n` +
       `💰 Gesamtvermögen: <b>${netWorth.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>\n` +
       `🔄 Handelsvolumen: ${Number(profile.total_volume).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€\n\n` +
       `━━ <b>Deine Assets</b> ━━\n\n` +
       (assetsText || '<i>Keine Assets im Besitz</i>\n') +
-      `\n🕐 Stand: ${new Date().toLocaleTimeString('de-DE')}`,
-      { parse_mode: 'HTML', reply_markup: kb }
-    );
+      `\n🕐 Stand: ${new Date().toLocaleTimeString('de-DE')}`;
+
+    if (ctx.callbackQuery) {
+      try {
+        await ctx.editMessageText(messageText, { parse_mode: 'HTML', reply_markup: kb });
+      } catch (e) {
+        if (e.description && e.description.includes('message is not modified')) {
+          // Ignorieren, wenn sich der Text seit der letzten Sekunde nicht geändert hat
+        } else {
+          throw e;
+        }
+      }
+    } else {
+      await ctx.reply(messageText, { parse_mode: 'HTML', reply_markup: kb });
+    }
   } catch (err) {
-    ctx.reply('❌ Fehler beim Laden deines Portfolios.');
+    if (ctx.callbackQuery) {
+      ctx.answerCallbackQuery('❌ Fehler beim Laden deines Portfolios.');
+    } else {
+      ctx.reply('❌ Fehler beim Laden deines Portfolios.');
+    }
   }
 }
 

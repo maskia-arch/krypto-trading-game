@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import useStore from '../lib/store';
+import TradeView from './TradeView';
 
 export default function AssetsView() {
   const { profile, fetchProfile, showToast } = useStore();
-  const [sub, setSub] = useState('realestate');
+  const [sub, setSub] = useState('wallet');
   const [reTypes, setReTypes] = useState([]);
   const [myRE, setMyRE] = useState([]);
   const [cTypes, setCTypes] = useState([]);
@@ -30,7 +31,7 @@ export default function AssetsView() {
       setCTypes(c.types || []); 
       setMyColl(d.collectibles || []);
     } catch (e) {
-      console.error("Failed to load assets data", e);
+      console.error(e);
     }
     setLoading(false);
   };
@@ -75,9 +76,9 @@ export default function AssetsView() {
 
   return (
     <div className="space-y-3 pb-4 tab-enter">
-      {/* Tabs */}
       <div className="flex gap-1.5">
         {[
+          { id: 'wallet', label: '💳 Wallet', color: 'text-neon-gold', bg: 'bg-neon-gold/10', border: 'border-neon-gold/25' },
           { id: 'realestate', label: '🏠 Immobilien', color: 'text-neon-blue', bg: 'bg-neon-blue/10', border: 'border-neon-blue/25' },
           { id: 'collectibles', label: '💎 Besitztümer', color: 'text-neon-purple', bg: 'bg-neon-purple/10', border: 'border-neon-purple/25' },
         ].map(t => {
@@ -93,7 +94,11 @@ export default function AssetsView() {
         })}
       </div>
 
-      {loading ? (
+      {sub === 'wallet' ? (
+        <div className="mt-2">
+          <TradeView />
+        </div>
+      ) : loading ? (
         <div className="flex flex-col gap-3 mt-4">
           <div className="shimmer h-16 w-full rounded-xl" />
           <div className="shimmer h-24 w-full rounded-xl" />
@@ -101,7 +106,6 @@ export default function AssetsView() {
         </div>
       ) : (
         <>
-          {/* Stats Board */}
           <div className="card p-3 ring-1 ring-white/5">
             <div className="grid grid-cols-3 gap-3 text-center">
               <div>
@@ -121,7 +125,6 @@ export default function AssetsView() {
 
           {sub === 'realestate' ? (
             <div className="space-y-3">
-              {/* Portfolio */}
               {myRE.length > 0 && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between px-1 pt-1">
@@ -145,7 +148,6 @@ export default function AssetsView() {
                 </div>
               )}
 
-              {/* Shop */}
               <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-dim)] px-1 pt-2">Immobilien-Shop</p>
               <div className="space-y-2">
                 {reTypes.map(t => {
@@ -193,7 +195,6 @@ export default function AssetsView() {
             </div>
           ) : (
             <div className="space-y-3">
-              {/* Collectibles Portfolio */}
               {myColl.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-dim)] px-1 pt-1">Meine Sammlung ({myColl.length})</p>
@@ -211,7 +212,6 @@ export default function AssetsView() {
                 </div>
               )}
 
-              {/* Collectibles Shop */}
               <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-dim)] px-1 pt-2">Besitztümer-Shop</p>
               <div className="space-y-2">
                 {cTypes.map(t => {
