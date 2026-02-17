@@ -23,6 +23,7 @@ const db = {
   },
 
   async isUsernameTaken(username) {
+    if (!username) return false;
     const { data } = await supabase
       .from('profiles')
       .select('id')
@@ -32,39 +33,36 @@ const db = {
   },
 
   async createProfile(telegramId, username, firstName) {
+    // FIX: Wenn der User keinen Telegram-Namen hat, geben wir ihm einen Platzhalter.
+    // Das verhindert den Absturz durch den UNIQUE Constraint in der Datenbank!
+    const safeUsername = username ? username : `trader_${telegramId}`;
+
     const profileData = {
       telegram_id: telegramId,
-      username: username || null,
+      username: safeUsername,
       first_name: firstName || 'Trader',
       balance: 10000.00,
-      feedback_sent: false,
-      story_bonus_claimed: false,
       last_active: new Date().toISOString(),
       created_at: new Date().toISOString()
     };
 
-    // Versuche das Profil anzulegen (ohne die neuen Spalten direkt zu erzwingen, 
-    // falls das Schema-Update noch nicht gegriffen hat)
-    let { data, error } = await supabase
+    const { data, error } = await supabase
       .from('profiles')
       .insert(profileData)
       .select()
       .single();
 
     if (error) {
-      console.error('CreateProfile Error:', error);
-      throw error;
+      console.error('DB Insert Error:', error);
+      throw new Error(error.message); // Wirft den genauen Fehler an start.js weiter
     }
 
-    // Wenn erfolgreich, setze die Startwerte separat (fehlertolerant)
     try {
        await supabase.from('profiles').update({
          season_start_worth: 10000.00,
          day_start_worth: 10000.00
        }).eq('id', data.id);
-    } catch (e) {
-       console.log("Konnte Startwerte nicht setzen (Schema prüfen).", e);
-    }
+    } catch (e) {}
 
     return data;
   },
@@ -227,8 +225,9 @@ const db = {
   },
 
   async getLeaderboard(filter = 'profit_season', limit = 20) {
+    // FIX: select('*') verhindert Abstürze, falls spezifische Spalten fehlen.
     const [ { data: profiles }, { data: assets }, { data: prices }, { data: season } ] = await Promise.all([
-      supabase.from('profiles').select('id, username, first_name, balance, total_volume, telegram_id, season_start_worth, day_start_worth'),
+      supabase.from('profiles').select('*'),
       supabase.from('assets').select('profile_id, symbol, amount'),
       supabase.from('current_prices').select('symbol, price_eur'),
       this.getActiveSeason()
@@ -256,7 +255,6 @@ const db = {
       let diffEuro = 0;
       let startBasis = 10000;
 
-      // Strikte Validierung der Basiswerte
       const seasonStart = Number(p.season_start_worth);
       const dayStart = Number(p.day_start_worth);
 
@@ -268,7 +266,6 @@ const db = {
         diffEuro = currentNetWorth - startBasis;
       }
 
-      // Vermeide NaN, falls startBasis = 0 ist
       const diffPercent = startBasis > 0 ? (diffEuro / startBasis) * 100 : 0;
 
       return {

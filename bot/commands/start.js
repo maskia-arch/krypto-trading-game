@@ -69,8 +69,8 @@ module.exports = async (ctx) => {
     }
 
   } catch (err) {
-    // Hier wird der Fehler geloggt, damit du im Server-Terminal genau siehst, warum es fehlschlägt!
-    console.error('Fehler im /start Befehl:', err); 
-    ctx.reply('❌ Ups! Da ist beim Erstellen deines Kontos etwas schiefgelaufen. Bitte versuch es gleich nochmal.');
+    console.error('Fehler im /start Befehl:', err);
+    // FIX: Der Bot schickt dir jetzt den genauen Datenbank-Fehler direkt in den Chat!
+    ctx.reply(`❌ Ups! Fehler beim Erstellen: <b>${err.message || 'Unbekannt'}</b>\n\nBitte mache hiervon einen Screenshot!`, { parse_mode: 'HTML' });
   }
 };
