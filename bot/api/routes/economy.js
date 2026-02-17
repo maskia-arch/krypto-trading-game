@@ -43,16 +43,13 @@ router.get('/chart/:symbol', async (req, res) => {
 router.get('/leaderboard', async (req, res) => {
   try {
     const { filter } = req.query;
-    
-    // Ruft das Leaderboard mit dem Filter (profit_season, profit_24h, etc.) ab.
-    // Das Ergebnis enthält leaders (mit performance_euro & performance_percent), 
-    // das season-Objekt und den aktuellen pool.
     const result = await db.getLeaderboard(filter || 'profit_season');
+    const realTimePool = await db.getFeePool();
 
     res.json({ 
       leaders: result.leaders || [],
-      season: result.season, // Enthält das komplette Objekt inkl. end_date für den WebApp-Timer
-      pool: result.pool
+      season: result.season,
+      pool: realTimePool
     });
   } catch (err) {
     console.error('API Leaderboard Error:', err);
