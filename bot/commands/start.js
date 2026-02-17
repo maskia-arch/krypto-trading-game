@@ -17,14 +17,13 @@ const startCommand = async (ctx) => {
         .text('🏆 Rangliste', 'leaderboard');
 
       return ctx.reply(
-        `Willkommen zurück, <b>${esc(profile.first_name)}</b>! 💰\n\n` +
+        `Willkommen zurück, <b>${esc(profile.username || profile.first_name)}</b>! 💰\n\n` +
         `Dein Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>\n` +
         `🎮 v${VERSION}`,
         { parse_mode: 'HTML', reply_markup: kb }
       );
     }
 
-    // NEUER FLOW: Profil existiert nicht, nach InGame-Namen fragen
     return ctx.reply(
       `Willkommen bei <b>ValueTrade</b>! 📈\n\n` +
       `Bevor Onkel Heinrich dir dein Startkapital überweist, benötigst du einen <b>InGame-Namen</b>.\n\n` +
@@ -45,7 +44,6 @@ const startCommand = async (ctx) => {
   }
 };
 
-// Diese Funktion wird nach erfolgreicher Eingabe & Validierung aus der bot.js aufgerufen
 startCommand.sendWelcomeMessage = async (ctx, profile) => {
   const tgId = ctx.from.id;
 
