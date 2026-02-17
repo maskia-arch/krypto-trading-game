@@ -1,17 +1,14 @@
-let leaderboardCache = {
-  data: null,
-  lastUpdate: 0
-};
+let leaderboardCache = {};
 
 module.exports = (db) => ({
   async getLeaderboard(filter = 'profit_season', limit = 20) {
     const CACHE_DURATION = 30 * 60 * 1000;
     const now = Date.now();
 
-    if (leaderboardCache.data && (now - leaderboardCache.lastUpdate) < CACHE_DURATION) {
+    if (leaderboardCache[filter] && (now - leaderboardCache[filter].lastUpdate) < CACHE_DURATION) {
       return {
-        ...leaderboardCache.data,
-        leaders: leaderboardCache.data.leaders.slice(0, limit),
+        ...leaderboardCache[filter].data,
+        leaders: leaderboardCache[filter].data.leaders.slice(0, limit),
         fromCache: true
       };
     }
@@ -53,14 +50,13 @@ module.exports = (db) => ({
       const seasonStart = Number(p.season_start_worth);
       const dayStart = Number(p.day_start_worth);
 
-      if (filter && filter.includes('season')) {
+      if (filter.includes('season')) {
         startBasis = (seasonStart && seasonStart > 0) ? seasonStart : 10000;
-        diffEuro = currentNetWorth - startBasis;
       } else {
         startBasis = (dayStart && dayStart > 0) ? dayStart : currentNetWorth;
-        diffEuro = currentNetWorth - startBasis;
       }
 
+      diffEuro = currentNetWorth - startBasis;
       const diffPercent = startBasis > 0 ? (diffEuro / startBasis) * 100 : 0;
 
       return {
@@ -71,10 +67,10 @@ module.exports = (db) => ({
       };
     });
 
-    if (filter && filter.startsWith('profit')) {
-      leaders.sort((a, b) => b.performance_euro - a.performance_euro);
-    } else if (filter && filter.startsWith('loss')) {
+    if (filter.startsWith('loss')) {
       leaders.sort((a, b) => a.performance_euro - b.performance_euro);
+    } else if (filter.startsWith('profit') || filter.includes('win')) {
+      leaders.sort((a, b) => b.performance_euro - a.performance_euro);
     } else {
       leaders.sort((a, b) => b.net_worth - a.net_worth);
     }
@@ -85,7 +81,7 @@ module.exports = (db) => ({
       pool: pool
     };
 
-    leaderboardCache = {
+    leaderboardCache[filter] = {
       data: result,
       lastUpdate: now
     };

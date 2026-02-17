@@ -43,7 +43,18 @@ router.get('/chart/:symbol', async (req, res) => {
 router.get('/leaderboard', async (req, res) => {
   try {
     const { filter } = req.query;
-    const result = await db.getLeaderboard(filter || 'profit_season');
+    
+    let dbFilter = 'profit_season';
+    if (filter) {
+      const f = String(filter).toLowerCase();
+      if (f.includes('loss')) {
+        dbFilter = f.includes('24') ? 'loss_24h' : 'loss_season';
+      } else {
+        dbFilter = f.includes('24') ? 'profit_24h' : 'profit_season';
+      }
+    }
+
+    const result = await db.getLeaderboard(dbFilter);
     const realTimePool = await db.getFeePool();
 
     res.json({ 
