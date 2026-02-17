@@ -42,16 +42,18 @@ router.get('/chart/:symbol', async (req, res) => {
 
 router.get('/leaderboard', async (req, res) => {
   try {
-    const leaders = await db.getLeaderboard(20);
-    const pool = await db.getFeePool();
-    const activeSeason = await db.getActiveSeason();
+    const { filter } = req.query;
+    
+    // Ruft das Leaderboard mit dem entsprechenden Filter (profit_season, profit_24h, etc.) ab
+    const result = await db.getLeaderboard(filter || 'profit_season');
 
     res.json({ 
-      leaders: leaders || [],
-      season: activeSeason ? activeSeason.name : "Season 1",
-      pool: pool
+      leaders: result.leaders || [],
+      season: result.season,
+      pool: result.pool
     });
   } catch (err) {
+    console.error('API Leaderboard Error:', err);
     res.status(500).json({ error: 'Leaderboard Fehler' });
   }
 });

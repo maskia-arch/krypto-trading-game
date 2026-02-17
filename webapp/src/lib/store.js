@@ -102,11 +102,19 @@ const useStore = create((set, get) => ({
     return data;
   },
 
-  loadLeaderboard: async () => {
+  // Aktualisierte Leaderboard-Logik mit Filter-Support
+  loadLeaderboard: async (filter = 'profit_season') => {
     try {
-      const data = await api.getLeaderboard();
-      set({ leaderboard: data.leaders || [], season: data.season, feePool: data.pool || 0 });
-    } catch (e) {}
+      // Wir übergeben den Filter an die API (muss in api.js ggf. noch angepasst werden)
+      const data = await api.getLeaderboard(filter);
+      set({ 
+        leaderboard: data.leaders || [], 
+        season: data.season, 
+        feePool: data.pool || 0 
+      });
+    } catch (e) {
+      console.error('Leaderboard Store Error:', e);
+    }
   },
 }));
 

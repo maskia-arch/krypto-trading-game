@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import useStore from '../lib/store';
 import { api, getTelegramId } from '../lib/api';
 
@@ -6,33 +6,61 @@ export default function RankView() {
   const { leaderboard, season, feePool, fetchProfile, loadLeaderboard } = useStore();
   const [txs, setTxs] = useState([]);
   const [sub, setSub] = useState('rank');
+  const [filter, setFilter] = useState('profit_season'); // Neue Filter-Logik
   const [loading, setLoading] = useState(true);
-  
+  const [now, setNow] = useState(new Date());
+
   const myId = getTelegramId();
+
+  // Live-Timer Update jede Sekunde
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [filter]); // Reload wenn Filter wechselt
 
   const loadData = async () => {
     setLoading(true);
     await Promise.all([
       fetchProfile(),
-      loadLeaderboard()
+      loadLeaderboard(filter) // API muss Filter unterstützen
     ]);
     
     try {
       const data = await api.getTransactions();
       setTxs(data.transactions || []);
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
     setLoading(false);
   };
 
-  const daysLeft = season
-    ? Math.max(0, Math.ceil((new Date(season.end_date) - Date.now()) / 86400000))
-    : 0;
+  // Season Timer Berechnung
+  const timeLeft = useMemo(() => {
+    if (!season?.end_date) return null;
+    const diff = new Date(season.end_date) - now;
+    if (diff <= 0) return "Beendet";
+    
+    const d = Math.floor(diff / 86400000);
+    const h = Math.floor((diff % 86400000) / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    return `${d}d ${h}h ${m}m ${s}s`;
+  }, [season, now]);
+
+  // Top 10 + Me Logik
+  const displayList = useMemo(() => {
+    if (!leaderboard) return [];
+    const top10 = leaderboard.slice(0, 10);
+    const myIndex = leaderboard.findIndex(p => String(p.telegram_id) === String(myId));
+    
+    // Wenn ich nicht in Top 10 bin, hänge mich als 11. Element an
+    if (myIndex >= 10) {
+      return [...top10, { ...leaderboard[myIndex], rank: myIndex + 1 }];
+    }
+    return top10;
+  }, [leaderboard, myId]);
 
   const TX_META = {
     buy:      { label: 'Kauf',     emoji: '📈', color: 'text-neon-red' },
@@ -45,163 +73,131 @@ export default function RankView() {
 
   return (
     <div className="space-y-3 pb-4 tab-enter">
+      {/* Tab Switcher */}
       <div className="flex gap-1.5">
-        {[
-          { id: 'rank', label: '🏆 ValueTrade Rangliste' },
-          { id: 'history', label: '📜 Meine History' },
-        ].map(t => {
-          const act = sub === t.id;
-          return (
-            <button key={t.id} onClick={() => setSub(t.id)}
-              className="btn-press flex-1 py-2 rounded-xl text-xs font-bold transition-all"
-              style={{
-                background: act ? 'rgba(251,191,36,0.08)' : 'var(--bg-card)',
-                border: `1px solid ${act ? 'rgba(251,191,36,0.2)' : 'var(--border-dim)'}`,
-                color: act ? 'var(--neon-gold)' : 'var(--text-dim)',
-              }}>
-              {t.label}
-            </button>
-          );
-        })}
+        {[{ id: 'rank', label: '🏆 Rangliste' }, { id: 'history', label: '📜 History' }].map(t => (
+          <button key={t.id} onClick={() => setSub(t.id)}
+            className={`flex-1 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              sub === t.id ? 'bg-neon-gold/10 border border-neon-gold/30 text-neon-gold' : 'bg-white/5 border border-white/5 text-white/40'
+            }`}>
+            {t.label}
+          </button>
+        ))}
       </div>
 
-      {loading ? (
-        <div className="flex flex-col items-center justify-center h-64 gap-3">
-          <div className="shimmer h-2 w-16 rounded-full" />
-          <div className="shimmer h-12 w-full rounded-xl" />
-          <div className="shimmer h-12 w-full rounded-xl" />
-          <div className="shimmer h-12 w-full rounded-xl" />
-        </div>
-      ) : sub === 'rank' ? (
+      {sub === 'rank' ? (
         <>
-          <div className="card p-4 relative overflow-hidden ring-1 ring-neon-gold/20"
-               style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.08) 0%, rgba(6,8,15,1) 100%)' }}>
+          {/* Filter Bar */}
+          <div className="flex overflow-x-auto no-scrollbar gap-2 py-1">
+            {[
+              { id: 'profit_season', label: '🔥 Season Win' },
+              { id: 'profit_24h', label: '⚡ 24h Win' },
+              { id: 'loss_season', label: '💀 Season Loss' },
+              { id: 'loss_24h', label: '📉 24h Loss' },
+            ].map(f => (
+              <button key={f.id} onClick={() => setFilter(f.id)}
+                className={`whitespace-nowrap px-4 py-1.5 rounded-full text-[10px] font-bold border transition-all ${
+                  filter === f.id ? 'bg-white text-black border-white' : 'bg-black/40 text-white/60 border-white/10'
+                }`}>
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Season Card mit Timer */}
+          <div className="card p-4 relative overflow-hidden border-neon-gold/20"
+               style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.12) 0%, rgba(6,8,15,1) 100%)' }}>
             <div className="flex items-start justify-between relative z-10">
               <div>
-                <p className="text-[10px] uppercase tracking-wider font-bold text-neon-gold glow-gold">
-                  Season Pool
-                </p>
-                <p className="text-sm font-bold mt-0.5 text-white">{season || 'Season 1'}</p>
+                <p className="text-[10px] uppercase tracking-tighter font-bold text-neon-gold glow-gold">Season Pool</p>
+                <p className="text-sm font-bold mt-0.5 text-white">{season?.name || 'Season 1'}</p>
+                {timeLeft && (
+                  <div className="mt-2 flex items-center gap-1.5">
+                    <span className="flex h-1.5 w-1.5 rounded-full bg-neon-red animate-pulse" />
+                    <p className="text-[10px] font-mono font-bold text-neon-red uppercase">{timeLeft}</p>
+                  </div>
+                )}
               </div>
               <div className="text-right">
-                <p className="text-[10px] uppercase tracking-wider font-bold text-neon-red">
-                  Live Ranking
-                </p>
-                <p className="text-xl font-mono font-bold text-neon-gold glow-gold mt-0.5">
+                <p className="text-[10px] uppercase tracking-wider font-bold text-white/40">Jackpot</p>
+                <p className="text-xl font-mono font-bold text-neon-gold glow-gold">
                   {(feePool || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-2 mt-4 relative z-10">
-              {[
-                { m: '🥇', pct: 40 },
-                { m: '🥈', pct: 25 },
-                { m: '🥉', pct: 15 },
-                { m: '🎖️', pct: 20 },
-              ].map((p, i) => (
-                <div key={i} className="text-center py-2 rounded-xl border border-white/5" 
-                     style={{ background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(4px)' }}>
-                  <span className="text-sm drop-shadow-md">{p.m}</span>
-                  <p className="text-[10px] font-mono font-bold text-neon-gold mt-1">
-                    {((feePool || 0) * p.pct / 100).toLocaleString('de-DE', { maximumFractionDigits: 0 })}€
-                  </p>
-                </div>
-              ))}
-            </div>
+
+            {/* Nur beim Profit-Filter werden die Gewinn-Einstufungen gezeigt */}
+            {filter.startsWith('profit') && (
+              <div className="grid grid-cols-4 gap-2 mt-4 relative z-10">
+                {[{ m: '🥇', p: 40 }, { m: '🥈', p: 25 }, { m: '🥉', p: 15 }, { m: '🎖️', p: 20 }].map((p, i) => (
+                  <div key={i} className="text-center py-2 rounded-xl bg-black/40 border border-white/5 backdrop-blur-md">
+                    <span className="text-sm">{p.m}</span>
+                    <p className="text-[10px] font-mono font-bold text-neon-gold mt-1">
+                      {((feePool || 0) * p.p / 100).toLocaleString('de-DE', { maximumDigits: 0 })}€
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
+          {/* Leaderboard List */}
           <div className="space-y-2 mt-2">
-            {leaderboard?.map((p, i) => {
-              const medal = ['🥇', '🥈', '🥉'][i];
+            {displayList.map((p, i) => {
+              const actualRank = p.rank || (i + 1);
+              const medal = actualRank <= 3 ? ['🥇', '🥈', '🥉'][actualRank - 1] : null;
               const isMe = String(p.telegram_id) === String(myId);
               
               return (
-                <div key={i}
-                  className={`card p-3 flex items-center justify-between transition-all duration-300 ${
-                    isMe ? 'ring-1 ring-neon-blue bg-neon-blue/5' : ''
-                  }`}>
+                <div key={i} className={`card p-3 flex items-center justify-between border-l-2 transition-all ${
+                  isMe ? 'border-neon-blue bg-neon-blue/5 ring-1 ring-neon-blue/20' : 'border-transparent'
+                }`}>
                   <div className="flex items-center gap-3">
-                    {medal ? (
-                      <span className="text-2xl w-8 text-center drop-shadow-md">{medal}</span>
-                    ) : (
-                      <span className="text-xs font-mono font-bold w-8 text-center opacity-40">
-                        {i + 1}
-                      </span>
-                    )}
+                    <div className="w-8 flex justify-center">
+                      {medal ? <span className="text-xl">{medal}</span> : <span className="text-xs font-mono opacity-30">{actualRank}</span>}
+                    </div>
                     <div>
                       <p className={`text-sm font-bold ${isMe ? 'text-neon-blue' : 'text-white'}`}>
                         {p.username || p.first_name || 'Unbekannt'}
-                        {isMe && <span className="text-[9px] uppercase tracking-wider ml-1.5 opacity-70">(Du)</span>}
+                        {isMe && <span className="text-[9px] ml-1.5 opacity-50 font-normal">(DU)</span>}
                       </p>
-                      <p className="text-[10px] font-mono font-medium opacity-50 mt-0.5">
-                        Umsatz: {Number(p.total_volume || 0).toLocaleString('de-DE')}€
-                      </p>
+                      <p className="text-[9px] font-mono opacity-40">Umsatz: {Number(p.total_volume || 0).toLocaleString('de-DE')}€</p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-sm font-mono font-bold ${isMe ? 'text-white' : 'text-neon-gold'}`}>
+                    <p className={`text-sm font-mono font-bold ${filter.includes('loss') ? 'text-neon-red' : (isMe ? 'text-white' : 'text-neon-gold')}`}>
                       {Number(p.net_worth || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
                     </p>
-                    <p className="text-[9px] uppercase tracking-wider font-semibold opacity-40 mt-0.5">
-                      Gesamtvermögen
-                    </p>
+                    <p className="text-[8px] uppercase font-bold opacity-30">Net Worth</p>
                   </div>
                 </div>
               );
             })}
-            
-            {(!leaderboard || leaderboard.length === 0) && (
-              <div className="card p-8 text-center">
-                <span className="text-4xl opacity-50">🏆</span>
-                <p className="text-xs mt-3 font-semibold text-[var(--text-dim)]">Noch keine ValueTrader aktiv</p>
-              </div>
-            )}
           </div>
         </>
       ) : (
-        <div className="space-y-2 mt-2">
+        /* History View (Unverändert aber mit Styles angepasst) */
+        <div className="space-y-2">
           {txs.map((tx, idx) => {
             const m = TX_META[tx.type] || { label: tx.type, emoji: '📝', color: 'text-white' };
-            const isPositive = ['sell', 'rent', 'bailout'].includes(tx.type);
-            
+            const isPos = ['sell', 'rent', 'bailout'].includes(tx.type);
             return (
-              <div key={idx} className="card p-3 flex items-center justify-between">
+              <div key={idx} className="card p-3 flex items-center justify-between border-white/5">
                 <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-full flex items-center justify-center bg-white/5 border border-white/5">
-                    <span className="text-sm">{m.emoji}</span>
+                  <div className="h-8 w-8 rounded-full flex items-center justify-center bg-white/5 border border-white/10 text-sm">
+                    {m.emoji}
                   </div>
                   <div>
-                    <p className={`text-xs font-bold uppercase tracking-wider ${m.color}`}>{m.label}</p>
-                    <p className="text-[10px] font-mono opacity-50 mt-0.5">
-                      {tx.symbol && <span className="text-white font-semibold">{tx.symbol} · </span>}
-                      {new Date(tx.created_at).toLocaleString('de-DE', {
-                        day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit'
-                      })}
-                    </p>
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${m.color}`}>{m.label}</p>
+                    <p className="text-[10px] font-mono opacity-40">{new Date(tx.created_at).toLocaleString('de-DE')}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  {tx.amount > 0 && (
-                    <p className="text-[10px] font-mono opacity-60 mb-0.5">
-                      {Number(tx.amount).toLocaleString('de-DE', { maximumFractionDigits: 4 })} {tx.symbol}
-                    </p>
-                  )}
-                  <p className={`text-sm font-mono font-bold ${
-                    isPositive ? 'text-neon-green glow-green' : 'text-neon-red'
-                  }`}>
-                    {isPositive ? '+' : '-'}{Number(tx.total_eur || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
-                  </p>
-                </div>
+                <p className={`text-sm font-mono font-bold ${isPos ? 'text-neon-green glow-green' : 'text-neon-red'}`}>
+                  {isPos ? '+' : '-'}{Number(tx.total_eur || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
+                </p>
               </div>
             );
           })}
-          
-          {txs.length === 0 && (
-            <div className="card p-8 text-center">
-              <span className="text-4xl opacity-50">📜</span>
-              <p className="text-xs mt-3 font-semibold text-[var(--text-dim)]">Transaktions-Log ist leer</p>
-            </div>
-          )}
         </div>
       )}
     </div>

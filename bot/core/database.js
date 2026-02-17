@@ -42,7 +42,9 @@ const db = {
         feedback_sent: false,
         story_bonus_claimed: false,
         last_active: new Date().toISOString(),
-        created_at: new Date().toISOString()
+        created_at: new Date().toISOString(),
+        season_start_worth: 10000.00,
+        day_start_worth: 10000.00
       })
       .select()
       .single();
@@ -207,11 +209,12 @@ const db = {
     return Number(data?.total_eur || 0);
   },
 
-  async getLeaderboard(limit = 20) {
-    const [ { data: profiles }, { data: assets }, { data: prices } ] = await Promise.all([
-      supabase.from('profiles').select('id, username, first_name, balance, total_volume, telegram_id'),
+  async getLeaderboard(filter = 'profit_season', limit = 20) {
+    const [ { data: profiles }, { data: assets }, { data: prices }, { data: season } ] = await Promise.all([
+      supabase.from('profiles').select('id, username, first_name, balance, total_volume, telegram_id, season_start_worth, day_start_worth'),
       supabase.from('assets').select('profile_id, symbol, amount'),
-      supabase.from('current_prices').select('symbol, price_eur')
+      supabase.from('current_prices').select('symbol, price_eur'),
+      this.getActiveSeason()
     ]);
 
     const priceMap = {};
@@ -223,7 +226,7 @@ const db = {
       userAssets[a.profile_id].push(a);
     });
 
-    const leaders = (profiles || []).map(p => {
+    let leaders = (profiles || []).map(p => {
       let cryptoValue = 0;
       if (userAssets[p.id]) {
         userAssets[p.id].forEach(asset => {
@@ -231,14 +234,53 @@ const db = {
           cryptoValue += Number(asset.amount) * currentPrice;
         });
       }
+      
+      const currentNetWorth = Number(p.balance) + cryptoValue;
+      let performance = 0;
+
+      if (filter === 'profit_season' || filter === 'loss_season') {
+        performance = currentNetWorth - Number(p.season_start_worth || 10000);
+      } else if (filter === 'profit_24h' || filter === 'loss_24h') {
+        performance = currentNetWorth - Number(p.day_start_worth || currentNetWorth);
+      }
+
       return {
         ...p,
-        net_worth: Number(p.balance) + cryptoValue
+        net_worth: currentNetWorth,
+        performance: performance
       };
     });
 
-    leaders.sort((a, b) => b.net_worth - a.net_worth);
-    return leaders.slice(0, limit);
+    if (filter.startsWith('profit')) {
+      leaders.sort((a, b) => b.performance - a.performance);
+    } else if (filter.startsWith('loss')) {
+      leaders.sort((a, b) => a.performance - b.performance);
+    } else {
+      leaders.sort((a, b) => b.net_worth - a.net_worth);
+    }
+
+    return {
+      leaders: leaders,
+      season: season,
+      pool: await this.getFeePool()
+    };
+  },
+
+  async updateDailySnapshots() {
+    const { data: users } = await supabase.from('profiles').select('id, balance');
+    const prices = await this.getAllPrices();
+    const priceMap = {};
+    prices.forEach(p => priceMap[p.symbol] = Number(p.price_eur));
+
+    for (const user of users) {
+      const assets = await this.getAssets(user.id);
+      let cryptoValue = 0;
+      assets.forEach(a => {
+        cryptoValue += Number(a.amount) * (priceMap[a.symbol] || 0);
+      });
+      const total = Number(user.balance) + cryptoValue;
+      await supabase.from('profiles').update({ day_start_worth: total }).eq('id', user.id);
+    }
   },
 
   async getActiveSeason() {

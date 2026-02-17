@@ -1,8 +1,9 @@
 const cron = require('node-cron');
 const { db } = require('../core/database');
-const { ADMIN_ID, COINS } = require('../core/config');
+const { ADMIN_ID } = require('../core/config');
 const { priceService } = require('../services/priceService');
 const { tradeService } = require('../services/tradeService');
+const { seasonService } = require('../services/seasonService');
 
 function setupCronJobs(bot) {
   const runFrequentTasks = async () => {
@@ -17,6 +18,14 @@ function setupCronJobs(bot) {
 
   runFrequentTasks();
   setInterval(runFrequentTasks, 45000);
+
+  cron.schedule('*/15 * * * *', async () => {
+    try {
+      await seasonService.checkAndHandleSeasonTransition(bot);
+    } catch (err) {
+      console.error('Season Transition Check Error:', err);
+    }
+  });
 
   cron.schedule('0 0,12 * * *', async () => {
     try {
@@ -105,12 +114,10 @@ function setupCronJobs(bot) {
 
   cron.schedule('0 0 * * *', async () => {
     try {
-      const season = await db.getActiveSeason();
-      if (season && new Date(season.end_date) <= new Date()) {
-        await bot.api.sendMessage(ADMIN_ID, '🏆 <b>Season-Update</b>\n\nZeit abgelaufen!', { parse_mode: 'HTML' });
-      }
+      await db.updateDailySnapshots();
+      console.log('Daily NetWorth snapshots updated.');
     } catch (err) {
-      console.error(err);
+      console.error('Daily Snapshot Error:', err);
     }
   });
 }

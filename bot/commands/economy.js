@@ -4,42 +4,60 @@ const { esc } = require('../core/utils');
 
 async function handleLeaderboard(ctx) {
   try {
-    const leaders = await db.getLeaderboard(10);
-    const pool = await db.getFeePool();
-    const season = await db.getActiveSeason();
+    const filter = 'profit_season';
+    const result = await db.getLeaderboard(filter, 10);
+    const leaders = result.leaders;
+    const pool = result.pool;
+    const season = result.season;
 
     let text = `🏆 <b>ValueTrade Rangliste</b>\n\n`;
 
     if (season) {
       const end = new Date(season.end_date);
-      const days = Math.max(0, Math.ceil((end - Date.now()) / (1000 * 60 * 60 * 24)));
-      text += `🗓 <b>Season Ende:</b> in ${days} Tagen\n`;
+      const now = new Date();
+      const diff = end - now;
+
+      if (diff > 0) {
+        const days = Math.floor(diff / 86400000);
+        const hours = Math.floor((diff % 86400000) / 3600000);
+        const minutes = Math.floor((diff % 3600000) / 60000);
+        text += `⏳ <b>Season Ende:</b> <code>${days}d ${hours}h ${minutes}m</code>\n`;
+      } else {
+        text += `⏳ <b>Season Ende:</b> Beendet\n`;
+      }
       text += `💰 <b>Season Pool:</b> ${Number(pool || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€\n\n`;
     }
 
-    text += `━━ 💎 <b>Top 10 Gesamtvermögen</b> 💎 ━━\n\n`;
-    leaders.forEach((l, i) => {
+    text += `━━ 🔥 <b>Top 10 Season Gewinner</b> ━━\n\n`;
+
+    leaders.slice(0, 10).forEach((l, i) => {
       const medal = ['🥇', '🥈', '🥉'][i] || `<b>${i + 1}.</b>`;
       const name = esc(l.username || l.first_name || 'Trader');
+      const perf = Number(l.performance || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const nw = Number(l.net_worth || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      text += `${medal} ${name}\n └ 💶 ${nw}€\n`;
+      
+      text += `${medal} ${name}\n`;
+      text += ` ├ Profit: <b>+${perf}€</b>\n`;
+      text += ` └ Gesamt: ${nw}€\n`;
     });
 
-    const { data: topProfit } = await db.supabase
-      .from('transactions')
-      .select('profiles(first_name, username)')
-      .eq('type', 'sell')
-      .order('total_eur', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (topProfit && topProfit.profiles) {
-      const topName = esc(topProfit.profiles.username || topProfit.profiles.first_name || 'Unbekannt');
-      text += `\n🏅 <b>Top-Trade:</b> ${topName}`;
+    const myProfile = await db.getProfile(ctx.from.id);
+    if (myProfile) {
+      const allLeaders = await db.getLeaderboard(filter, 1000);
+      const myRank = allLeaders.leaders.findIndex(p => String(p.telegram_id) === String(ctx.from.id)) + 1;
+      
+      if (myRank > 10) {
+        const me = allLeaders.leaders[myRank - 1];
+        const myPerf = Number(me.performance || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        text += `\n━━ 👤 <b>Deine Platzierung</b> ━━\n\n`;
+        text += `<b>${myRank}.</b> ${esc(me.username || me.first_name)} (Du)\n`;
+        text += ` └ Profit: <b>${me.performance >= 0 ? '+' : ''}${myPerf}€</b>\n`;
+      }
     }
 
     await ctx.reply(text, { parse_mode: 'HTML' });
   } catch (err) {
+    console.error(err);
     ctx.reply('❌ Rangliste konnte nicht geladen werden.');
   }
 }
