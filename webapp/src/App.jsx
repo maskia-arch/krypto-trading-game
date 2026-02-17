@@ -5,6 +5,7 @@ import Header from './components/layout/Header';
 import Navbar from './components/layout/Navbar';
 import PriceTicker from './components/layout/PriceTicker';
 
+// Stelle sicher, dass diese Dateinamen EXAKT so im Ordner liegen (Groß/Kleinschreibung!)
 import ChartView from './views/ChartView';
 import AssetsView from './views/AssetsView';
 import RankView from './views/RankView';
@@ -44,6 +45,7 @@ export default function App() {
     };
   }, [fetchProfile, refreshPrices, loadVersion]);
 
+  // Redirection von altem Tab auf neuen Default
   useEffect(() => {
     if (tab === 'trade') {
       setTab('chart');
@@ -60,14 +62,14 @@ export default function App() {
             <PriceTicker 
               key={sym} 
               symbol={sym} 
-              price={prices[sym]} 
-              prevPrice={prevPrices[sym]} 
+              price={prices[sym] || 0} 
+              prevPrice={prevPrices[sym] || 0} 
             />
           ))}
         </div>
       </header>
 
-      <main className="px-4 pt-4 tab-enter" key={tab}>
+      <main className="px-4 pt-4 tab-enter">
         {tab === 'chart' && <ChartView />}
         {tab === 'assets' && <AssetsView />}
         {tab === 'rank' && <RankView />}
