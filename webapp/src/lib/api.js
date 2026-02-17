@@ -52,7 +52,10 @@ export const api = {
   getChart:             (symbol, range = '3h') => apiCall(`/api/economy/chart/${symbol}?range=${range}`),
   buy:                  (symbol, amount_eur) => apiCall('/api/trade', { method: 'POST', body: JSON.stringify({ action: 'buy', symbol, amount_eur }) }),
   sell:                 (symbol, amount_crypto) => apiCall('/api/trade', { method: 'POST', body: JSON.stringify({ action: 'sell', symbol, amount_crypto }) }),
-  getLeaderboard:       () => apiCall('/api/economy/leaderboard'), 
+  
+  // Unterstützt jetzt die Filter-Übergabe an das Backend
+  getLeaderboard:       (filter = 'profit_season') => apiCall(`/api/economy/leaderboard?filter=${filter}`), 
+  
   getRealEstateTypes:   () => apiCall('/api/economy/realestate/types'),
   getMyRealEstate:      () => apiCall('/api/economy/realestate/mine'),
   buyRealEstate:        (type_id) => apiCall('/api/economy/realestate/buy', { method: 'POST', body: JSON.stringify({ type_id }) }),

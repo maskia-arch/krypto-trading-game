@@ -6,13 +6,12 @@ export default function RankView() {
   const { leaderboard, season, feePool, fetchProfile, loadLeaderboard } = useStore();
   const [txs, setTxs] = useState([]);
   const [sub, setSub] = useState('rank');
-  const [filter, setFilter] = useState('profit_season'); // Neue Filter-Logik
+  const [filter, setFilter] = useState('profit_season');
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(new Date());
 
   const myId = getTelegramId();
 
-  // Live-Timer Update jede Sekunde
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
@@ -20,13 +19,13 @@ export default function RankView() {
 
   useEffect(() => {
     loadData();
-  }, [filter]); // Reload wenn Filter wechselt
+  }, [filter]);
 
   const loadData = async () => {
     setLoading(true);
     await Promise.all([
       fetchProfile(),
-      loadLeaderboard(filter) // API muss Filter unterstützen
+      loadLeaderboard(filter)
     ]);
     
     try {
@@ -36,9 +35,8 @@ export default function RankView() {
     setLoading(false);
   };
 
-  // Season Timer Berechnung
   const timeLeft = useMemo(() => {
-    if (!season?.end_date) return null;
+    if (!season || !season.end_date) return null;
     const diff = new Date(season.end_date) - now;
     if (diff <= 0) return "Beendet";
     
@@ -49,13 +47,11 @@ export default function RankView() {
     return `${d}d ${h}h ${m}m ${s}s`;
   }, [season, now]);
 
-  // Top 10 + Me Logik
   const displayList = useMemo(() => {
     if (!leaderboard) return [];
     const top10 = leaderboard.slice(0, 10);
     const myIndex = leaderboard.findIndex(p => String(p.telegram_id) === String(myId));
     
-    // Wenn ich nicht in Top 10 bin, hänge mich als 11. Element an
     if (myIndex >= 10) {
       return [...top10, { ...leaderboard[myIndex], rank: myIndex + 1 }];
     }
@@ -69,11 +65,11 @@ export default function RankView() {
     rent:     { label: 'Miete',    emoji: '🏠', color: 'text-neon-green' },
     bailout:  { label: 'Rettung',  emoji: '🆘', color: 'text-neon-blue' },
     leverage: { label: 'Hebel',    emoji: '🔥', color: 'text-neon-gold' },
+    prize:    { label: 'Gewinn',   emoji: '🎁', color: 'text-neon-gold' },
   };
 
   return (
     <div className="space-y-3 pb-4 tab-enter">
-      {/* Tab Switcher */}
       <div className="flex gap-1.5">
         {[{ id: 'rank', label: '🏆 Rangliste' }, { id: 'history', label: '📜 History' }].map(t => (
           <button key={t.id} onClick={() => setSub(t.id)}
@@ -87,7 +83,6 @@ export default function RankView() {
 
       {sub === 'rank' ? (
         <>
-          {/* Filter Bar */}
           <div className="flex overflow-x-auto no-scrollbar gap-2 py-1">
             {[
               { id: 'profit_season', label: '🔥 Season Win' },
@@ -104,13 +99,12 @@ export default function RankView() {
             ))}
           </div>
 
-          {/* Season Card mit Timer */}
           <div className="card p-4 relative overflow-hidden border-neon-gold/20"
                style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.12) 0%, rgba(6,8,15,1) 100%)' }}>
             <div className="flex items-start justify-between relative z-10">
               <div>
                 <p className="text-[10px] uppercase tracking-tighter font-bold text-neon-gold glow-gold">Season Pool</p>
-                <p className="text-sm font-bold mt-0.5 text-white">{season?.name || 'Season 1'}</p>
+                <p className="text-sm font-bold mt-0.5 text-white">{season?.name || 'Lade...'}</p>
                 {timeLeft && (
                   <div className="mt-2 flex items-center gap-1.5">
                     <span className="flex h-1.5 w-1.5 rounded-full bg-neon-red animate-pulse" />
@@ -126,14 +120,13 @@ export default function RankView() {
               </div>
             </div>
 
-            {/* Nur beim Profit-Filter werden die Gewinn-Einstufungen gezeigt */}
             {filter.startsWith('profit') && (
               <div className="grid grid-cols-4 gap-2 mt-4 relative z-10">
                 {[{ m: '🥇', p: 40 }, { m: '🥈', p: 25 }, { m: '🥉', p: 15 }, { m: '🎖️', p: 20 }].map((p, i) => (
                   <div key={i} className="text-center py-2 rounded-xl bg-black/40 border border-white/5 backdrop-blur-md">
                     <span className="text-sm">{p.m}</span>
                     <p className="text-[10px] font-mono font-bold text-neon-gold mt-1">
-                      {((feePool || 0) * p.p / 100).toLocaleString('de-DE', { maximumDigits: 0 })}€
+                      {((feePool || 0) * p.p / 100).toLocaleString('de-DE', { maximumFractionDigits: 0 })}€
                     </p>
                   </div>
                 ))}
@@ -141,12 +134,15 @@ export default function RankView() {
             )}
           </div>
 
-          {/* Leaderboard List */}
           <div className="space-y-2 mt-2">
             {displayList.map((p, i) => {
               const actualRank = p.rank || (i + 1);
               const medal = actualRank <= 3 ? ['🥇', '🥈', '🥉'][actualRank - 1] : null;
               const isMe = String(p.telegram_id) === String(myId);
+              
+              const isLoss = filter.includes('loss');
+              const perfEuro = p.performance_euro || 0;
+              const perfPercent = p.performance_percent || 0;
               
               return (
                 <div key={i} className={`card p-3 flex items-center justify-between border-l-2 transition-all ${
@@ -165,10 +161,12 @@ export default function RankView() {
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className={`text-sm font-mono font-bold ${filter.includes('loss') ? 'text-neon-red' : (isMe ? 'text-white' : 'text-neon-gold')}`}>
-                      {Number(p.net_worth || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
+                    <p className={`text-sm font-mono font-bold ${isLoss ? 'text-neon-red' : 'text-neon-green glow-green'}`}>
+                      {perfEuro >= 0 ? '+' : ''}{Number(perfEuro).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
                     </p>
-                    <p className="text-[8px] uppercase font-bold opacity-30">Net Worth</p>
+                    <p className={`text-[10px] font-mono font-bold ${isLoss ? 'text-neon-red/70' : 'text-neon-green/70'}`}>
+                      ({perfPercent}%)
+                    </p>
                   </div>
                 </div>
               );
@@ -176,11 +174,10 @@ export default function RankView() {
           </div>
         </>
       ) : (
-        /* History View (Unverändert aber mit Styles angepasst) */
         <div className="space-y-2">
           {txs.map((tx, idx) => {
             const m = TX_META[tx.type] || { label: tx.type, emoji: '📝', color: 'text-white' };
-            const isPos = ['sell', 'rent', 'bailout'].includes(tx.type);
+            const isPos = ['sell', 'rent', 'bailout', 'prize'].includes(tx.type);
             return (
               <div key={idx} className="card p-3 flex items-center justify-between border-white/5">
                 <div className="flex items-center gap-3">

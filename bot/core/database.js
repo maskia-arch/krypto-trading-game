@@ -236,31 +236,37 @@ const db = {
       }
       
       const currentNetWorth = Number(p.balance) + cryptoValue;
-      let performance = 0;
+      let diffEuro = 0;
+      let startBasis = 10000;
 
-      if (filter === 'profit_season' || filter === 'loss_season') {
-        performance = currentNetWorth - Number(p.season_start_worth || 10000);
-      } else if (filter === 'profit_24h' || filter === 'loss_24h') {
-        performance = currentNetWorth - Number(p.day_start_worth || currentNetWorth);
+      if (filter.includes('season')) {
+        startBasis = Number(p.season_start_worth) || 10000;
+        diffEuro = currentNetWorth - startBasis;
+      } else {
+        startBasis = Number(p.day_start_worth) || currentNetWorth;
+        diffEuro = currentNetWorth - startBasis;
       }
+
+      const diffPercent = startBasis > 0 ? (diffEuro / startBasis) * 100 : 0;
 
       return {
         ...p,
         net_worth: currentNetWorth,
-        performance: performance
+        performance_euro: diffEuro,
+        performance_percent: diffPercent.toFixed(2)
       };
     });
 
     if (filter.startsWith('profit')) {
-      leaders.sort((a, b) => b.performance - a.performance);
+      leaders.sort((a, b) => b.performance_euro - a.performance_euro);
     } else if (filter.startsWith('loss')) {
-      leaders.sort((a, b) => a.performance - b.performance);
+      leaders.sort((a, b) => a.performance_euro - b.performance_euro);
     } else {
       leaders.sort((a, b) => b.net_worth - a.net_worth);
     }
 
     return {
-      leaders: leaders,
+      leaders: leaders.slice(0, limit),
       season: season,
       pool: await this.getFeePool()
     };
