@@ -1,4 +1,4 @@
-const { Bot } = require('grammy');
+const { Bot, InlineKeyboard } = require('grammy');
 const { botConfig, ADMIN_ID } = require('./core/config');
 const { db } = require('./core/database');
 const { setupApi } = require('./api/server');
@@ -19,6 +19,28 @@ bot.command(['rank', 'leaderboard'], economyCommands.handleLeaderboard);
 bot.command('bailout', economyCommands.handleBailout);
 bot.command('pro', economyCommands.handlePro);
 bot.command('rent', economyCommands.handleRent);
+
+bot.command('settings', async (ctx) => {
+  const profile = await db.getProfile(ctx.from.id);
+  if (!profile) return;
+
+  const isPro = profile.is_pro && new Date(profile.pro_until) > new Date();
+  const kb = new InlineKeyboard()
+    .text('✏️ Name ändern', 'set_name_start')
+    .row()
+    .text('🗑️ Account löschen', 'set_delete_start')
+    .row()
+    .text('❌ Schließen', 'close');
+
+  return ctx.reply(
+    `⚙️ <b>Einstellungen</b>\n\n` +
+    `👤 Name: <b>${profile.username || profile.first_name}</b>\n` +
+    `⭐ Status: ${isPro ? 'Pro-Mitglied' : 'Standard'}\n` +
+    `📝 Namensänderungen: ${profile.username_changes || 0}\n\n` +
+    `Wähle eine Option:`,
+    { parse_mode: 'HTML', reply_markup: kb }
+  );
+});
 
 bot.command('admin', adminCommands.dashboard);
 bot.command('user', adminCommands.userInfo);
@@ -49,8 +71,65 @@ bot.on('message:story', async (ctx) => {
 });
 
 bot.on('message:text', async (ctx) => {
-  if (ctx.message.text.includes('Portfolio')) {
+  const text = ctx.message.text.trim();
+  const userId = ctx.from.id;
+
+  if (text.includes('Portfolio')) {
     return portfolioCommand(ctx);
+  }
+
+  if (ctx.message.reply_to_message && ctx.message.reply_to_message.text.includes('✍️')) {
+    if (text.length < 3) return ctx.reply("❌ Der Name muss mindestens 3 Zeichen lang sein.");
+    if (text.length > 20) return ctx.reply("❌ Der Name darf maximal 20 Zeichen lang sein.");
+
+    try {
+      const profile = await db.getProfile(userId);
+      const isPro = profile.is_pro && new Date(profile.pro_until) > new Date();
+      
+      await db.updateUsername(profile.id, text, isPro);
+      return ctx.reply(`✅ Dein Name wurde erfolgreich in <b>${text}</b> geändert!`, { parse_mode: 'HTML' });
+    } catch (e) {
+      // Hier wird der Error "Dieser Username ist bereits vergeben" aus der db.js abgefangen
+      return ctx.reply(`❌ Fehler: ${e.message}`);
+    }
+  }
+
+  const deleteMatch = text.match(/^Delete \((\d+)\)$/i);
+  if (deleteMatch) {
+    const tgId = Number(deleteMatch[1]);
+    if (tgId !== ctx.from.id) return ctx.reply("❌ Die ID stimmt nicht mit deinem Account überein.");
+
+    try {
+      const profile = await db.getProfile(tgId);
+      if (!profile) return;
+
+      const { data: request } = await db.supabase
+        .from('deletion_requests')
+        .select('*')
+        .eq('profile_id', profile.id)
+        .eq('status', 'pending')
+        .maybeSingle();
+
+      if (!request) {
+        return ctx.reply("❌ Bitte stelle zuerst den Löschantrag in den Einstellungen.");
+      }
+
+      const kb = new InlineKeyboard()
+        .text('🗑️ Unwiderruflich Löschen', `confirm_delete:${profile.id}`)
+        .text('❌ Ablehnen', `reject_delete:${profile.id}`);
+
+      await bot.api.sendMessage(ADMIN_ID, 
+        `⚠️ <b>LÖSCHANTRAG BESTÄTIGT</b>\n\n` +
+        `User: ${profile.first_name} (@${profile.username || '-'})\n` +
+        `ID: <code>${tgId}</code>\n\n` +
+        `Der User hat die Löschung manuell verifiziert. Jetzt final löschen?`,
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+
+      return ctx.reply("⏳ Deine Identität wurde bestätigt. Der Administrator wurde benachrichtigt und wird die Löschung final bearbeiten.");
+    } catch (e) {
+      console.error('Delete Verification Error:', e);
+    }
   }
 });
 

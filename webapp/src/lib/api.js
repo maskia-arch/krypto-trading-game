@@ -46,6 +46,8 @@ export const api = {
   getProfile:           () => apiCall('/api/profile'),
   getPrices:            () => apiCall('/api/profile/prices'),
   getTransactions:      () => apiCall('/api/profile/transactions'),
+  updateUsername:       (username) => apiCall('/api/profile/update-username', { method: 'POST', body: JSON.stringify({ username }) }),
+  requestAccountDeletion: () => apiCall('/api/profile/request-deletion', { method: 'POST' }),
   collectRent:          () => apiCall('/api/profile/collect-rent', { method: 'POST' }),
   getChart:             (symbol, range = '3h') => apiCall(`/api/economy/chart/${symbol}?range=${range}`),
   buy:                  (symbol, amount_eur) => apiCall('/api/trade', { method: 'POST', body: JSON.stringify({ action: 'buy', symbol, amount_eur }) }),

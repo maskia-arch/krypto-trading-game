@@ -1,25 +1,24 @@
-// ============================================================
-// COMMAND: ADMIN (commands/admin.js)
-// ============================================================
-
 const { InlineKeyboard } = require('grammy');
 const { db } = require('../core/database');
 const { esc } = require('../core/utils');
 const { ADMIN_ID, VERSION } = require('../core/config');
 
-/**
- * /admin - Das Haupt-Dashboard für Administratoren
- */
 async function dashboard(ctx) {
   if (ctx.from.id !== ADMIN_ID) return;
 
   try {
     const stats = await db.getStats();
     const pool = await db.getFeePool();
+    const { count: deleteRequests } = await db.supabase
+      .from('deletion_requests')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'pending');
 
     const kb = new InlineKeyboard()
       .text('👥 Alle User', 'admin_users')
       .text('💰 Fee Pool', 'admin_pool')
+      .row()
+      .text(`⚠️ Löschanträge (${deleteRequests || 0})`, 'admin_deletions')
       .row()
       .text('🏆 Season starten', 'admin_new_season')
       .text('🎁 Season auswerten', 'admin_end_season')
@@ -31,19 +30,15 @@ async function dashboard(ctx) {
       `🔧 <b>ADMIN DASHBOARD</b> (v${VERSION})\n\n` +
       `👥 User: ${stats.userCount}\n` +
       `📝 Transaktionen: ${stats.txCount}\n` +
-      `💰 Fee Pool: ${pool.toFixed(2)}€\n\n` +
+      `💰 Fee Pool: ${pool.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€\n\n` +
       `Letzte Aktualisierung: ${new Date().toLocaleString('de-DE')}`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
   } catch (err) {
-    console.error('Admin Dashboard Error:', err);
     ctx.reply('❌ Fehler beim Laden der Admin-Stats.');
   }
 }
 
-/**
- * /user <telegram_id> - Detail-Informationen zu einem Spieler
- */
 async function userInfo(ctx) {
   if (ctx.from.id !== ADMIN_ID) return;
   
@@ -61,14 +56,19 @@ async function userInfo(ctx) {
       .map(a => `  ${a.symbol}: ${Number(a.amount).toFixed(6)}`)
       .join('\n') || '  (keine)';
 
+    const lastActive = profile.last_active 
+      ? new Date(profile.last_active).toLocaleString('de-DE') 
+      : 'Nie';
+
     return ctx.reply(
       `👤 <b>User Info</b>\n\n` +
       `Name: ${esc(profile.first_name)}\n` +
       `Username: @${profile.username || '-'}\n` +
       `ID: <code>${profile.telegram_id}</code>\n` +
-      `Balance: ${Number(profile.balance).toFixed(2)}€\n` +
-      `Umsatz: ${Number(profile.total_volume).toFixed(2)}€\n` +
+      `Balance: ${Number(profile.balance).toLocaleString('de-DE')}€\n` +
+      `Umsatz: ${Number(profile.total_volume).toLocaleString('de-DE')}€\n` +
       `Pro: ${profile.is_pro ? '✅' : '❌'}\n` +
+      `Letzte Aktivität: ${lastActive}\n` +
       `Registriert: ${new Date(profile.created_at).toLocaleDateString('de-DE')}\n\n` +
       `📦 Assets:\n${assetsText}`,
       { parse_mode: 'HTML' }
@@ -78,9 +78,6 @@ async function userInfo(ctx) {
   }
 }
 
-/**
- * /setbalance <telegram_id> <amount> - Kontostand manuell anpassen
- */
 async function setBalance(ctx) {
   if (ctx.from.id !== ADMIN_ID) return;
   
@@ -95,15 +92,12 @@ async function setBalance(ctx) {
     if (!profile) return ctx.reply('User nicht gefunden.');
 
     await db.updateBalance(profile.id, amount);
-    return ctx.reply(`✅ Balance von ${esc(profile.first_name)} auf ${amount.toFixed(2)}€ gesetzt.`);
+    return ctx.reply(`✅ Balance von ${esc(profile.first_name)} auf ${amount.toLocaleString('de-DE')}€ gesetzt.`);
   } catch (err) {
     ctx.reply('❌ Fehler beim Setzen der Balance.');
   }
 }
 
-/**
- * /broadcast <nachricht> - Nachricht an alle registrierten User senden
- */
 async function broadcast(ctx) {
   if (ctx.from.id !== ADMIN_ID) return;
 
@@ -118,9 +112,7 @@ async function broadcast(ctx) {
       try {
         await ctx.api.sendMessage(u.telegram_id, `📢 <b>Ankündigung</b>\n\n${text}`, { parse_mode: 'HTML' });
         sent++;
-      } catch (e) {
-        // User hat den Bot blockiert
-      }
+      } catch (e) {}
     }
     return ctx.reply(`✅ Nachricht an ${sent}/${users.length} User gesendet.`);
   } catch (err) {

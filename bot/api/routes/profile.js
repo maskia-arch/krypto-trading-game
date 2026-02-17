@@ -3,7 +3,6 @@ const router = express.Router();
 const { db } = require('../../core/database');
 const { parseTelegramUser } = require('../auth');
 
-// Haupt-Profil-Route: Lädt Profil, Assets und aktuelle Preise
 router.get('/', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -21,23 +20,60 @@ router.get('/', async (req, res) => {
       prices 
     });
   } catch (err) {
-    console.error('Profile Fetch Error:', err);
     res.status(500).json({ error: 'Fehler beim Abrufen des Profils' });
   }
 });
 
-// Separate Preis-Route für das schnelle Polling (Ticker/Chart-Updates)
+router.post('/update-username', async (req, res) => {
+  const tgId = parseTelegramUser(req);
+  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
+
+  let { username } = req.body;
+  if (!username) return res.status(400).json({ error: 'Kein Name angegeben' });
+  
+  username = username.trim();
+  if (username.length < 3) return res.status(400).json({ error: 'Name muss mindestens 3 Zeichen lang sein' });
+  if (username.length > 20) return res.status(400).json({ error: 'Name zu lang (max. 20 Zeichen)' });
+
+  try {
+    const profile = await db.getProfile(tgId);
+    if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
+
+    const isPro = profile.is_pro && new Date(profile.pro_until) > new Date();
+
+    // Der Check findet direkt in der Datenbank-Methode statt, 
+    // wir fangen den Error hier sauber ab und geben ihn an die WebApp weiter.
+    await db.updateUsername(profile.id, username, isPro);
+    
+    res.json({ success: true, username });
+  } catch (err) {
+    // Hier wird z.B. "Dieser Username ist bereits vergeben." zurückgegeben
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/request-deletion', async (req, res) => {
+  const tgId = parseTelegramUser(req);
+  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
+
+  try {
+    const profile = await db.getProfile(tgId);
+    await db.requestAccountDeletion(profile.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: 'Löschantrag fehlgeschlagen' });
+  }
+});
+
 router.get('/prices', async (req, res) => {
   try {
     const prices = await db.getAllPrices();
     res.json({ prices });
   } catch (err) {
-    console.error('Price Fetch Error:', err);
     res.status(500).json({ error: 'Fehler beim Abrufen der Preise' });
   }
 });
 
-// Transaktionsverlauf für die RankView (History-Tab)
 router.get('/transactions', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -56,12 +92,10 @@ router.get('/transactions', async (req, res) => {
     if (error) throw error;
     res.json({ transactions: data || [] });
   } catch (err) {
-    console.error('Transaction Fetch Error:', err);
     res.status(500).json({ error: 'Fehler beim Laden der Transaktionen' });
   }
 });
 
-// Miete einsammeln für die AssetsView
 router.post('/collect-rent', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -70,7 +104,6 @@ router.post('/collect-rent', async (req, res) => {
     const profile = await db.getProfile(tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
-    // Führt die Logik in der Datenbank aus (berechnet fällige Miete seit letztem Collect)
     const rentCollected = await db.collectRent(profile.id);
     const updatedProfile = await db.getProfile(tgId);
 
@@ -80,7 +113,6 @@ router.post('/collect-rent', async (req, res) => {
       new_balance: Number(updatedProfile.balance) 
     });
   } catch (err) {
-    console.error('Rent Collection Error:', err);
     res.status(500).json({ error: err.message || 'Miete konnte nicht eingesammelt werden' });
   }
 });

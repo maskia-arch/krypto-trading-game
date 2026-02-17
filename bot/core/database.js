@@ -12,7 +12,23 @@ const db = {
       .select('*')
       .eq('telegram_id', telegramId)
       .maybeSingle();
+    
+    if (data) {
+      await supabase
+        .from('profiles')
+        .update({ last_active: new Date().toISOString() })
+        .eq('id', data.id);
+    }
     return data;
+  },
+
+  async isUsernameTaken(username) {
+    const { data } = await supabase
+      .from('profiles')
+      .select('id')
+      .eq('username', username)
+      .maybeSingle();
+    return !!data;
   },
 
   async createProfile(telegramId, username, firstName) {
@@ -25,6 +41,7 @@ const db = {
         balance: 10000.00,
         feedback_sent: false,
         story_bonus_claimed: false,
+        last_active: new Date().toISOString(),
         created_at: new Date().toISOString()
       })
       .select()
@@ -33,10 +50,63 @@ const db = {
     return data;
   },
 
+  async updateUsername(profileId, newUsername, isPro) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('username_changes, is_pro')
+      .eq('id', profileId)
+      .single();
+
+    const canChange = isPro ? true : (profile.username_changes < 1);
+    if (!canChange) throw new Error('Namensänderung bereits verbraucht.');
+
+    const taken = await this.isUsernameTaken(newUsername);
+    if (taken) throw new Error('Dieser Username ist bereits vergeben.');
+
+    const { error } = await supabase
+      .from('profiles')
+      .update({ 
+        username: newUsername, 
+        username_changes: profile.username_changes + 1,
+        last_name_change: new Date().toISOString()
+      })
+      .eq('id', profileId);
+    
+    if (error) throw error;
+    return true;
+  },
+
+  async requestAccountDeletion(profileId) {
+    await supabase.from('deletion_requests').insert({
+      profile_id: profileId,
+      status: 'pending',
+      requested_at: new Date().toISOString()
+    });
+  },
+
+  async deleteUserCompletely(profileId) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('telegram_id')
+      .eq('id', profileId)
+      .single();
+
+    await supabase.from('assets').delete().eq('profile_id', profileId);
+    await supabase.from('transactions').delete().eq('profile_id', profileId);
+    await supabase.from('real_estate').delete().eq('profile_id', profileId);
+    await supabase.from('collectibles').delete().eq('profile_id', profileId);
+    await supabase.from('pro_requests').delete().eq('profile_id', profileId);
+    await supabase.from('deletion_requests').delete().eq('profile_id', profileId);
+    
+    const { error } = await supabase.from('profiles').delete().eq('id', profileId);
+    
+    return { success: !error, telegramId: profile?.telegram_id };
+  },
+
   async updateBalance(profileId, newBalance) {
     await supabase
       .from('profiles')
-      .update({ balance: newBalance })
+      .update({ balance: newBalance, last_active: new Date().toISOString() })
       .eq('id', profileId);
   },
 
@@ -48,7 +118,10 @@ const db = {
       .single();
     await supabase
       .from('profiles')
-      .update({ total_volume: Number(p.total_volume || 0) + amount })
+      .update({ 
+        total_volume: Number(p.total_volume || 0) + amount,
+        last_active: new Date().toISOString()
+      })
       .eq('id', profileId);
   },
 
