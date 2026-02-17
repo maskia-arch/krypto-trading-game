@@ -45,12 +45,13 @@ router.get('/leaderboard', async (req, res) => {
     const { filter } = req.query;
     
     // Ruft das Leaderboard mit dem Filter (profit_season, profit_24h, etc.) ab.
-    // Die Datenbank-Funktion liefert nun leaders, season (Objekt) und pool.
+    // Das Ergebnis enthält leaders (mit performance_euro & performance_percent), 
+    // das season-Objekt und den aktuellen pool.
     const result = await db.getLeaderboard(filter || 'profit_season');
 
     res.json({ 
       leaders: result.leaders || [],
-      season: result.season, // Überträgt das komplette Objekt inkl. end_date für den Timer
+      season: result.season, // Enthält das komplette Objekt inkl. end_date für den WebApp-Timer
       pool: result.pool
     });
   } catch (err) {

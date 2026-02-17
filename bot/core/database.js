@@ -240,10 +240,10 @@ const db = {
       let startBasis = 10000;
 
       if (filter.includes('season')) {
-        startBasis = Number(p.season_start_worth) || 10000;
+        startBasis = (Number(p.season_start_worth) > 0) ? Number(p.season_start_worth) : 10000;
         diffEuro = currentNetWorth - startBasis;
       } else {
-        startBasis = Number(p.day_start_worth) || currentNetWorth;
+        startBasis = (Number(p.day_start_worth) > 0) ? Number(p.day_start_worth) : currentNetWorth;
         diffEuro = currentNetWorth - startBasis;
       }
 
@@ -252,8 +252,8 @@ const db = {
       return {
         ...p,
         net_worth: currentNetWorth,
-        performance_euro: diffEuro,
-        performance_percent: diffPercent.toFixed(2)
+        performance_euro: parseFloat(diffEuro.toFixed(2)),
+        performance_percent: parseFloat(diffPercent.toFixed(2))
       };
     });
 

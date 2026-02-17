@@ -12,6 +12,7 @@ export default function RankView() {
 
   const myId = getTelegramId();
 
+  // Live-Timer Update jede Sekunde
   useEffect(() => {
     const timer = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(timer);
@@ -35,6 +36,7 @@ export default function RankView() {
     setLoading(false);
   };
 
+  // Season Timer Berechnung
   const timeLeft = useMemo(() => {
     if (!season || !season.end_date) return null;
     const diff = new Date(season.end_date) - now;
@@ -47,11 +49,14 @@ export default function RankView() {
     return `${d}d ${h}h ${m}m ${s}s`;
   }, [season, now]);
 
+  // Top 10 + Eigenplatzierung Logik
   const displayList = useMemo(() => {
     if (!leaderboard) return [];
+    // Wir nehmen die ersten 10
     const top10 = leaderboard.slice(0, 10);
     const myIndex = leaderboard.findIndex(p => String(p.telegram_id) === String(myId));
     
+    // Falls ich nicht in den Top 10 bin, füge mich als 11. Zeile hinzu
     if (myIndex >= 10) {
       return [...top10, { ...leaderboard[myIndex], rank: myIndex + 1 }];
     }
@@ -70,6 +75,7 @@ export default function RankView() {
 
   return (
     <div className="space-y-3 pb-4 tab-enter">
+      {/* Header Tabs */}
       <div className="flex gap-1.5">
         {[{ id: 'rank', label: '🏆 Rangliste' }, { id: 'history', label: '📜 History' }].map(t => (
           <button key={t.id} onClick={() => setSub(t.id)}
@@ -83,6 +89,7 @@ export default function RankView() {
 
       {sub === 'rank' ? (
         <>
+          {/* Filter Bar */}
           <div className="flex overflow-x-auto no-scrollbar gap-2 py-1">
             {[
               { id: 'profit_season', label: '🔥 Season Win' },
@@ -99,6 +106,7 @@ export default function RankView() {
             ))}
           </div>
 
+          {/* Season Pool Card */}
           <div className="card p-4 relative overflow-hidden border-neon-gold/20"
                style={{ background: 'linear-gradient(135deg, rgba(251,191,36,0.12) 0%, rgba(6,8,15,1) 100%)' }}>
             <div className="flex items-start justify-between relative z-10">
@@ -115,11 +123,12 @@ export default function RankView() {
               <div className="text-right">
                 <p className="text-[10px] uppercase tracking-wider font-bold text-white/40">Jackpot</p>
                 <p className="text-xl font-mono font-bold text-neon-gold glow-gold">
-                  {(feePool || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
+                  {(feePool || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€
                 </p>
               </div>
             </div>
 
+            {/* Price Distribution */}
             {filter.startsWith('profit') && (
               <div className="grid grid-cols-4 gap-2 mt-4 relative z-10">
                 {[{ m: '🥇', p: 40 }, { m: '🥈', p: 25 }, { m: '🥉', p: 15 }, { m: '🎖️', p: 20 }].map((p, i) => (
@@ -134,6 +143,7 @@ export default function RankView() {
             )}
           </div>
 
+          {/* Leaderboard List */}
           <div className="space-y-2 mt-2">
             {displayList.map((p, i) => {
               const actualRank = p.rank || (i + 1);
@@ -157,15 +167,15 @@ export default function RankView() {
                         {p.username || p.first_name || 'Unbekannt'}
                         {isMe && <span className="text-[9px] ml-1.5 opacity-50 font-normal">(DU)</span>}
                       </p>
-                      <p className="text-[9px] font-mono opacity-40">Umsatz: {Number(p.total_volume || 0).toLocaleString('de-DE')}€</p>
+                      <p className="text-[9px] font-mono opacity-40">Umsatz: {Number(p.total_volume || 0).toLocaleString('de-DE', { maximumFractionDigits: 0 })}€</p>
                     </div>
                   </div>
                   <div className="text-right">
                     <p className={`text-sm font-mono font-bold ${isLoss ? 'text-neon-red' : 'text-neon-green glow-green'}`}>
-                      {perfEuro >= 0 ? '+' : ''}{Number(perfEuro).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
+                      {perfEuro >= 0 ? '+' : ''}{Number(perfEuro).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€
                     </p>
                     <p className={`text-[10px] font-mono font-bold ${isLoss ? 'text-neon-red/70' : 'text-neon-green/70'}`}>
-                      ({perfPercent}%)
+                      ({Number(perfPercent).toFixed(2)}%)
                     </p>
                   </div>
                 </div>
@@ -174,6 +184,7 @@ export default function RankView() {
           </div>
         </>
       ) : (
+        /* History View */
         <div className="space-y-2">
           {txs.map((tx, idx) => {
             const m = TX_META[tx.type] || { label: tx.type, emoji: '📝', color: 'text-white' };
@@ -190,7 +201,7 @@ export default function RankView() {
                   </div>
                 </div>
                 <p className={`text-sm font-mono font-bold ${isPos ? 'text-neon-green glow-green' : 'text-neon-red'}`}>
-                  {isPos ? '+' : '-'}{Number(tx.total_eur || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
+                  {isPos ? '+' : '-'}{Number(tx.total_eur || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€
                 </p>
               </div>
             );
