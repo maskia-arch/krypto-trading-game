@@ -97,10 +97,16 @@ async function handlePro(ctx) {
   try {
     const profile = await db.getProfile(ctx.from.id);
     if (!profile) return ctx.reply('Starte zuerst mit /start');
-    if (profile.is_pro) {
+    
+    if (profile.is_admin) {
+      return ctx.reply(`👑 <b>Admin-Status aktiv!</b>\n\nDu bist der Boss. Alle Pro-Features sind für dich dauerhaft kostenlos freigeschaltet.`, { parse_mode: 'HTML' });
+    }
+    
+    if (profile.is_pro && new Date(profile.pro_until) > new Date()) {
       const until = new Date(profile.pro_until).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
       return ctx.reply(`✅ Du bist bereits Pro-Mitglied!\nAktiv bis: ${until}`);
     }
+    
     const kb = new InlineKeyboard()
       .text('💳 Pro kaufen (5€/Monat)', 'buy_pro')
       .row()

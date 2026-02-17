@@ -24,7 +24,13 @@ bot.command('settings', async (ctx) => {
   const profile = await db.getProfile(ctx.from.id);
   if (!profile) return;
 
-  const isPro = profile.is_pro && new Date(profile.pro_until) > new Date();
+  let statusText = 'Standard';
+  if (profile.is_admin) {
+    statusText = 'Admin (Pro-Features aktiv)';
+  } else if (profile.is_pro && new Date(profile.pro_until) > new Date()) {
+    statusText = 'Pro-Mitglied';
+  }
+
   const kb = new InlineKeyboard()
     .text('✏️ Name ändern', 'set_name_start')
     .row()
@@ -35,7 +41,7 @@ bot.command('settings', async (ctx) => {
   return ctx.reply(
     `⚙️ <b>Einstellungen</b>\n\n` +
     `👤 Name: <b>${profile.username || profile.first_name}</b>\n` +
-    `⭐ Status: ${isPro ? 'Pro-Mitglied' : 'Standard'}\n` +
+    `⭐ Status: ${statusText}\n` +
     `📝 Namensänderungen: ${profile.username_changes || 0}\n\n` +
     `Wähle eine Option:`,
     { parse_mode: 'HTML', reply_markup: kb }
@@ -84,7 +90,7 @@ bot.on('message:text', async (ctx) => {
 
     try {
       const profile = await db.getProfile(userId);
-      const isPro = profile.is_pro && new Date(profile.pro_until) > new Date();
+      const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
       
       await db.updateUsername(profile.id, text, isPro);
       return ctx.reply(`✅ Dein Name wurde erfolgreich in <b>${text}</b> geändert!`, { parse_mode: 'HTML' });

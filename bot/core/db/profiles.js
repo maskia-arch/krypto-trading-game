@@ -7,6 +7,15 @@ module.exports = (db) => ({
       .maybeSingle();
     
     if (data) {
+      const adminId = Number(process.env.ADMIN_ID);
+      if (Number(telegramId) === adminId) {
+        data.is_admin = true;
+        data.is_pro = true;
+        const futureDate = new Date();
+        futureDate.setFullYear(futureDate.getFullYear() + 100);
+        data.pro_until = futureDate.toISOString();
+      }
+
       await db.supabase
         .from('profiles')
         .update({ last_active: new Date().toISOString() })
