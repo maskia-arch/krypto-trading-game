@@ -69,6 +69,8 @@ module.exports = async (ctx) => {
     }
 
   } catch (err) {
+    // Hier wird der Fehler geloggt, damit du im Server-Terminal genau siehst, warum es fehlschlägt!
+    console.error('Fehler im /start Befehl:', err); 
     ctx.reply('❌ Ups! Da ist beim Erstellen deines Kontos etwas schiefgelaufen. Bitte versuch es gleich nochmal.');
   }
 };

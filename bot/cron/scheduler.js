@@ -34,6 +34,9 @@ function setupCronJobs(bot) {
         .select('*')
         .eq('notifications_enabled', true);
 
+      // Falls die Spalte notifications_enabled noch nicht existiert, fange das ab
+      if (!users) return;
+
       const prices = await db.getAllPrices();
       const priceMap = {};
       prices.forEach(p => priceMap[p.symbol] = Number(p.price_eur));
@@ -63,7 +66,7 @@ function setupCronJobs(bot) {
         try {
           await bot.api.sendMessage(user.telegram_id, msg, { parse_mode: 'HTML' });
         } catch (e) {
-          console.error(`Notify failed for ${user.telegram_id}`);
+          console.error(`Portfolio Notify failed for ${user.telegram_id}`);
         }
       }
     } catch (err) {
@@ -74,6 +77,7 @@ function setupCronJobs(bot) {
   cron.schedule('0 2 * * *', async () => {
     try {
       const { data: users } = await db.supabase.from('profiles').select('*');
+      if (!users) return;
       
       for (const user of users) {
         const isPro = user.is_pro && new Date(user.pro_until) > new Date();
@@ -82,20 +86,29 @@ function setupCronJobs(bot) {
         const lastActive = new Date(user.last_active || user.created_at);
         const daysInactive = (Date.now() - lastActive) / (1000 * 60 * 60 * 24);
 
-        if (daysInactive >= 22) {
-          await bot.api.sendMessage(user.telegram_id, "💀 <b>Account gelöscht.</b>\n\nDein Account wurde aufgrund von 22 Tagen Inaktivität unwiderruflich entfernt. Danke fürs Mitspielen!", { parse_mode: 'HTML' });
-          await db.deleteUserCompletely(user.id); 
-          continue;
-        }
+        // Alles in einem Try-Catch Block, damit blockierende User die Schleife nicht crashen
+        try {
+          if (daysInactive >= 22) {
+            await bot.api.sendMessage(user.telegram_id, "💀 <b>Account gelöscht.</b>\n\nDein Account wurde aufgrund von 22 Tagen Inaktivität unwiderruflich entfernt. Danke fürs Mitspielen!", { parse_mode: 'HTML' });
+            await db.deleteUserCompletely(user.id); 
+            continue;
+          }
 
-        if (daysInactive >= 20) {
-          await bot.api.sendMessage(user.telegram_id, "⚠️ <b>LETZTE WARNUNG!</b>\n\nDein Account wird in <b>48 Stunden</b> aufgrund von Inaktivität gelöscht. Öffne die App, um das zu verhindern!", { parse_mode: 'HTML' });
-        } else if (daysInactive >= 7) {
-          await bot.api.sendMessage(user.telegram_id, "☁️ <b>Server-Ressourcen sparen</b>\n\nUm Kosten zu sparen, werden inaktive Accounts regelmäßig bereinigt. Dein Account steht nun auf der Liste für eine baldige Löschung.", { parse_mode: 'HTML' });
-        } else if (daysInactive >= 3 && !user.inactivity_bonus_claimed) {
-          await bot.api.sendMessage(user.telegram_id, "🎁 <b>Willkommen zurück Bonus!</b>\n\nWir vermissen dich! Hier sind <b>500€ Bonus</b> für deinen Wiedereinstieg. Viel Erfolg!", { parse_mode: 'HTML' });
-          await db.supabase.rpc('add_balance', { user_id: user.id, amount: 500 });
-          await db.supabase.from('profiles').update({ inactivity_bonus_claimed: true }).eq('id', user.id);
+          if (daysInactive >= 20) {
+            await bot.api.sendMessage(user.telegram_id, "⚠️ <b>LETZTE WARNUNG!</b>\n\nDein Account wird in <b>48 Stunden</b> aufgrund von Inaktivität gelöscht. Öffne die App, um das zu verhindern!", { parse_mode: 'HTML' });
+          } else if (daysInactive >= 7) {
+            await bot.api.sendMessage(user.telegram_id, "☁️ <b>Server-Ressourcen sparen</b>\n\nUm Kosten zu sparen, werden inaktive Accounts regelmäßig bereinigt. Dein Account steht nun auf der Liste für eine baldige Löschung.", { parse_mode: 'HTML' });
+          } else if (daysInactive >= 3 && !user.inactivity_bonus_claimed) {
+            await bot.api.sendMessage(user.telegram_id, "🎁 <b>Willkommen zurück Bonus!</b>\n\nWir vermissen dich! Hier sind <b>500,00€ Bonus</b> für deinen Wiedereinstieg. Viel Erfolg!", { parse_mode: 'HTML' });
+            await db.supabase.rpc('add_balance', { user_id: user.id, amount: 500 });
+            await db.supabase.from('profiles').update({ inactivity_bonus_claimed: true }).eq('id', user.id);
+          }
+        } catch (msgErr) {
+          console.error(`Inaktivitäts-Nachricht an ${user.telegram_id} fehlgeschlagen. User hat Bot evtl. blockiert.`);
+          // WICHTIG: Wenn der User 22 Tage inaktiv ist, löschen wir ihn trotzdem, auch wenn die Nachricht nicht ankam!
+          if (daysInactive >= 22) {
+            await db.deleteUserCompletely(user.id); 
+          }
         }
       }
     } catch (err) {
@@ -108,7 +121,7 @@ function setupCronJobs(bot) {
       const cutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       await db.supabase.from('market_history').delete().lt('recorded_at', cutoff);
     } catch (err) {
-      console.error(err);
+      console.error('History Cleanup Error:', err);
     }
   });
 

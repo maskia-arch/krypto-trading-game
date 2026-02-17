@@ -56,7 +56,8 @@ router.post('/', async (req, res) => {
       const euroAmount = Number(amount_eur);
       if (!euroAmount || euroAmount <= 0) return res.status(400).json({ error: 'Ungültiger Euro-Betrag' });
 
-      const fee = euroAmount * (FEE_RATE || 0.005);
+      // Gebührenberechnung (Sicherheits-Rundung auf 4 Nachkommastellen für die DB)
+      const fee = parseFloat((euroAmount * (FEE_RATE || 0.005)).toFixed(4));
       const netAmount = euroAmount - fee;
       const cryptoAmount = netAmount / price;
 
@@ -64,14 +65,21 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: 'Guthaben unzureichend' });
       }
 
+      // Falls Asset leer verkauft war, den Timer für Wash-Trading-Schutz zurücksetzen
       const existingAsset = await db.getAsset(profile.id, symbol);
       if (existingAsset && Number(existingAsset.amount) <= 0) {
         await db.supabase.from('assets').update({ first_buy: new Date().toISOString() }).eq('id', existingAsset.id);
       }
 
-      await db.updateBalance(profile.id, Number(profile.balance) - euroAmount);
+      const newBalance = Number(profile.balance) - euroAmount;
+
+      await db.updateBalance(profile.id, newBalance);
       await db.upsertAsset(profile.id, symbol, cryptoAmount, price);
-      if (db.addToFeePool) await db.addToFeePool(fee);
+      
+      // Jackpot füllen
+      if (db.addToFeePool) {
+        await db.addToFeePool(fee);
+      }
       
       await db.logTransaction(profile.id, 'buy', symbol, cryptoAmount, price, fee, euroAmount);
 
@@ -80,7 +88,7 @@ router.post('/', async (req, res) => {
         action: 'buy', 
         crypto_amount: cryptoAmount, 
         fee: fee,
-        balance: Number(profile.balance) - euroAmount 
+        balance: newBalance 
       });
 
     } else if (action === 'sell') {
@@ -93,13 +101,19 @@ router.post('/', async (req, res) => {
       if (sellAmount <= 0) return res.status(400).json({ error: 'Ungültige Menge' });
 
       const grossEuro = sellAmount * price;
-      const fee = grossEuro * (FEE_RATE || 0.005);
+      const fee = parseFloat((grossEuro * (FEE_RATE || 0.005)).toFixed(4));
       const netEuro = grossEuro - fee;
+      const newBalance = Number(profile.balance) + netEuro;
 
       await db.upsertAsset(profile.id, symbol, -sellAmount, 0);
-      await db.updateBalance(profile.id, Number(profile.balance) + netEuro);
-      if (db.addToFeePool) await db.addToFeePool(fee);
+      await db.updateBalance(profile.id, newBalance);
+      
+      // Jackpot füllen
+      if (db.addToFeePool) {
+        await db.addToFeePool(fee);
+      }
 
+      // Volumen-Unlocker: Nur wenn Asset länger als 1 Stunde gehalten wurde
       const holdTimeMs = Date.now() - new Date(asset.first_buy || Date.now()).getTime();
       if (holdTimeMs >= 60 * 60 * 1000) {
         await db.addVolume(profile.id, grossEuro * 2);
@@ -112,7 +126,7 @@ router.post('/', async (req, res) => {
         action: 'sell', 
         euro_received: netEuro, 
         fee: fee,
-        balance: Number(profile.balance) + netEuro 
+        balance: newBalance 
       });
     }
   } catch (err) {

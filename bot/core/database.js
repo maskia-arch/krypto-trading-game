@@ -32,23 +32,40 @@ const db = {
   },
 
   async createProfile(telegramId, username, firstName) {
-    const { data, error } = await supabase
+    const profileData = {
+      telegram_id: telegramId,
+      username: username || null,
+      first_name: firstName || 'Trader',
+      balance: 10000.00,
+      feedback_sent: false,
+      story_bonus_claimed: false,
+      last_active: new Date().toISOString(),
+      created_at: new Date().toISOString()
+    };
+
+    // Versuche das Profil anzulegen (ohne die neuen Spalten direkt zu erzwingen, 
+    // falls das Schema-Update noch nicht gegriffen hat)
+    let { data, error } = await supabase
       .from('profiles')
-      .insert({
-        telegram_id: telegramId,
-        username: username || null,
-        first_name: firstName || 'Trader',
-        balance: 10000.00,
-        feedback_sent: false,
-        story_bonus_claimed: false,
-        last_active: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        season_start_worth: 10000.00,
-        day_start_worth: 10000.00
-      })
+      .insert(profileData)
       .select()
       .single();
-    if (error) throw error;
+
+    if (error) {
+      console.error('CreateProfile Error:', error);
+      throw error;
+    }
+
+    // Wenn erfolgreich, setze die Startwerte separat (fehlertolerant)
+    try {
+       await supabase.from('profiles').update({
+         season_start_worth: 10000.00,
+         day_start_worth: 10000.00
+       }).eq('id', data.id);
+    } catch (e) {
+       console.log("Konnte Startwerte nicht setzen (Schema prüfen).", e);
+    }
+
     return data;
   },
 
@@ -239,14 +256,19 @@ const db = {
       let diffEuro = 0;
       let startBasis = 10000;
 
+      // Strikte Validierung der Basiswerte
+      const seasonStart = Number(p.season_start_worth);
+      const dayStart = Number(p.day_start_worth);
+
       if (filter.includes('season')) {
-        startBasis = (Number(p.season_start_worth) > 0) ? Number(p.season_start_worth) : 10000;
+        startBasis = (seasonStart && seasonStart > 0) ? seasonStart : 10000;
         diffEuro = currentNetWorth - startBasis;
       } else {
-        startBasis = (Number(p.day_start_worth) > 0) ? Number(p.day_start_worth) : currentNetWorth;
+        startBasis = (dayStart && dayStart > 0) ? dayStart : currentNetWorth;
         diffEuro = currentNetWorth - startBasis;
       }
 
+      // Vermeide NaN, falls startBasis = 0 ist
       const diffPercent = startBasis > 0 ? (diffEuro / startBasis) * 100 : 0;
 
       return {
