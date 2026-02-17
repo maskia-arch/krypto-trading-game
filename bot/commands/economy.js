@@ -59,7 +59,7 @@ async function handleLeaderboard(ctx) {
       }
     }
 
-    text += `\n🕒 Stand: ${new Date().toLocaleTimeString('de-DE')}`;
+    text += `\n🕒 Stand: ${new Date().toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin' })}`;
 
     const kb = new InlineKeyboard()
       .webApp('🎮 Jetzt traden', WEBAPP_URL)
@@ -71,7 +71,6 @@ async function handleLeaderboard(ctx) {
         await ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
         await ctx.answerCallbackQuery('Rangliste aktualisiert! 🏆');
       } catch (e) {
-        // Falls Nachricht identisch, nur Quittung senden
         await ctx.answerCallbackQuery();
       }
     } else {
@@ -99,7 +98,7 @@ async function handlePro(ctx) {
     const profile = await db.getProfile(ctx.from.id);
     if (!profile) return ctx.reply('Starte zuerst mit /start');
     if (profile.is_pro) {
-      const until = new Date(profile.pro_until).toLocaleDateString('de-DE');
+      const until = new Date(profile.pro_until).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
       return ctx.reply(`✅ Du bist bereits Pro-Mitglied!\nAktiv bis: ${until}`);
     }
     const kb = new InlineKeyboard()

@@ -61,7 +61,7 @@ async function handlePortfolio(ctx) {
       `🔄 Handelsvolumen: ${Number(profile.total_volume || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€\n\n` +
       `━━ <b>Deine Assets</b> ━━\n\n` +
       (assetsText || '<i>Keine Assets im Besitz</i>\n') +
-      `\n🕒 Stand: ${new Date().toLocaleTimeString('de-DE')}`;
+      `\n🕒 Stand: ${new Date().toLocaleTimeString('de-DE', { timeZone: 'Europe/Berlin' })}`;
 
     if (ctx.callbackQuery) {
       try {
