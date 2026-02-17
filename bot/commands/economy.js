@@ -12,7 +12,7 @@ async function handleLeaderboard(ctx) {
 
     let text = `🏆 <b>ValueTrade Rangliste</b>\n\n`;
 
-    if (season) {
+    if (season && season.end_date) {
       const end = new Date(season.end_date);
       const now = new Date();
       const diff = end - now;
@@ -33,11 +33,14 @@ async function handleLeaderboard(ctx) {
     leaders.slice(0, 10).forEach((l, i) => {
       const medal = ['🥇', '🥈', '🥉'][i] || `<b>${i + 1}.</b>`;
       const name = esc(l.username || l.first_name || 'Trader');
-      const perf = Number(l.performance || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      
+      // FIX: Nutzt jetzt die neuen Bezeichnungen aus der database.js
+      const perfEuro = Number(l.performance_euro || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const perfPercent = Number(l.performance_percent || 0).toFixed(2);
       const nw = Number(l.net_worth || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       
       text += `${medal} ${name}\n`;
-      text += ` ├ Profit: <b>+${perf}€</b>\n`;
+      text += ` ├ Profit: <b>${l.performance_euro >= 0 ? '+' : ''}${perfEuro}€</b> (${perfPercent}%)\n`;
       text += ` └ Gesamt: ${nw}€\n`;
     });
 
@@ -48,16 +51,18 @@ async function handleLeaderboard(ctx) {
       
       if (myRank > 10) {
         const me = allLeaders.leaders[myRank - 1];
-        const myPerf = Number(me.performance || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const myPerfEuro = Number(me.performance_euro || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const myPerfPercent = Number(me.performance_percent || 0).toFixed(2);
+        
         text += `\n━━ 👤 <b>Deine Platzierung</b> ━━\n\n`;
         text += `<b>${myRank}.</b> ${esc(me.username || me.first_name)} (Du)\n`;
-        text += ` └ Profit: <b>${me.performance >= 0 ? '+' : ''}${myPerf}€</b>\n`;
+        text += ` └ Profit: <b>${me.performance_euro >= 0 ? '+' : ''}${myPerfEuro}€</b> (${myPerfPercent}%)\n`;
       }
     }
 
     await ctx.reply(text, { parse_mode: 'HTML' });
   } catch (err) {
-    console.error(err);
+    console.error('Bot Leaderboard Error:', err);
     ctx.reply('❌ Rangliste konnte nicht geladen werden.');
   }
 }
