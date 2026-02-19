@@ -2,10 +2,10 @@ let leaderboardCache = {};
 
 module.exports = (db) => ({
   async getLeaderboard(filter = 'profit_season', limit = 20) {
-    const CACHE_DURATION = 5 * 60 * 1000;
+    const CACHE_DURATION = 0; // Cache deaktiviert für sofortiges Live-Update
     const now = Date.now();
 
-    if (leaderboardCache[filter] && (now - leaderboardCache[filter].lastUpdate) < CACHE_DURATION) {
+    if (CACHE_DURATION > 0 && leaderboardCache[filter] && (now - leaderboardCache[filter].lastUpdate) < CACHE_DURATION) {
       return {
         ...leaderboardCache[filter].data,
         leaders: leaderboardCache[filter].data.leaders.slice(0, limit),
@@ -43,7 +43,7 @@ module.exports = (db) => ({
         });
       }
       
-      const currentNetWorth = Number(p.balance) + cryptoValue;
+      const currentNetWorth = Number(p.balance || 0) + cryptoValue;
       const geschenkt = Number(p.bonus_received || 0);
       const START_KAPITAL = 10000;
       
