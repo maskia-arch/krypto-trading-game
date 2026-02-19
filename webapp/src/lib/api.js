@@ -59,6 +59,7 @@ export const api = {
   sell:                 (symbol, amount_crypto) => apiCall('/api/trade', { method: 'POST', body: JSON.stringify({ action: 'sell', symbol, amount_crypto }) }),
   
   getLeaderboard:       (filter = 'profit_season') => apiCall(`/api/economy/leaderboard?filter=${filter}`), 
+  getReferrals:         () => apiCall('/api/referrals'), // NEU: Der Affiliate-Endpunkt
   
   getRealEstateTypes:   () => apiCall('/api/economy/realestate/types'),
   getMyRealEstate:      () => apiCall('/api/economy/realestate/mine'),

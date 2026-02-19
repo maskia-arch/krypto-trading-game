@@ -106,13 +106,20 @@ bot.on('message:text', async (ctx) => {
       return ctx.reply("❌ Nur Buchstaben (a-z, A-Z) und Zahlen (0-9) sind erlaubt. Bitte antworte erneut auf meine vorherige Nachricht.", { reply_markup: { force_reply: true } });
     }
 
+    // EXTRAKTION DER WERBER-ID
+    let referredBy = null;
+    const refMatch = ctx.message.reply_to_message.text.match(/Ticket: REF-(\d+)/);
+    if (refMatch) {
+      referredBy = Number(refMatch[1]);
+    }
+
     try {
       const taken = await db.isUsernameTaken(text);
       if (taken) {
         return ctx.reply("❌ Dieser Name ist bereits vergeben. Bitte wähle einen anderen und antworte erneut auf meine Nachricht.", { reply_markup: { force_reply: true } });
       }
 
-      const profile = await db.createProfile(userId, text, ctx.from.first_name);
+      const profile = await db.createProfile(userId, text, ctx.from.first_name, referredBy);
       return startCommand.sendWelcomeMessage(ctx, profile);
     } catch (e) {
       return ctx.reply(`❌ Fehler bei der Registrierung: ${e.message}`);

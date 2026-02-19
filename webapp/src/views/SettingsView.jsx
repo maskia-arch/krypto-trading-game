@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 
 export default function SettingsView() {
   const { profile, fetchProfile, showToast, setTab } = useStore();
-  const [newName, setNewName] = useState('');
+  const [newName, useState] = useState('');
   const [deleteStep, setDeleteStep] = useState(1);
   const [busy, setBusy] = useState(false);
 
@@ -50,7 +50,7 @@ export default function SettingsView() {
 
   return (
     <div className="space-y-4 tab-enter">
-      {/* NEU: LINK ZUM EIGENEN PROFIL */}
+      
       <section className="card p-4 flex items-center justify-between border-neon-blue/20 bg-neon-blue/5">
         <div className="flex items-center gap-3">
           <div className="w-12 h-12 rounded-full border border-neon-blue/30 overflow-hidden bg-black/40 flex items-center justify-center shrink-0">
@@ -70,6 +70,24 @@ export default function SettingsView() {
           className="bg-neon-blue/20 text-neon-blue border border-neon-blue/30 px-4 py-2 rounded-xl text-xs font-bold hover:bg-neon-blue/30 transition-all"
         >
           Ansehen
+        </button>
+      </section>
+
+      <section className="card p-4 flex items-center justify-between border-neon-gold/20 bg-neon-gold/5">
+        <div className="flex items-center gap-3">
+          <div className="w-12 h-12 rounded-full border border-neon-gold/30 overflow-hidden bg-black/40 flex items-center justify-center shrink-0">
+            <span className="text-xl">🤝</span>
+          </div>
+          <div>
+            <h3 className="text-sm font-bold text-neon-gold">Affiliate</h3>
+            <p className="text-[10px] text-[var(--text-dim)]">Freunde einladen & 500€ Bonus sichern</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => setTab('affiliate')}
+          className="bg-neon-gold/20 text-neon-gold border border-neon-gold/30 px-4 py-2 rounded-xl text-xs font-bold hover:bg-neon-gold/30 transition-all"
+        >
+          Öffnen
         </button>
       </section>
 

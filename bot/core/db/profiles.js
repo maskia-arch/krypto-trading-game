@@ -66,7 +66,7 @@ module.exports = (db) => ({
     return !!data;
   },
 
-  async createProfile(telegramId, username, firstName) {
+  async createProfile(telegramId, username, firstName, referredBy = null) {
     const safeUsername = username ? username : `trader_${telegramId}`;
 
     const profileData = {
@@ -74,6 +74,7 @@ module.exports = (db) => ({
       username: safeUsername,
       first_name: firstName || 'Trader',
       balance: 10000.00,
+      referred_by: referredBy,
       last_active: new Date().toISOString(),
       created_at: new Date().toISOString()
     };

@@ -3,6 +3,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const { VERSION } = require('../core/config');
+const { db } = require('../core/database'); // NEU: Datenbank-Import für die Affiliate-Route
 
 const tradingRoutes = require('./routes/trading');
 const profileRoutes = require('./routes/profile');
@@ -19,6 +20,11 @@ function getGameVersion() {
   } catch (e) {
     return VERSION;
   }
+}
+
+function parseTelegramUser(req) {
+  const tgId = req.headers['x-telegram-id'] || req.query.telegram_id;
+  return tgId ? Number(tgId) : null;
 }
 
 function setupApi(bot) {
@@ -42,6 +48,27 @@ function setupApi(bot) {
 
   app.get('/api/version', (req, res) => res.json({ version: getGameVersion() }));
 
+  // --- NEU: Affiliate / Referrals Endpunkt ---
+  app.get('/api/referrals', async (req, res) => {
+    const tgId = parseTelegramUser(req);
+    if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
+
+    try {
+      const { data, error } = await db.supabase
+        .from('profiles')
+        .select('username, first_name, avatar_url, created_at')
+        .eq('referred_by', tgId)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      res.json({ referrals: data || [] });
+    } catch (err) {
+      console.error('Referrals API Error:', err);
+      res.status(500).json({ error: 'Server Fehler beim Laden der Referrals' });
+    }
+  });
+  // -------------------------------------------
+
   app.use('/api/trade', tradingRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/economy/collectibles', collectiblesRoutes);
@@ -53,11 +80,6 @@ function setupApi(bot) {
   });
 
   return app;
-}
-
-function parseTelegramUser(req) {
-  const tgId = req.headers['x-telegram-id'] || req.query.telegram_id;
-  return tgId ? Number(tgId) : null;
 }
 
 module.exports = { setupApi, parseTelegramUser };

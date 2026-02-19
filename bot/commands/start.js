@@ -5,6 +5,7 @@ const { WEBAPP_URL, VERSION } = require('../core/config');
 
 const startCommand = async (ctx) => {
   const tgId = ctx.from.id;
+  const payload = ctx.match;
 
   try {
     let profile = await db.getProfile(tgId);
@@ -24,19 +25,25 @@ const startCommand = async (ctx) => {
       );
     }
 
-    return ctx.reply(
-      `Willkommen bei <b>ValueTrade</b>! 📈\n\n` +
+    let promptText = `Willkommen bei <b>ValueTrade</b>! 📈\n\n` +
       `Bevor Onkel Heinrich dir dein Startkapital überweist, benötigst du einen <b>InGame-Namen</b>.\n\n` +
       `👉 <b>Antworte einfach auf diese Nachricht</b> mit deinem gewünschten Namen.\n` +
-      `<i>(Erlaubt: a-z, A-Z, 0-9 | Min. 4 bis max. 16 Zeichen)</i>`,
-      {
-        parse_mode: 'HTML',
-        reply_markup: {
-          force_reply: true,
-          input_field_placeholder: 'Dein InGame-Name...'
-        }
+      `<i>(Erlaubt: a-z, A-Z, 0-9 | Min. 4 bis max. 16 Zeichen)</i>`;
+
+    if (payload && payload.startsWith('ref_')) {
+      const refId = payload.split('_')[1];
+      if (Number(refId) !== tgId) {
+        promptText += `\n\n🎁 <i>Ticket: REF-${refId}</i>`;
       }
-    );
+    }
+
+    return ctx.reply(promptText, {
+      parse_mode: 'HTML',
+      reply_markup: {
+        force_reply: true,
+        input_field_placeholder: 'Dein InGame-Name...'
+      }
+    });
 
   } catch (err) {
     console.error('Fehler im /start Befehl:', err);
@@ -47,16 +54,49 @@ const startCommand = async (ctx) => {
 startCommand.sendWelcomeMessage = async (ctx, profile) => {
   const tgId = ctx.from.id;
 
+  if (profile.referred_by) {
+    try {
+      const { data: referrer } = await db.supabase.from('profiles').select('telegram_id, balance, bonus_received').eq('telegram_id', profile.referred_by).single();
+      
+      if (referrer) {
+        await db.supabase.from('profiles').update({
+          balance: Number(referrer.balance || 0) + 500,
+          bonus_received: Number(referrer.bonus_received || 0) + 500
+        }).eq('telegram_id', referrer.telegram_id);
+
+        try {
+          await ctx.api.sendMessage(referrer.telegram_id, `🎉 <b>Neuer Freund beigetreten!</b>\n\nDein Freund <b>${esc(profile.username)}</b> hat sich registriert. Dir wurden soeben <b>500,00€</b> Affiliate-Bonus gutgeschrieben! 💸`, { parse_mode: 'HTML' });
+        } catch(e) {}
+      }
+
+      await db.supabase.from('profiles').update({
+        balance: Number(profile.balance || 10000) + 500,
+        bonus_received: Number(profile.bonus_received || 0) + 500
+      }).eq('id', profile.id);
+
+      profile.balance = Number(profile.balance || 10000) + 500;
+    } catch (err) {
+      console.error('Referral Bonus Error:', err);
+    }
+  }
+
+  let introText = `<i>Ich habe dir 10.000€ auf dein Konto überwiesen. Mach was Kluges daraus – investiere in Krypto, kauf dir Immobilien, werde reich!</i>`;
+  let startKapitalText = `💰 <b>Startkapital: 10.000,00€</b>`;
+
+  if (profile.referred_by) {
+    introText = `<i>Ich habe dir 10.000€ auf dein Konto überwiesen. Da du von einem Freund eingeladen wurdest, lege ich noch 500€ Willkommens-Bonus oben drauf!</i>`;
+    startKapitalText = `💰 <b>Startkapital: 10.500,00€</b> (Inkl. 500€ Bonus)`;
+  }
+
   const welcomeMsg = await ctx.reply(
     `📨 <b>Ein Brief von Onkel Heinrich</b>\n\n` +
     `━━━━━━━━━━━━━━━━━━━\n\n` +
     `<i>Mein lieber ${esc(profile.username)},</i>\n\n` +
-    `<i>Ich habe dir 10.000€ auf dein Konto überwiesen. Mach was Kluges daraus – ` +
-    `investiere in Krypto, kauf dir Immobilien, werde reich!</i>\n\n` +
+    `${introText}\n\n` +
     `<i>Aber sei vorsichtig... wenn du alles verlierst, kann ich dir nur noch begrenzt helfen.</i>\n\n` +
     `<i>Dein Onkel Heinrich</i> 👴\n\n` +
     `━━━━━━━━━━━━━━━━━━━\n\n` +
-    `💰 <b>Startkapital: 10.000,00€</b>\n` +
+    `${startKapitalText}\n` +
     `📈 Verfügbare Coins: BTC, ETH, LTC\n` +
     `💸 Trading-Fee: 0,5%\n\n` +
     `Tippe den Button um loszulegen! 👇`,
@@ -84,7 +124,8 @@ startCommand.sendWelcomeMessage = async (ctx, profile) => {
         `🆕 <b>Neuer Spieler!</b>\n` +
         `🎮 InGame Username: <b>${esc(profile.username)}</b>\n` +
         `📱 Telegram Name: ${esc(ctx.from.first_name)}\n` +
-        `🆔 <code>${tgId}</code>`,
+        `🆔 <code>${tgId}</code>\n` +
+        (profile.referred_by ? `🤝 Geworben von: <code>${profile.referred_by}</code>` : ''),
         { parse_mode: 'HTML' }
       );
     } catch (e) {}

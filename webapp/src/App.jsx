@@ -11,6 +11,7 @@ import AssetsView from './views/AssetsView';
 import RankView from './views/RankView';
 import SettingsView from './views/SettingsView';
 import ProfileView from './views/ProfileView';
+import AffiliateView from './views/AffiliateView'; // NEU: Import für das Affiliate-System
 
 const TABS = [
   { id: 'chart', label: 'Chart',  icon: '📊' },
@@ -97,6 +98,7 @@ export default function App() {
         {tab === 'rank' && <RankView />}
         {tab === 'settings' && <SettingsView />}
         {tab === 'profile' && <ProfileView />}
+        {tab === 'affiliate' && <AffiliateView />} {/* NEU: Hier wird die Ansicht gerendert */}
       </main>
 
       <Navbar tabs={TABS} currentTab={tab} onTabChange={setTab} />
