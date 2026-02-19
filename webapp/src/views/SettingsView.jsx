@@ -4,7 +4,7 @@ import { api } from '../lib/api';
 
 export default function SettingsView() {
   const { profile, fetchProfile, showToast, setTab } = useStore();
-  const [newName, useState] = useState('');
+  const [newName, setNewName] = useState('');
   const [deleteStep, setDeleteStep] = useState(1);
   const [busy, setBusy] = useState(false);
 
@@ -49,7 +49,7 @@ export default function SettingsView() {
   };
 
   return (
-    <div className="space-y-4 tab-enter">
+    <div className="space-y-4 tab-enter pb-6">
       
       <section className="card p-4 flex items-center justify-between border-neon-blue/20 bg-neon-blue/5">
         <div className="flex items-center gap-3">
