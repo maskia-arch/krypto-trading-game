@@ -44,7 +44,7 @@ export default function PublicProfileView({ userId, onClose }) {
     <div className="space-y-4 tab-enter pb-20 relative pt-2">
       <button 
         onClick={onClose}
-        className="absolute top-0 right-2 z-50 bg-black/50 border border-white/10 w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:bg-white/10"
+        className="absolute top-0 right-2 z-50 bg-black/50 border border-white/10 w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:bg-white/10 transition-colors"
       >
         ✕
       </button>
@@ -53,7 +53,7 @@ export default function PublicProfileView({ userId, onClose }) {
         <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-neon-blue/20 to-transparent"></div>
         
         <div className="relative z-10 flex flex-col items-center mt-2">
-          <div className="w-24 h-24 rounded-full border-2 border-neon-blue/50 overflow-hidden bg-black/50 flex items-center justify-center">
+          <div className="w-24 h-24 rounded-full border-2 border-neon-blue/50 overflow-hidden bg-black/50 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.2)]">
             {data.avatar_url ? (
               <img 
                 src={data.avatar_url} 
@@ -80,6 +80,32 @@ export default function PublicProfileView({ userId, onClose }) {
 
       <section className="card p-4">
         <h3 className="text-sm font-bold text-white/90 mb-4 text-center">
+          💎 Besitztümer
+        </h3>
+        
+        {data.collectibles && data.collectibles.length > 0 ? (
+          <div className="flex flex-wrap justify-center gap-3">
+            {data.collectibles.map((item, idx) => (
+              <div 
+                key={idx} 
+                className="w-12 h-12 rounded-lg bg-black/40 border border-white/5 flex items-center justify-center text-2xl shadow-inner relative group cursor-default"
+              >
+                {item.collectibles?.icon || '💎'}
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/90 border border-white/10 text-[9px] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                  {item.collectibles?.name}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-[10px] text-white/40 italic">
+            Keine öffentlichen Besitztümer.
+          </p>
+        )}
+      </section>
+
+      <section className="card p-4">
+        <h3 className="text-sm font-bold text-white/90 mb-4 text-center">
           🏆 Abzeichen
         </h3>
         
@@ -91,7 +117,7 @@ export default function PublicProfileView({ userId, onClose }) {
                 className="w-14 h-14 rounded-full bg-neon-gold/10 border border-neon-gold/30 flex items-center justify-center text-2xl shadow-[0_0_12px_rgba(255,215,0,0.15)] relative group cursor-default"
               >
                 {ach.icon}
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/90 border border-white/10 text-[10px] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/90 border border-white/10 text-[10px] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                   {ach.name}
                 </div>
               </div>

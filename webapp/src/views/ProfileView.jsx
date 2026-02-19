@@ -62,6 +62,17 @@ export default function ProfileView() {
     }
   };
 
+  const togglePrivacy = async () => {
+    try {
+      const newState = !profile.hide_collectibles;
+      await api.updatePrivacy(newState);
+      await fetchProfile();
+      showToast(newState ? '🙈 Besitztümer sind nun verborgen' : '👁️ Besitztümer sind nun öffentlich');
+    } catch (e) {
+      showToast(`❌ Fehler: ${e.message}`, 'error');
+    }
+  };
+
   const getStatusColor = () => {
     if (isAdmin) return 'bg-neon-red/20 text-neon-red border-neon-red/30';
     if (isPro) return 'bg-neon-gold/20 text-neon-gold border-neon-gold/30';
@@ -141,6 +152,38 @@ export default function ProfileView() {
             </span>
           </div>
         </div>
+      </section>
+
+      <section className="card p-4 space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-bold flex items-center gap-2">💎 Besitztümer</h3>
+          
+          <button 
+            onClick={togglePrivacy}
+            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border ${
+              profile?.hide_collectibles 
+                ? 'bg-neon-red/10 text-neon-red border-neon-red/20' 
+                : 'bg-neon-green/10 text-neon-green border-neon-green/20'
+            }`}
+          >
+            {profile?.hide_collectibles ? '🙈 Verborgen' : '👁️ Öffentlich sichtbar'}
+          </button>
+        </div>
+
+        {profile?.collectibles && profile.collectibles.length > 0 ? (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {profile.collectibles.map((item, idx) => (
+              <div key={idx} className="bg-black/40 border border-white/5 rounded-lg p-2 flex items-center justify-center text-xl shadow-inner relative group cursor-default">
+                {item.collectibles?.icon || '💎'}
+                <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 bg-black text-white text-[9px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-10 pointer-events-none">
+                  {item.collectibles?.name}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[10px] text-[var(--text-dim)]">Du hast noch keine Besitztümer gekauft. Nutze den Shop, um dein Vermögen abzusichern!</p>
+        )}
       </section>
 
       <section className="card p-4">

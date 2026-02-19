@@ -7,6 +7,7 @@ const { VERSION } = require('../core/config');
 const tradingRoutes = require('./routes/trading');
 const profileRoutes = require('./routes/profile');
 const economyRoutes = require('./routes/economy');
+const collectiblesRoutes = require('./routes/collectibles');
 
 function getGameVersion() {
   try {
@@ -43,6 +44,7 @@ function setupApi(bot) {
 
   app.use('/api/trade', tradingRoutes);
   app.use('/api/profile', profileRoutes);
+  app.use('/api/economy/collectibles', collectiblesRoutes);
   app.use('/api/economy', economyRoutes);
 
   app.use((err, req, res, next) => {

@@ -45,7 +45,7 @@ const useStore = create((set, get) => ({
       const priceMap = {};
       (data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
       set({
-        profile: data.profile,
+        profile: { ...data.profile, collectibles: data.collectibles || [] },
         assets: data.assets || [],
         prices: priceMap,
         prevPrices: priceMap,
@@ -64,7 +64,10 @@ const useStore = create((set, get) => ({
   loadPublicProfile: async (id) => {
     try {
       const data = await api.getPublicProfile(id);
-      return data.profile;
+      return { 
+        ...data.profile, 
+        collectibles: data.collectibles || [] 
+      };
     } catch (e) {
       console.error('Public Profile Error:', e);
       throw e;

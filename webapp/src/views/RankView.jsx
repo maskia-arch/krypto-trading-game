@@ -4,7 +4,7 @@ import { api, getTelegramId } from '../lib/api';
 import PublicProfileView from './PublicProfileView';
 
 export default function RankView() {
-  const { leaderboard, season, feePool, fetchProfile, loadLeaderboard, setTab } = useStore();
+  const { leaderboard, season, feePool, fetchProfile, loadLeaderboard, setTab, profile } = useStore();
   const [txs, setTxs] = useState([]);
   const [sub, setSub] = useState('rank');
   const [filter, setFilter] = useState('profit_season');
@@ -51,11 +51,27 @@ export default function RankView() {
 
   const displayList = useMemo(() => {
     if (!leaderboard) return [];
-    const top10 = leaderboard.slice(0, 10);
-    const myIndex = leaderboard.findIndex(p => String(p.telegram_id) === String(myId));
+    
+    const startKapital = 10000;
+
+    const calculatedBoard = leaderboard.map(p => {
+      const geschenkt = Number(p.bonus_received || 0);
+      const gesamtVermögen = Number(p.balance || 0) + Number(p.portfolio_value || 0);
+      const nettoGewinn = gesamtVermögen - geschenkt - startKapital;
+      const profitProzent = (nettoGewinn / startKapital) * 100;
+
+      return {
+        ...p,
+        fair_profit_eur: nettoGewinn,
+        fair_profit_percent: profitProzent
+      };
+    });
+
+    const top10 = calculatedBoard.slice(0, 10);
+    const myIndex = calculatedBoard.findIndex(p => String(p.telegram_id) === String(myId));
     
     if (myIndex >= 10) {
-      return [...top10, { ...leaderboard[myIndex], rank: myIndex + 1 }];
+      return [...top10, { ...calculatedBoard[myIndex], rank: myIndex + 1 }];
     }
     return top10;
   }, [leaderboard, myId]);
@@ -68,6 +84,7 @@ export default function RankView() {
     bailout:  { label: 'Rettung',  emoji: '🆘', color: 'text-neon-blue' },
     leverage: { label: 'Hebel',    emoji: '🔥', color: 'text-neon-gold' },
     prize:    { label: 'Gewinn',   emoji: '🎁', color: 'text-neon-gold' },
+    achievement_reward: { label: 'Erfolg', emoji: '🏆', color: 'text-neon-gold' },
   };
 
   const handleUserClick = (tgId) => {
@@ -161,8 +178,8 @@ export default function RankView() {
               const isMe = String(p.telegram_id) === String(myId);
               
               const isLoss = filter.includes('loss');
-              const perfEuro = p.performance_euro || 0;
-              const perfPercent = p.performance_percent || 0;
+              const perfEuro = p.fair_profit_eur || 0;
+              const perfPercent = p.fair_profit_percent || 0;
               
               return (
                 <div 
@@ -210,7 +227,7 @@ export default function RankView() {
         <div className="space-y-2">
           {txs.map((tx, idx) => {
             const m = TX_META[tx.type] || { label: tx.type, emoji: '📝', color: 'text-white' };
-            const isPos = ['sell', 'rent', 'bailout', 'prize'].includes(tx.type);
+            const isPos = ['sell', 'rent', 'bailout', 'prize', 'achievement_reward'].includes(tx.type);
             return (
               <div key={idx} className="card p-3 flex items-center justify-between border-white/5">
                 <div className="flex items-center gap-3">

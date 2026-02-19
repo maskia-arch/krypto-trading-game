@@ -7,9 +7,16 @@ async function handleLeaderboard(ctx) {
   try {
     const filter = 'profit_season';
     const result = await db.getLeaderboard(filter, 10);
-    const leaders = result.leaders;
     const pool = result.pool;
     const season = result.season;
+    const START_KAPITAL = 10000;
+
+    const leaders = result.leaders.map(l => {
+      const gesamt = Number(l.balance || 0) + Number(l.portfolio_value || 0);
+      const netto = gesamt - Number(l.bonus_received || 0) - START_KAPITAL;
+      const prozent = (netto / START_KAPITAL) * 100;
+      return { ...l, fair_profit_eur: netto, fair_profit_percent: prozent };
+    });
 
     let text = `🏆 <b>ValueTrade Rangliste</b>\n\n`;
 
@@ -34,28 +41,32 @@ async function handleLeaderboard(ctx) {
     leaders.slice(0, 10).forEach((l, i) => {
       const medal = ['🥇', '🥈', '🥉'][i] || `<b>${i + 1}.</b>`;
       const name = esc(l.username || l.first_name || 'Trader');
-      const perfEuro = Number(l.performance_euro || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-      const perfPercent = Number(l.performance_percent || 0).toFixed(2);
-      const nw = Number(l.net_worth || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const perfEuro = l.fair_profit_eur.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const perfPercent = l.fair_profit_percent.toFixed(2);
       
       text += `${medal} ${name}\n`;
-      text += ` ├ Profit: <b>${l.performance_euro >= 0 ? '+' : ''}${perfEuro}€</b> (${perfPercent}%)\n`;
-      text += ` └ Gesamt: ${nw}€\n`;
+      text += ` └ Profit: <b>${l.fair_profit_eur >= 0 ? '+' : ''}${perfEuro}€</b> (${perfPercent}%)\n`;
     });
 
     const myProfile = await db.getProfile(ctx.from.id);
     if (myProfile) {
-      const allLeaders = await db.getLeaderboard(filter, 1000);
-      const myRank = allLeaders.leaders.findIndex(p => String(p.telegram_id) === String(ctx.from.id)) + 1;
+      const allLeadersRaw = await db.getLeaderboard(filter, 1000);
+      const allLeaders = allLeadersRaw.leaders.map(l => {
+        const gesamt = Number(l.balance || 0) + Number(l.portfolio_value || 0);
+        const netto = gesamt - Number(l.bonus_received || 0) - START_KAPITAL;
+        return { ...l, fair_profit_eur: netto };
+      });
+
+      const myRank = allLeaders.findIndex(p => String(p.telegram_id) === String(ctx.from.id)) + 1;
       
       if (myRank > 10) {
-        const me = allLeaders.leaders[myRank - 1];
-        const myPerfEuro = Number(me.performance_euro || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const myPerfPercent = Number(me.performance_percent || 0).toFixed(2);
+        const me = allLeaders[myRank - 1];
+        const myPerfEuro = me.fair_profit_eur.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const myPerfPercent = ((me.fair_profit_eur / START_KAPITAL) * 100).toFixed(2);
         
         text += `\n━━ 👤 <b>Deine Platzierung</b> ━━\n\n`;
         text += `<b>${myRank}.</b> ${esc(me.username || me.first_name)} (Du)\n`;
-        text += ` └ Profit: <b>${me.performance_euro >= 0 ? '+' : ''}${myPerfEuro}€</b> (${myPerfPercent}%)\n`;
+        text += ` └ Profit: <b>${me.fair_profit_eur >= 0 ? '+' : ''}${myPerfEuro}€</b> (${myPerfPercent}%)\n`;
       }
     }
 

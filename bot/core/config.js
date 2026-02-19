@@ -14,6 +14,11 @@ const botConfig = {
 
 const ADMIN_ID = Number(process.env.ADMIN_ID);
 const WEBAPP_URL = process.env.WEBAPP_URL || 'https://your-webapp.vercel.app';
+const BOT_USERNAME = process.env.BOT_USERNAME || 'YourBot';
+const APP_SHORTNAME = process.env.APP_SHORTNAME || 'app';
+
+const APP_LINK = `https://t.me/${BOT_USERNAME}/${APP_SHORTNAME}`;
+const BONUS_CLAIM_URL = `${APP_LINK}?startapp=claim_bonus`;
 
 const supabaseConfig = {
   url: process.env.SUPABASE_URL,
@@ -34,6 +39,8 @@ module.exports = {
   botConfig,
   ADMIN_ID,
   WEBAPP_URL,
+  APP_LINK,
+  BONUS_CLAIM_URL,
   supabaseConfig,
   COINS,
   FEE_RATE

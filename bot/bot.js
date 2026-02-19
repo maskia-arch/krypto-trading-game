@@ -1,5 +1,5 @@
 const { Bot, InlineKeyboard } = require('grammy');
-const { botConfig, ADMIN_ID } = require('./core/config');
+const { botConfig, ADMIN_ID, BONUS_CLAIM_URL } = require('./core/config');
 const { db } = require('./core/database');
 const { setupApi } = require('./api/server');
 const { setupCronJobs } = require('./cron/scheduler');
@@ -13,7 +13,20 @@ const { priceService } = require('./services/priceService');
 
 const bot = new Bot(botConfig.token);
 
-bot.command('start', startCommand);
+bot.command('start', async (ctx) => {
+  if (ctx.match === 'claim_bonus') {
+    const profile = await db.getProfile(ctx.from.id);
+    if (profile && profile.claimable_bonus > 0 && !profile.inactivity_bonus_claimed) {
+      const kb = new InlineKeyboard().url('💰 Jetzt 500€ Bonus einlösen', BONUS_CLAIM_URL);
+      return ctx.reply(
+        "🎁 <b>Dein Inaktivitäts-Bonus ist bereit!</b>\n\nKlicke auf den Button unten, um die App zu öffnen und deine 500,00€ automatisch gutgeschrieben zu bekommen.",
+        { parse_mode: 'HTML', reply_markup: kb }
+      );
+    }
+  }
+  return startCommand(ctx);
+});
+
 bot.command('portfolio', portfolioCommand);
 bot.command(['rank', 'leaderboard'], economyCommands.handleLeaderboard);
 bot.command('bailout', economyCommands.handleBailout);

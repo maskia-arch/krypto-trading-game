@@ -91,6 +91,11 @@ router.post('/', async (req, res) => {
         balance: newBalance 
       };
 
+      if (req.bot) {
+        const msg = `🟢 <b>TRADE ERÖFFNET</b>\n\nDu hast <b>${cryptoAmount.toFixed(4)} ${symbol}</b> für <b>${euroAmount.toLocaleString('de-DE')}€</b> gekauft.\n<i>Kaufkurs: ${price.toLocaleString('de-DE')}€</i>`;
+        req.bot.api.sendMessage(profile.telegram_id, msg, { parse_mode: 'HTML' }).catch(() => {});
+      }
+
     } else if (action === 'sell') {
       const asset = await db.getAsset(profile.id, symbol);
       if (!asset || Number(asset.amount) <= 0) {
@@ -122,17 +127,33 @@ router.post('/', async (req, res) => {
         fee: fee,
         balance: newBalance 
       };
+
+      if (req.bot) {
+        const msg = `🔴 <b>TRADE GESCHLOSSEN</b>\n\nDu hast <b>${sellAmount.toFixed(4)} ${symbol}</b> für <b>${netEuro.toLocaleString('de-DE')}€</b> verkauft.\n<i>Verkaufskurs: ${price.toLocaleString('de-DE')}€</i>`;
+        req.bot.api.sendMessage(profile.telegram_id, msg, { parse_mode: 'HTML' }).catch(() => {});
+      }
     }
 
     if (tradeResult && db.checkAndGrantAchievements) {
       const unlocked = await db.checkAndGrantAchievements(profile.id);
       tradeResult.new_achievements = unlocked;
+
+      if (unlocked && unlocked.length > 0 && req.bot) {
+        for (const ach of unlocked) {
+          const msg = `🏆 <b>ACHIEVEMENT FREIGESCHALTET!</b>\n\nGlückwunsch, du hast das Abzeichen <b>${ach.name}</b> erhalten!\n\nDein Bonus: <b>+${ach.reward.toLocaleString('de-DE')}€</b> 💰 wurden deinem Guthaben hinzugefügt.`;
+          try {
+            await req.bot.api.sendMessage(profile.telegram_id, msg, { parse_mode: 'HTML' });
+          } catch (e) {
+            console.error(e);
+          }
+        }
+      }
     }
 
     res.json(tradeResult);
 
   } catch (err) {
-    console.error('Trade Error:', err);
+    console.error(err);
     res.status(500).json({ error: 'Transaktion fehlgeschlagen' });
   }
 });

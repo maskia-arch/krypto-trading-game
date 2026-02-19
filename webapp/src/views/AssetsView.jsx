@@ -6,10 +6,13 @@ import TradeView from './TradeView';
 export default function AssetsView() {
   const { profile, fetchProfile, showToast } = useStore();
   const [sub, setSub] = useState('wallet');
+  
   const [reTypes, setReTypes] = useState([]);
   const [myRE, setMyRE] = useState([]);
+  
   const [cTypes, setCTypes] = useState([]);
   const [myColl, setMyColl] = useState([]);
+  
   const [loading, setLoading] = useState(true);
 
   const vol = Number(profile?.total_volume || 0);
@@ -64,11 +67,23 @@ export default function AssetsView() {
   const buyColl = async (id) => {
     try {
       const r = await api.buyCollectible(id);
-      showToast(`💎 ${r.item || 'Item'} gekauft!`);
+      showToast(`💎 Gekauft! 5% Steuer wandern in den Pool.`);
       await fetchProfile(); 
       await loadData();
     } catch (e) { 
       showToast(`❌ ${e.message}`, 'error'); 
+    }
+  };
+
+  const sellColl = async (userCollectibleId) => {
+    if (!window.confirm("Bist du sicher? Du erhältst 95% des Kaufpreises zurück.")) return;
+    try {
+      const r = await api.sellCollectible(userCollectibleId);
+      showToast(`💰 Verkauft für ${Number(r.received).toLocaleString('de-DE')}€`);
+      await fetchProfile();
+      await loadData();
+    } catch (e) {
+      showToast(`❌ ${e.message}`, 'error');
     }
   };
 
@@ -195,20 +210,38 @@ export default function AssetsView() {
             </div>
           ) : (
             <div className="space-y-3">
+              <div className="bg-neon-gold/5 border border-neon-gold/20 p-3 rounded-xl">
+                <p className="text-[10px] text-neon-gold font-bold uppercase tracking-wide text-center">
+                  ⚠️ Wertsicherung & Luxussteuer
+                </p>
+                <p className="text-[10px] text-[var(--text-dim)] text-center mt-1">
+                  Beim Kauf fallen 5% Luxussteuer an (wandert in den Season-Pool). Bei Verkauf erhältst du 95% des Kaufwerts zurück.
+                </p>
+              </div>
+
               {myColl.length > 0 && (
                 <div className="space-y-2">
                   <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-dim)] px-1 pt-1">Meine Sammlung ({myColl.length})</p>
-                  {myColl.map(p => (
-                    <div key={p.id} className="card p-3 flex items-center justify-between border-l-2 border-neon-purple bg-gradient-to-r from-neon-purple/5 to-transparent">
-                      <div className="flex items-center gap-3">
-                        <span className="text-2xl drop-shadow-md">{p.collectible_types?.emoji}</span>
-                        <div>
-                          <p className="text-sm font-bold text-white">{p.collectible_types?.name}</p>
-                          <p className="text-[10px] text-[var(--text-dim)] font-mono">Gekauft am {new Date(p.purchased_at || p.created_at).toLocaleDateString('de-DE')}</p>
+                  {myColl.map(p => {
+                    const refund = Number(p.purchase_price || p.collectibles?.price || 0) * 0.95;
+                    return (
+                      <div key={p.id} className="card p-3 flex items-center justify-between border-l-2 border-neon-purple bg-gradient-to-r from-neon-purple/5 to-transparent">
+                        <div className="flex items-center gap-3">
+                          <span className="text-2xl drop-shadow-md">{p.collectibles?.icon || '💎'}</span>
+                          <div>
+                            <p className="text-sm font-bold text-white">{p.collectibles?.name}</p>
+                            <p className="text-[10px] text-[var(--text-dim)] font-mono">Wert: {refund.toLocaleString('de-DE')}€</p>
+                          </div>
                         </div>
+                        <button 
+                          onClick={() => sellColl(p.id)}
+                          className="bg-white/5 border border-white/10 text-[10px] font-bold px-3 py-1.5 rounded-lg text-[var(--text-dim)] hover:text-white transition-colors"
+                        >
+                          Verkaufen
+                        </button>
                       </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
 
@@ -216,7 +249,7 @@ export default function AssetsView() {
               <div className="space-y-2">
                 {cTypes.map(t => {
                   const minVol = Number(t.min_volume || 0);
-                  const price = Number(t.price_eur || 0);
+                  const price = Number(t.price || 0);
                   const isLocked = vol < minVol;
                   const canAfford = bal >= price;
 
@@ -224,7 +257,7 @@ export default function AssetsView() {
                     <div key={t.id} className={`card p-4 flex items-center justify-between transition-all ${isLocked ? 'opacity-60 grayscale-[30%]' : ''}`}>
                       <div className="flex items-center gap-3">
                         <div className="relative">
-                          <span className="text-3xl drop-shadow-md">{t.emoji || '💎'}</span>
+                          <span className="text-3xl drop-shadow-md">{t.icon || '💎'}</span>
                           {isLocked && <div className="absolute -bottom-1 -right-1 bg-black rounded-full p-0.5 text-xs">🔒</div>}
                         </div>
                         <div>
@@ -237,10 +270,11 @@ export default function AssetsView() {
                               BENÖTIGT {minVol.toLocaleString('de-DE')}€ UMSATZ
                             </p>
                           ) : (
-                            <p className="text-[10px] text-[var(--text-dim)] font-medium">⏱ {t.min_hold_h}h Haltedauer</p>
+                            <p className="text-[10px] text-[var(--text-dim)] font-medium">Luxussteuer: 5%</p>
                           )}
                         </div>
                       </div>
+                      
                       <button 
                         onClick={() => buyColl(t.id)} 
                         disabled={isLocked || !canAfford}

@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import useStore from './lib/store';
+import { api } from './lib/api';
 
 import Header from './components/layout/Header';
 import Navbar from './components/layout/Navbar';
@@ -9,7 +10,7 @@ import ChartView from './views/ChartView';
 import AssetsView from './views/AssetsView';
 import RankView from './views/RankView';
 import SettingsView from './views/SettingsView';
-import ProfileView from './views/ProfileView'; // NEU
+import ProfileView from './views/ProfileView';
 
 const TABS = [
   { id: 'chart', label: 'Chart',  icon: '📊' },
@@ -25,7 +26,7 @@ const COIN_META = {
 };
 
 export default function App() {
-  const { tab, setTab, fetchProfile, refreshPrices, loadVersion, prices, prevPrices } = useStore();
+  const { tab, setTab, fetchProfile, refreshPrices, loadVersion, prices, prevPrices, showToast } = useStore();
 
   useEffect(() => {
     loadVersion();
@@ -44,6 +45,28 @@ export default function App() {
       clearInterval(profileInterval);
     };
   }, [fetchProfile, refreshPrices, loadVersion]);
+
+  useEffect(() => {
+    const handleStartParam = async () => {
+      const tg = window.Telegram?.WebApp;
+      if (!tg) return;
+
+      tg.ready();
+      const startParam = tg.initDataUnsafe?.start_param;
+
+      if (startParam === 'claim_bonus') {
+        try {
+          const res = await api.claimBonus();
+          showToast(`🎁 Bonus aktiviert: +${res.claimed}€!`, 'success');
+          await fetchProfile();
+        } catch (err) {
+          console.error(err.message);
+        }
+      }
+    };
+
+    handleStartParam();
+  }, [fetchProfile, showToast]);
 
   useEffect(() => {
     if (tab === 'trade') {
@@ -73,7 +96,7 @@ export default function App() {
         {tab === 'assets' && <AssetsView />}
         {tab === 'rank' && <RankView />}
         {tab === 'settings' && <SettingsView />}
-        {tab === 'profile' && <ProfileView />} {/* NEU: Eigenes Profil */}
+        {tab === 'profile' && <ProfileView />}
       </main>
 
       <Navbar tabs={TABS} currentTab={tab} onTabChange={setTab} />
