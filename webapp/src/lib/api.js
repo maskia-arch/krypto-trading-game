@@ -44,6 +44,9 @@ async function apiCall(path, options = {}) {
 export const api = {
   getVersion:           () => apiCall('/api/version'),
   getProfile:           () => apiCall('/api/profile'),
+  getPublicProfile:     (id) => apiCall(`/api/profile/public/${id}`),
+  updateAvatar:         (avatar_url) => apiCall('/api/profile/avatar', { method: 'POST', body: JSON.stringify({ avatar_url }) }),
+  deleteAvatar:         () => apiCall('/api/profile/avatar', { method: 'DELETE' }),
   getPrices:            () => apiCall('/api/profile/prices'),
   getTransactions:      () => apiCall('/api/profile/transactions'),
   updateUsername:       (username) => apiCall('/api/profile/update-username', { method: 'POST', body: JSON.stringify({ username }) }),
@@ -53,7 +56,6 @@ export const api = {
   buy:                  (symbol, amount_eur) => apiCall('/api/trade', { method: 'POST', body: JSON.stringify({ action: 'buy', symbol, amount_eur }) }),
   sell:                 (symbol, amount_crypto) => apiCall('/api/trade', { method: 'POST', body: JSON.stringify({ action: 'sell', symbol, amount_crypto }) }),
   
-  // Unterstützt jetzt die Filter-Übergabe an das Backend
   getLeaderboard:       (filter = 'profit_season') => apiCall(`/api/economy/leaderboard?filter=${filter}`), 
   
   getRealEstateTypes:   () => apiCall('/api/economy/realestate/types'),

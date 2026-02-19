@@ -14,6 +14,7 @@ const useStore = create((set, get) => ({
   leaderboard: [],
   season: null,
   feePool: 0,
+  achievements: [],
   loading: true,
   error: null,
   tab: 'trade',
@@ -48,6 +49,7 @@ const useStore = create((set, get) => ({
         assets: data.assets || [],
         prices: priceMap,
         prevPrices: priceMap,
+        achievements: data.achievements || [],
         loading: false,
       });
     } catch (err) {
@@ -57,6 +59,16 @@ const useStore = create((set, get) => ({
 
   loadProfile: async () => {
     return get().fetchProfile();
+  },
+
+  loadPublicProfile: async (id) => {
+    try {
+      const data = await api.getPublicProfile(id);
+      return data.profile;
+    } catch (e) {
+      console.error('Public Profile Error:', e);
+      throw e;
+    }
   },
 
   refreshPrices: async () => {
@@ -102,10 +114,8 @@ const useStore = create((set, get) => ({
     return data;
   },
 
-  // Aktualisierte Leaderboard-Logik mit Filter-Support
   loadLeaderboard: async (filter = 'profit_season') => {
     try {
-      // Wir übergeben den Filter an die API (muss in api.js ggf. noch angepasst werden)
       const data = await api.getLeaderboard(filter);
       set({ 
         leaderboard: data.leaders || [], 

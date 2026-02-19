@@ -5,11 +5,11 @@ import Header from './components/layout/Header';
 import Navbar from './components/layout/Navbar';
 import PriceTicker from './components/layout/PriceTicker';
 
-// Stelle sicher, dass diese Dateinamen EXAKT so im Ordner liegen (Groß/Kleinschreibung!)
 import ChartView from './views/ChartView';
 import AssetsView from './views/AssetsView';
 import RankView from './views/RankView';
 import SettingsView from './views/SettingsView';
+import ProfileView from './views/ProfileView'; // NEU
 
 const TABS = [
   { id: 'chart', label: 'Chart',  icon: '📊' },
@@ -45,7 +45,6 @@ export default function App() {
     };
   }, [fetchProfile, refreshPrices, loadVersion]);
 
-  // Redirection von altem Tab auf neuen Default
   useEffect(() => {
     if (tab === 'trade') {
       setTab('chart');
@@ -74,6 +73,7 @@ export default function App() {
         {tab === 'assets' && <AssetsView />}
         {tab === 'rank' && <RankView />}
         {tab === 'settings' && <SettingsView />}
+        {tab === 'profile' && <ProfileView />} {/* NEU: Eigenes Profil */}
       </main>
 
       <Navbar tabs={TABS} currentTab={tab} onTabChange={setTab} />

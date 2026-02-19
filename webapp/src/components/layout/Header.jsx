@@ -2,17 +2,27 @@ import React from 'react';
 import useStore from '../../lib/store';
 
 export default function Header() {
-  const { profile, version } = useStore();
+  const { profile, version, setTab } = useStore();
   const balance = Number(profile?.balance || 0);
 
   return (
     <div className="px-4 pt-3 pb-2">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {/* Pulsierender Live-Indikator */}
-          <div className="live-dot" />
+        <div 
+          className="flex items-center gap-3 cursor-pointer active:opacity-70 transition-opacity"
+          onClick={() => setTab('profile')}
+        >
+          {/* PROFILBILD / AVATAR */}
+          <div className="w-10 h-10 rounded-full border border-white/10 overflow-hidden bg-black/40 flex items-center justify-center shrink-0 shadow-lg">
+            {profile?.avatar_url ? (
+              <img src={profile.avatar_url} alt="Profil" className="w-full h-full object-cover" />
+            ) : (
+              <span className="text-xl">👤</span>
+            )}
+          </div>
+
           <div>
-            <h1 className="text-sm font-bold tracking-tight">
+            <h1 className="text-sm font-bold tracking-tight flex items-center">
               ValueTradeGame
               <span className="text-[10px] font-mono font-normal text-[var(--text-dim)] ml-1.5">
                 {version ? `v${version}` : 'v1.0'}

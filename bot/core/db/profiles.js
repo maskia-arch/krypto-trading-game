@@ -24,6 +24,38 @@ module.exports = (db) => ({
     return data;
   },
 
+  async getPublicProfile(telegramId) {
+    const { data } = await db.supabase
+      .from('profiles')
+      .select('id, telegram_id, username, created_at, is_pro, pro_until, avatar_url')
+      .eq('telegram_id', telegramId)
+      .maybeSingle();
+
+    if (!data) return null;
+
+    let status = 'Trader';
+    const adminId = Number(process.env.ADMIN_ID);
+    if (Number(telegramId) === adminId) {
+      status = 'Admin';
+    } else if (data.is_pro && new Date(data.pro_until) > new Date()) {
+      status = 'Pro';
+    }
+
+    const { data: achievements } = await db.supabase
+      .from('user_achievements')
+      .select('achievements(id, name, icon)')
+      .eq('profile_id', data.id);
+
+    return {
+      telegram_id: data.telegram_id,
+      username: data.username,
+      avatar_url: data.avatar_url,
+      created_at: data.created_at,
+      status: status,
+      achievements: achievements ? achievements.map(a => a.achievements) : []
+    };
+  },
+
   async isUsernameTaken(username) {
     if (!username) return false;
     const { data } = await db.supabase
@@ -97,6 +129,13 @@ module.exports = (db) => ({
     return true;
   },
 
+  async updateAvatar(profileId, avatarUrl) {
+    await db.supabase
+      .from('profiles')
+      .update({ avatar_url: avatarUrl })
+      .eq('id', profileId);
+  },
+
   async requestAccountDeletion(profileId) {
     await db.supabase.from('deletion_requests').insert({
       profile_id: profileId,
@@ -118,6 +157,7 @@ module.exports = (db) => ({
     await db.supabase.from('collectibles').delete().eq('profile_id', profileId);
     await db.supabase.from('pro_requests').delete().eq('profile_id', profileId);
     await db.supabase.from('deletion_requests').delete().eq('profile_id', profileId);
+    await db.supabase.from('user_achievements').delete().eq('profile_id', profileId);
     
     const { error } = await db.supabase.from('profiles').delete().eq('id', profileId);
     

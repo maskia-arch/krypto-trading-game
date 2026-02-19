@@ -14,7 +14,7 @@ module.exports = (db) => ({
     }
 
     const [profilesRes, assetsRes, pricesRes, season, pool] = await Promise.all([
-      db.supabase.from('profiles').select('*'),
+      db.supabase.from('profiles').select('id, telegram_id, username, first_name, balance, avatar_url, is_pro, pro_until, total_volume, season_start_worth, day_start_worth'),
       db.supabase.from('assets').select('profile_id, symbol, amount'),
       db.supabase.from('current_prices').select('symbol, price_eur'),
       this.getActiveSeason(),
@@ -60,7 +60,14 @@ module.exports = (db) => ({
       const diffPercent = startBasis > 0 ? (diffEuro / startBasis) * 100 : 0;
 
       return {
-        ...p,
+        id: p.id,
+        telegram_id: p.telegram_id,
+        username: p.username,
+        first_name: p.first_name,
+        avatar_url: p.avatar_url,
+        is_pro: p.is_pro,
+        pro_until: p.pro_until,
+        total_volume: p.total_volume,
         net_worth: currentNetWorth,
         performance_euro: parseFloat(diffEuro.toFixed(2)),
         performance_percent: parseFloat(diffPercent.toFixed(2))

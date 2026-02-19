@@ -52,6 +52,8 @@ router.post('/', async (req, res) => {
     const price = await db.getCurrentPrice(symbol);
     if (!price) return res.status(500).json({ error: 'Kein Kurs verfügbar' });
 
+    let tradeResult = null;
+
     if (action === 'buy') {
       const euroAmount = Number(amount_eur);
       if (!euroAmount || euroAmount <= 0) return res.status(400).json({ error: 'Ungültiger Euro-Betrag' });
@@ -81,13 +83,13 @@ router.post('/', async (req, res) => {
       
       await db.logTransaction(profile.id, 'buy', symbol, cryptoAmount, price, fee, euroAmount);
 
-      res.json({ 
+      tradeResult = { 
         success: true, 
         action: 'buy', 
         crypto_amount: cryptoAmount, 
         fee: fee,
         balance: newBalance 
-      });
+      };
 
     } else if (action === 'sell') {
       const asset = await db.getAsset(profile.id, symbol);
@@ -113,14 +115,22 @@ router.post('/', async (req, res) => {
 
       await db.logTransaction(profile.id, 'sell', symbol, sellAmount, price, fee, netEuro);
 
-      res.json({ 
+      tradeResult = { 
         success: true, 
         action: 'sell', 
         euro_received: netEuro, 
         fee: fee,
         balance: newBalance 
-      });
+      };
     }
+
+    if (tradeResult && db.checkAndGrantAchievements) {
+      const unlocked = await db.checkAndGrantAchievements(profile.id);
+      tradeResult.new_achievements = unlocked;
+    }
+
+    res.json(tradeResult);
+
   } catch (err) {
     console.error('Trade Error:', err);
     res.status(500).json({ error: 'Transaktion fehlgeschlagen' });
