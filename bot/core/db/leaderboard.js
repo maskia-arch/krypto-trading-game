@@ -2,7 +2,7 @@ let leaderboardCache = {};
 
 module.exports = (db) => ({
   async getLeaderboard(filter = 'profit_season', limit = 20) {
-    const CACHE_DURATION = 30 * 60 * 1000;
+    const CACHE_DURATION = 5 * 60 * 1000;
     const now = Date.now();
 
     if (leaderboardCache[filter] && (now - leaderboardCache[filter].lastUpdate) < CACHE_DURATION) {
@@ -14,7 +14,7 @@ module.exports = (db) => ({
     }
 
     const [profilesRes, assetsRes, pricesRes, season, pool] = await Promise.all([
-      db.supabase.from('profiles').select('id, telegram_id, username, first_name, balance, avatar_url, is_pro, pro_until, total_volume, season_start_worth, day_start_worth'),
+      db.supabase.from('profiles').select('id, telegram_id, username, first_name, balance, avatar_url, is_pro, pro_until, total_volume, season_start_worth, day_start_worth, bonus_received'),
       db.supabase.from('assets').select('profile_id, symbol, amount'),
       db.supabase.from('current_prices').select('symbol, price_eur'),
       this.getActiveSeason(),
@@ -44,19 +44,22 @@ module.exports = (db) => ({
       }
       
       const currentNetWorth = Number(p.balance) + cryptoValue;
+      const geschenkt = Number(p.bonus_received || 0);
+      const START_KAPITAL = 10000;
+      
       let diffEuro = 0;
-      let startBasis = 10000;
-
-      const seasonStart = Number(p.season_start_worth);
-      const dayStart = Number(p.day_start_worth);
+      let startBasis = START_KAPITAL;
 
       if (filter.includes('season')) {
-        startBasis = (seasonStart && seasonStart > 0) ? seasonStart : 10000;
+        const seasonStart = Number(p.season_start_worth);
+        startBasis = (seasonStart && seasonStart > 0) ? seasonStart : START_KAPITAL;
+        diffEuro = currentNetWorth - geschenkt - startBasis;
       } else {
+        const dayStart = Number(p.day_start_worth);
         startBasis = (dayStart && dayStart > 0) ? dayStart : currentNetWorth;
+        diffEuro = currentNetWorth - dayStart; 
       }
 
-      diffEuro = currentNetWorth - startBasis;
       const diffPercent = startBasis > 0 ? (diffEuro / startBasis) * 100 : 0;
 
       return {
@@ -68,6 +71,7 @@ module.exports = (db) => ({
         is_pro: p.is_pro,
         pro_until: p.pro_until,
         total_volume: p.total_volume,
+        bonus_received: geschenkt,
         net_worth: currentNetWorth,
         performance_euro: parseFloat(diffEuro.toFixed(2)),
         performance_percent: parseFloat(diffPercent.toFixed(2))
@@ -76,10 +80,8 @@ module.exports = (db) => ({
 
     if (filter.startsWith('loss')) {
       leaders.sort((a, b) => a.performance_euro - b.performance_euro);
-    } else if (filter.startsWith('profit') || filter.includes('win')) {
-      leaders.sort((a, b) => b.performance_euro - a.performance_euro);
     } else {
-      leaders.sort((a, b) => b.net_worth - a.net_worth);
+      leaders.sort((a, b) => b.performance_euro - a.performance_euro);
     }
 
     const result = {
