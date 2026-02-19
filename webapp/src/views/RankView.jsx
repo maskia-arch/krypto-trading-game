@@ -4,7 +4,7 @@ import { api, getTelegramId } from '../lib/api';
 import PublicProfileView from './PublicProfileView';
 
 export default function RankView() {
-  const { leaderboard, season, feePool, fetchProfile, loadLeaderboard, setTab, profile } = useStore();
+  const { leaderboard, season, feePool, fetchProfile, loadLeaderboard, setTab } = useStore();
   const [txs, setTxs] = useState([]);
   const [sub, setSub] = useState('rank');
   const [filter, setFilter] = useState('profit_season');
@@ -52,26 +52,11 @@ export default function RankView() {
   const displayList = useMemo(() => {
     if (!leaderboard) return [];
     
-    const startKapital = 10000;
-
-    const calculatedBoard = leaderboard.map(p => {
-      const geschenkt = Number(p.bonus_received || 0);
-      const gesamtVermögen = Number(p.balance || 0) + Number(p.portfolio_value || 0);
-      const nettoGewinn = gesamtVermögen - geschenkt - startKapital;
-      const profitProzent = (nettoGewinn / startKapital) * 100;
-
-      return {
-        ...p,
-        fair_profit_eur: nettoGewinn,
-        fair_profit_percent: profitProzent
-      };
-    });
-
-    const top10 = calculatedBoard.slice(0, 10);
-    const myIndex = calculatedBoard.findIndex(p => String(p.telegram_id) === String(myId));
+    const top10 = leaderboard.slice(0, 10);
+    const myIndex = leaderboard.findIndex(p => String(p.telegram_id) === String(myId));
     
     if (myIndex >= 10) {
-      return [...top10, { ...calculatedBoard[myIndex], rank: myIndex + 1 }];
+      return [...top10, { ...leaderboard[myIndex], rank: myIndex + 1 }];
     }
     return top10;
   }, [leaderboard, myId]);
@@ -178,8 +163,10 @@ export default function RankView() {
               const isMe = String(p.telegram_id) === String(myId);
               
               const isLoss = filter.includes('loss');
-              const perfEuro = p.fair_profit_eur || 0;
-              const perfPercent = p.fair_profit_percent || 0;
+              
+              // HIER IST DER FIX: Wir nehmen direkt den Wert vom Backend
+              const perfEuro = p.performance_euro || 0;
+              const perfPercent = p.performance_percent || 0;
               
               return (
                 <div 
