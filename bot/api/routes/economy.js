@@ -16,7 +16,9 @@ router.get('/chart/:symbol', async (req, res) => {
     };
 
     const minutes = rangeMap[range] || 180;
-    const startTime = new Date(Date.now() - ((minutes + 150) * 60 * 1000)).toISOString();
+    
+    // FIX: Saubere UTC-Zeitberechnung ohne "+150" Zeitzonen-Hack
+    const startTime = new Date(Date.now() - (minutes * 60 * 1000)).toISOString();
 
     const { data, error } = await db.supabase
       .from('market_history')
@@ -25,7 +27,10 @@ router.get('/chart/:symbol', async (req, res) => {
       .gte('recorded_at', startTime)
       .order('recorded_at', { ascending: true });
 
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase Chart Error:", error);
+      throw error;
+    }
 
     res.json({ 
       data: data || [],
@@ -36,7 +41,8 @@ router.get('/chart/:symbol', async (req, res) => {
       }
     });
   } catch (err) {
-    res.status(500).json({ error: 'Chart-Daten Fehler' });
+    console.error("Chart Route Error:", err);
+    res.status(500).json({ error: 'Chart-Daten Fehler', details: err.message });
   }
 });
 
@@ -57,14 +63,27 @@ router.get('/leaderboard', async (req, res) => {
     const result = await db.getLeaderboard(dbFilter);
     const realTimePool = await db.getFeePool();
 
+    // PANZERUNG: Falls keine Season existiert, erzeuge einen Fallback, 
+    // damit das Frontend (RankView) nicht mit einem Null-Pointer abstürzt!
+    const safeSeason = result.season || {
+      id: 1,
+      name: "Season 1",
+      end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // +30 Tage
+    };
+
     res.json({ 
       leaders: result.leaders || [],
-      season: result.season,
-      pool: realTimePool
+      season: safeSeason,
+      pool: realTimePool || 0
     });
   } catch (err) {
     console.error('API Leaderboard Error:', err);
-    res.status(500).json({ error: 'Leaderboard Fehler' });
+    // Notfall-Rettung: Schicke leere Daten statt 500er Fehler, damit die UI nicht crasht
+    res.json({
+      leaders: [],
+      season: { end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
+      pool: 0
+    });
   }
 });
 
@@ -141,7 +160,9 @@ router.post('/realestate/buy', async (req, res) => {
       type: 'buy_realestate',
       symbol: 'HOUSE',
       total_eur: -Number(reType.price_eur),
-      details: `Kauf: ${reType.name}`
+      price_eur: 0,
+      amount: 1,
+      fee_eur: 0
     });
 
     res.json({ success: true });

@@ -46,11 +46,12 @@ export default function PositionsTable() {
       </div>
       
       {leveragePositions.map(pos => {
-        const currentPrice = Number(prices[pos.symbol] || pos.entry_price || 0);
-        const entryPrice = Number(pos.entry_price || 0);
-        const liqPrice = Number(pos.liquidation_price || 0);
-        const collateral = Number(pos.collateral || 0);
-        const leverage = Number(pos.leverage || 1);
+        // SICHERHEITS-PANZER: Fallbacks für alle numerischen Werte
+        const currentPrice = Number(prices?.[pos.symbol]) || Number(pos.entry_price) || 0;
+        const entryPrice = Number(pos.entry_price) || 0;
+        const liqPrice = Number(pos.liquidation_price) || 0;
+        const collateral = Number(pos.collateral) || 0;
+        const leverage = Number(pos.leverage) || 1;
         const notional = collateral * leverage;
 
         let pnl = 0;
@@ -60,13 +61,21 @@ export default function PositionsTable() {
           pnl = entryPrice > 0 ? ((entryPrice - currentPrice) / entryPrice) * notional : 0;
         }
 
+        // Schutz vor NaN
         const pnlPercent = collateral > 0 ? (pnl / collateral) * 100 : 0;
         const isProfit = pnl >= 0;
         const isLong = pos.direction === 'LONG';
 
-        const distanceToLiq = isLong 
-          ? (currentPrice > 0 ? ((currentPrice - liqPrice) / currentPrice) * 100 : 0)
-          : (currentPrice > 0 ? ((liqPrice - currentPrice) / currentPrice) * 100 : 0);
+        // Verbesserte, absturzsichere Distanz-Berechnung
+        let distanceToLiq = 100; // Default-Wert, wenn noch keine Preise geladen sind
+        if (currentPrice > 0 && liqPrice > 0) {
+           distanceToLiq = isLong 
+            ? ((currentPrice - liqPrice) / currentPrice) * 100
+            : ((liqPrice - currentPrice) / currentPrice) * 100;
+        }
+        
+        // Verhindert extreme Ausreißer in der ProgressBar (die sonst das CSS sprengen)
+        const safeDistance = Math.max(0, Math.min(100, distanceToLiq || 100));
 
         return (
           <div key={pos.id} className="card p-3 border border-white/5 relative overflow-hidden bg-gradient-to-br from-[#0a0c14] to-black/80 backdrop-blur-xl shadow-lg transition-all duration-300">
@@ -86,7 +95,7 @@ export default function PositionsTable() {
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[8px] text-[var(--text-dim)] uppercase font-black tracking-widest">Einstieg</span>
-                  <span className="text-xs font-mono font-bold text-white/90">{entryPrice.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€</span>
+                  <span className="text-xs font-mono font-bold text-white/90">{(entryPrice || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€</span>
                 </div>
               </div>
               
@@ -94,11 +103,11 @@ export default function PositionsTable() {
                 <p className={`text-[17px] font-mono font-black tabular-nums tracking-tighter transition-all duration-300 ${
                   isProfit ? 'text-neon-green drop-shadow-[0_0_8px_rgba(34,214,138,0.6)]' : 'text-neon-red drop-shadow-[0_0_8px_rgba(244,63,94,0.6)]'
                 }`}>
-                  {isProfit ? '+' : ''}{pnl.toFixed(2)}€
+                  {isProfit ? '+' : ''}{(pnl || 0).toFixed(2)}€
                 </p>
                 <div className={`flex items-center justify-end gap-0.5 text-[10px] font-black mt-0.5 ${isProfit ? 'text-neon-green' : 'text-neon-red'}`}>
                   <span>{isProfit ? '▲' : '▼'}</span>
-                  <span>{Math.abs(pnlPercent).toFixed(2)}%</span>
+                  <span>{Math.abs(pnlPercent || 0).toFixed(2)}%</span>
                 </div>
               </div>
             </div>
@@ -109,13 +118,13 @@ export default function PositionsTable() {
                 {pos.stop_loss && (
                   <div className="flex flex-col">
                     <span className="text-[7px] font-black uppercase text-neon-red/70 tracking-tighter">Stop Loss</span>
-                    <span className="text-[10px] font-mono font-bold text-white/60">{Number(pos.stop_loss).toLocaleString()}€</span>
+                    <span className="text-[10px] font-mono font-bold text-white/60">{Number(pos.stop_loss || 0).toLocaleString('de-DE')}€</span>
                   </div>
                 )}
                 {pos.take_profit && (
                   <div className="flex flex-col">
                     <span className="text-[7px] font-black uppercase text-neon-green/70 tracking-tighter">Take Profit</span>
-                    <span className="text-[10px] font-mono font-bold text-white/60">{Number(pos.take_profit).toLocaleString()}€</span>
+                    <span className="text-[10px] font-mono font-bold text-white/60">{Number(pos.take_profit || 0).toLocaleString('de-DE')}€</span>
                   </div>
                 )}
               </div>
@@ -124,26 +133,27 @@ export default function PositionsTable() {
             <div className="pl-3 grid grid-cols-3 gap-2 mb-4 relative z-10">
               <div className="bg-white/[0.03] backdrop-blur-sm p-2 rounded-xl border border-white/5">
                 <p className="text-[8px] uppercase font-black tracking-wider text-[var(--text-dim)]">Marge</p>
-                <p className="text-[11px] font-mono font-bold text-white mt-0.5">{collateral.toFixed(2)}€</p>
+                <p className="text-[11px] font-mono font-bold text-white mt-0.5">{(collateral || 0).toFixed(2)}€</p>
               </div>
               <div className="bg-white/[0.03] backdrop-blur-sm p-2 rounded-xl border border-white/5">
                 <p className="text-[8px] uppercase font-black tracking-wider text-[var(--text-dim)]">Markt</p>
-                <p className="text-[11px] font-mono font-bold text-neon-blue mt-0.5">{currentPrice.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€</p>
+                <p className="text-[11px] font-mono font-bold text-neon-blue mt-0.5">{(currentPrice || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€</p>
               </div>
               <div className="bg-white/[0.03] backdrop-blur-sm p-2 rounded-xl border border-red-500/10">
                 <p className="text-[8px] uppercase font-black tracking-wider text-neon-red">Liq. Preis</p>
-                <p className="text-[11px] font-mono font-bold text-neon-red/90 mt-0.5">{liqPrice.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€</p>
+                <p className="text-[11px] font-mono font-bold text-neon-red/90 mt-0.5">{(liqPrice || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€</p>
               </div>
             </div>
 
-            {distanceToLiq < 15 && distanceToLiq > 0 && (
+            {/* Sicherer Aufruf von distanceToLiq */}
+            {safeDistance < 15 && safeDistance > 0 && currentPrice > 0 && (
               <div className="pl-3 mb-4 relative z-10">
                 <div className="flex justify-between text-[8px] font-black uppercase mb-1">
                   <span className="text-neon-red animate-pulse">Margin Call Gefahr!</span>
-                  <span className="text-neon-red/70">{distanceToLiq.toFixed(1)}% bis Liq.</span>
+                  <span className="text-neon-red/70">{safeDistance.toFixed(1)}% bis Liq.</span>
                 </div>
                 <div className="w-full bg-black/50 h-1.5 rounded-full overflow-hidden border border-red-500/20">
-                  <div className="h-full bg-neon-red shadow-[0_0_8px_rgba(244,63,94,0.8)] relative transition-all duration-500" style={{ width: `${Math.max(5, 100 - (distanceToLiq * 6.6))}%` }}>
+                  <div className="h-full bg-neon-red shadow-[0_0_8px_rgba(244,63,94,0.8)] relative transition-all duration-500" style={{ width: `${Math.max(5, 100 - (safeDistance * 6.6))}%` }}>
                     <div className="absolute inset-0 bg-white/30 animate-[pulse_1s_ease-in-out_infinite]" />
                   </div>
                 </div>
