@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import useStore from './lib/store';
 import { api } from './lib/api';
 
@@ -34,90 +34,113 @@ export default function App() {
     prices, prevPrices, showToast, loading, error, version, profile 
   } = useStore();
   
-  const [timeoutError, setTimeoutError] = useState(null);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [initError, setInitError] = useState(null);
 
+  // 1. Initialisierung: Version & Profil laden
   useEffect(() => {
-    loadVersion();
-    fetchProfile();
+    const initApp = async () => {
+      try {
+        const tg = window.Telegram?.WebApp;
+        if (tg) {
+          tg.ready();
+          tg.expand();
+        }
+        
+        await loadVersion();
+        await fetchProfile();
+      } catch (err) {
+        console.error("Initialization error:", err);
+      } finally {
+        setAuthChecking(false);
+      }
+    };
 
-    const priceInterval = setInterval(() => {
-      refreshPrices();
-    }, 60000);
+    initApp();
 
+    const priceInterval = setInterval(refreshPrices, 60000);
     const profileInterval = setInterval(() => {
-      if (!timeoutError) fetchProfile();
-    }, 15000);
+      if (window.Telegram?.WebApp?.initData) fetchProfile();
+    }, 20000);
 
     return () => {
       clearInterval(priceInterval);
       clearInterval(profileInterval);
     };
-  }, [fetchProfile, refreshPrices, loadVersion, timeoutError]);
+  }, [fetchProfile, refreshPrices, loadVersion]);
 
+  // 2. Bonus handling via Start-Parameter
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!profile) {
-        setTimeoutError("Bitte nutze den Telegram Bot, um dich in deinem Spielprofil anzumelden.");
-      }
-    }, 60000);
-    return () => clearTimeout(timer);
-  }, [profile]);
-
-  useEffect(() => {
-    const handleStartParam = async () => {
-      const tg = window.Telegram?.WebApp;
-      if (!tg) return;
-
-      tg.ready();
-      tg.expand(); // Sorgt dafür, dass die App den ganzen Screen nutzt
-      
-      const startParam = tg.initDataUnsafe?.start_param;
-
-      if (startParam === 'claim_bonus') {
+    const checkBonus = async () => {
+      const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
+      if (startParam === 'claim_bonus' && profile) {
         try {
           const res = await api.claimBonus();
           showToast(`🎁 Bonus aktiviert: +${res.claimed}€!`, 'success');
-          await fetchProfile();
+          fetchProfile();
         } catch (err) {
-          console.error(err.message);
+          console.error("Bonus error:", err.message);
         }
       }
     };
+    checkBonus();
+  }, [profile, fetchProfile, showToast]);
 
-    handleStartParam();
-  }, [fetchProfile, showToast]);
-
+  // 3. Authentifizierungs-Timeout (Falls nach 10 Sek kein Profil da ist)
   useEffect(() => {
-    if (tab === 'trade') {
-      setTab('wallet');
-    }
+    const timer = setTimeout(() => {
+      if (!profile && !loading) {
+        setInitError("Authentifizierung fehlgeschlagen. Bitte starte die App über den Telegram Bot neu.");
+      }
+    }, 10000); // 10 Sekunden Puffer
+    return () => clearTimeout(timer);
+  }, [profile, loading]);
+
+  // Navigation Fix
+  useEffect(() => {
+    if (tab === 'trade') setTab('wallet');
   }, [tab, setTab]);
 
-  const hasAuthError = timeoutError || (!profile && !loading && error);
-
-  if (hasAuthError) {
+  // Lade-Screen (Während der allererste Check läuft)
+  if (authChecking || (loading && !profile && !initError)) {
     return (
-      <div className="flex h-screen items-center justify-center text-white px-6 text-center bg-[#06080f]">
-        <p className="text-sm text-[var(--text-dim)]">
-          {timeoutError || "Bitte nutze den Telegram Bot, um dich in deinem Spielprofil anzumelden."}
-        </p>
+      <div className="flex h-screen flex-col items-center justify-center text-white bg-[#06080f] space-y-4">
+        <div className="relative">
+          <div className="w-16 h-16 border-4 border-white/5 border-t-neon-blue rounded-full animate-spin"></div>
+          <div className="absolute inset-0 flex items-center justify-center text-[10px] font-bold">VT</div>
+        </div>
+        <div className="text-center">
+          <h1 className="text-xl font-bold tracking-widest animate-pulse">ValueTrade</h1>
+          <p className="text-[10px] font-mono text-[var(--text-dim)] mt-1 uppercase tracking-tighter">
+            Verbinde mit Engine {version || '0.2.2'}...
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (loading && !profile) {
+  // Fehler-Screen
+  if (initError || (!profile && error)) {
     return (
-      <div className="flex h-screen flex-col items-center justify-center text-white bg-[#06080f] space-y-2">
-        <h1 className="text-2xl font-bold tracking-widest">ValueTradeGame</h1>
-        <p className="text-sm font-mono text-[var(--text-dim)]">V{version || '0.2'}</p>
-        <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin mt-4"></div>
+      <div className="flex h-screen items-center justify-center text-white px-8 text-center bg-[#06080f]">
+        <div className="space-y-4">
+          <div className="text-4xl">⚠️</div>
+          <p className="text-sm text-[var(--text-dim)] leading-relaxed">
+            {initError || "Dein Profil konnte nicht geladen werden. Bitte stelle sicher, dass du die App aus dem offiziellen Bot startest."}
+          </p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-white/5 border border-white/10 rounded-full text-xs font-bold active:scale-95 transition-transform"
+          >
+            Erneut versuchen
+          </button>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-[#06080f]">
-      {/* Feststehender Header */}
+    <div className="flex flex-col h-screen overflow-hidden bg-[#06080f] select-none">
       <header className="flex-none z-50 backdrop-blur-xl border-b border-white/[0.05] bg-[#06080f]/80">
         <Header />
         <div className="flex overflow-x-auto no-scrollbar py-2 border-t border-white/[0.03]">
@@ -132,9 +155,8 @@ export default function App() {
         </div>
       </header>
 
-      {/* Scrollbarer Inhaltsbereich */}
-      <main className="flex-1 view-container">
-        <div className="px-4 pt-4">
+      <main className="flex-1 view-container overflow-y-auto">
+        <div className="px-4 pt-4 pb-20">
           {tab === 'chart' && <ChartView />}
           {tab === 'wallet' && <WalletView />}
           {tab === 'assets' && <AssetsView />}
@@ -145,7 +167,6 @@ export default function App() {
         </div>
       </main>
 
-      {/* Feststehende Navbar */}
       <div className="flex-none">
         <Navbar tabs={TABS} currentTab={tab} onTabChange={setTab} />
       </div>

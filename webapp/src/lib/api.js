@@ -1,5 +1,10 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'https://your-bot.onrender.com';
 
+// Hilfsfunktion zum Abrufen der rohen Telegram-Init-Daten
+export function getTelegramInitData() {
+  return window.Telegram?.WebApp?.initData || '';
+}
+
 export function getTelegramId() {
   try {
     const tg = window.Telegram?.WebApp;
@@ -19,10 +24,12 @@ export function getTelegramUser() {
 }
 
 async function apiCall(path, options = {}) {
+  const initData = getTelegramInitData();
   const tgId = getTelegramId();
   
-  if (!tgId) {
-    throw new Error('Keine Telegram ID gefunden. Bitte über den Bot starten.');
+  // Wir brauchen mindestens initData oder eine ID für den Fallback
+  if (!initData && !tgId) {
+    throw new Error('Keine Authentifizierung gefunden. Bitte über den Bot starten.');
   }
   
   const isGet = !options.method || options.method === 'GET';
@@ -34,6 +41,9 @@ async function apiCall(path, options = {}) {
     cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
+      // Der neue Standard: Komplette verschlüsselte InitData
+      'x-telegram-init-data': initData,
+      // Fallback für Legacy-Funktionen
       'x-telegram-id': String(tgId),
       ...options.headers,
     },
@@ -52,7 +62,6 @@ export const api = {
   updateAvatar:           (avatar_url) => apiCall('/api/profile/avatar', { method: 'POST', body: JSON.stringify({ avatar_url }) }),
   deleteAvatar:           () => apiCall('/api/profile/avatar', { method: 'DELETE' }),
   
-  // NEU: Pro-Hintergrund Funktionen
   updateBackground:       (background_url) => apiCall('/api/profile/background', { method: 'POST', body: JSON.stringify({ background_url }) }),
   deleteBackground:       () => apiCall('/api/profile/background', { method: 'DELETE' }),
 
