@@ -8,16 +8,22 @@ import useStore from '../lib/store';
 
 export default function WalletView() {
   const [mode, setMode] = useState('spot');
-  const { fetchLeveragePositions } = useStore();
+  
+  // SICHERHEIT: Wir ziehen nur die benötigte Funktion und prüfen, ob sie existiert
+  const fetchLeveragePositions = useStore((state) => state.fetchLeveragePositions);
+  const leveragePolicy = useStore((state) => state.leveragePolicy);
 
   useEffect(() => {
-    fetchLeveragePositions();
+    // Nur ausführen, wenn die Funktion im Store auch wirklich existiert
+    if (typeof fetchLeveragePositions === 'function') {
+      fetchLeveragePositions().catch(err => console.error("Initial Fetch Error:", err));
 
-    const interval = setInterval(() => {
-      fetchLeveragePositions();
-    }, 5000);
+      const interval = setInterval(() => {
+        fetchLeveragePositions().catch(() => {}); // Fehler im Intervall ignorieren
+      }, 8000); // Intervall leicht erhöht auf 8s für bessere Performance
 
-    return () => clearInterval(interval);
+      return () => clearInterval(interval);
+    }
   }, [fetchLeveragePositions]);
 
   return (
@@ -54,23 +60,29 @@ export default function WalletView() {
         </div>
       ) : (
         <div className="flex flex-col tab-enter">
-          {/* 1. Chart (Bleibt oben) */}
-          <LiveChart30m />
-          
-          {/* 2. LeveragePanel (Coin-Wechsler & Kaufmenü) 
-              Hier liegen die Buttons, die fest unter dem Chart kleben sollen.
-          */}
-          <div className="mt-4 order-1">
-            <LeveragePanel />
-          </div>
-          
-          {/* 3. PositionsTable (Aktive Positionen) 
-              Durch 'order-2' und die Platzierung im Code wandern sie UNTER das Panel 
-              oder bleiben übersichtlich getrennt.
-          */}
-          <div className="mt-6 order-2">
-            <PositionsTable /> 
-          </div>
+          {/* FALLBACK: Falls die Hebel-Daten noch laden, zeige einen Lade-Indikator 
+              statt die Seite abstürzen zu lassen */}
+          {!leveragePolicy ? (
+            <div className="flex flex-col items-center justify-center py-20 opacity-50 gap-3">
+              <div className="w-8 h-8 border-2 border-neon-blue/20 border-t-neon-blue rounded-full animate-spin"></div>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Initialisiere Hebel-Markt...</p>
+            </div>
+          ) : (
+            <>
+              {/* 1. Chart */}
+              <LiveChart30m />
+              
+              {/* 2. LeveragePanel */}
+              <div className="mt-4 order-1">
+                <LeveragePanel />
+              </div>
+              
+              {/* 3. PositionsTable */}
+              <div className="mt-6 order-2">
+                <PositionsTable /> 
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

@@ -29,11 +29,11 @@ const COIN_META = {
 export default function App() {
   const { 
     tab, setTab, fetchProfile, refreshPrices, loadVersion, 
+    loadChart, chartSymbol, chartRange,
     prices, prevPrices, showToast, loading, error, version, profile 
   } = useStore();
   
   const [authChecking, setAuthChecking] = useState(true);
-
   const lastKnownVersion = localStorage.getItem('vt_last_version') || '...';
 
   useEffect(() => {
@@ -49,14 +49,16 @@ export default function App() {
         if (tg) {
           tg.ready();
           tg.expand();
-          // v0.3.0 Fix: Setze Hintergrundfarbe für nahtlosen Übergang
           tg.setBackgroundColor('#06080f');
           tg.setHeaderColor('#06080f');
         }
         
-        await loadVersion();
-        // Das Error-Handling übernimmt nun die Retry-Logik im Store
-        await fetchProfile();
+        // Parallel laden für maximale Geschwindigkeit
+        await Promise.all([
+          loadVersion(),
+          fetchProfile(),
+          loadChart(chartSymbol, chartRange) // Sofort ersten Chart-Ladevorgang starten
+        ]);
       } catch (err) {
         console.error("Initialization error:", err);
       } finally {
@@ -68,15 +70,15 @@ export default function App() {
 
     const priceInterval = setInterval(refreshPrices, 60000);
     const profileInterval = setInterval(() => {
-      // Nur pollen, wenn wir bereits autorisiert sind
-      if (window.Telegram?.WebApp?.initData && profile) fetchProfile();
-    }, 20000);
+      // Regelmäßiges Update nur bei vorhandenem Profil
+      if (profile) fetchProfile();
+    }, 25000);
 
     return () => {
       clearInterval(priceInterval);
       clearInterval(profileInterval);
     };
-  }, [fetchProfile, refreshPrices, loadVersion, profile]);
+  }, [fetchProfile, refreshPrices, loadVersion, loadChart, chartSymbol, chartRange, profile]);
 
   useEffect(() => {
     const checkBonus = async () => {
@@ -94,12 +96,14 @@ export default function App() {
     checkBonus();
   }, [profile, fetchProfile, showToast]);
 
+  // Tab-Erzwingung bei ungültigen Zuständen
   useEffect(() => {
     if (tab === 'trade' || tab === 'chart') {
       setTab('wallet');
     }
   }, [tab, setTab]);
 
+  // Ladebildschirm-Panzerung
   if (authChecking || (loading && !profile && !error)) {
     return (
       <div className="flex h-screen flex-col items-center justify-center text-white bg-[#06080f] space-y-4">
@@ -110,27 +114,28 @@ export default function App() {
         <div className="text-center">
           <h1 className="text-xl font-bold tracking-widest animate-pulse">ValueTrade</h1>
           <p className="text-[10px] font-mono text-[var(--text-dim)] mt-1 uppercase tracking-tighter">
-            Verbinde mit Engine v{version || lastKnownVersion}...
+            Synchronisiere mit Engine v{version || lastKnownVersion}...
           </p>
         </div>
       </div>
     );
   }
 
+  // Fehler-Screen bei fehlgeschlagener Authentifizierung
   if (error && !profile) {
     return (
       <div className="flex h-screen items-center justify-center text-white px-8 text-center bg-[#06080f]">
         <div className="space-y-6 max-w-xs">
           <div className="text-5xl animate-bounce">⚠️</div>
           <div className="space-y-2">
-            <h2 className="text-lg font-bold">Verbindung unterbrochen</h2>
+            <h2 className="text-lg font-bold">Verbindung instabil</h2>
             <p className="text-xs text-[var(--text-dim)] leading-relaxed">
-              {error || "Dein Profil konnte nicht verifiziert werden. Bitte starte die App aus dem offiziellen Bot."}
+              {error}
             </p>
           </div>
           <button 
             onClick={() => window.location.reload()}
-            className="w-full py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all hover:bg-white/10"
+            className="w-full py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all"
           >
             🔄 System Neustart
           </button>

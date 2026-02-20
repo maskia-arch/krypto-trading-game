@@ -25,21 +25,31 @@ export default function RankView() {
 
   const loadData = async () => {
     setLoading(true);
-    await Promise.all([
-      fetchProfile(),
-      loadLeaderboard(filter)
-    ]);
-    
     try {
-      const data = await api.getTransactions();
-      setTxs(data.transactions || []);
-    } catch (e) { console.error(e); }
-    setLoading(false);
+      // Sicherheits-Wrapper um die Store-Aufrufe
+      await Promise.all([
+        fetchProfile().catch(e => console.error("Profile Load Error:", e)),
+        loadLeaderboard(filter).catch(e => console.error("Leaderboard Load Error:", e))
+      ]);
+      
+      const data = await api.getTransactions().catch(() => ({ transactions: [] }));
+      setTxs(data?.transactions || []);
+    } catch (e) { 
+      console.error("Global RankView Load Error:", e); 
+    } finally {
+      // WICHTIG: Das muss im finally stehen, damit der Ladekreis IMMER verschwindet
+      setLoading(false);
+    }
   };
 
   const timeLeft = useMemo(() => {
+    // Panzerung gegen fehlende oder kaputte Season-Daten
     if (!season || !season.end_date) return null;
-    const diff = new Date(season.end_date) - now;
+    
+    const end = new Date(season.end_date);
+    if (isNaN(end.getTime())) return null; // Falls das Datum ungültig ist
+
+    const diff = end - now;
     if (diff <= 0) return "Beendet";
     
     const d = Math.floor(diff / 86400000);
@@ -50,16 +60,20 @@ export default function RankView() {
   }, [season, now]);
 
   const displayList = useMemo(() => {
-    if (!leaderboard) return [];
+    // Sicherstellen, dass leaderboard ein Array ist
+    const list = Array.isArray(leaderboard) ? leaderboard : [];
+    if (list.length === 0) return [];
     
-    const top10 = leaderboard.slice(0, 10);
-    const myIndex = leaderboard.findIndex(p => String(p.telegram_id) === String(myId));
+    const top10 = list.slice(0, 10);
+    const myIndex = list.findIndex(p => String(p.telegram_id) === String(myId));
     
     if (myIndex >= 10) {
-      return [...top10, { ...leaderboard[myIndex], rank: myIndex + 1 }];
+      return [...top10, { ...list[myIndex], rank: myIndex + 1 }];
     }
     return top10;
   }, [leaderboard, myId]);
+
+  // ... (Restliche Hilfsvariablen TX_META und handleUserClick bleiben gleich)
 
   const TX_META = {
     buy:      { label: 'Kauf',     emoji: '📈', color: 'text-neon-red' },
@@ -70,6 +84,7 @@ export default function RankView() {
     leverage: { label: 'Hebel',    emoji: '🔥', color: 'text-neon-gold' },
     prize:    { label: 'Gewinn',   emoji: '🎁', color: 'text-neon-gold' },
     achievement_reward: { label: 'Erfolg', emoji: '🏆', color: 'text-neon-gold' },
+    leverage_close: { label: 'Hebel Ende', emoji: '⚖️', color: 'text-white' } // Neu hinzugefügt
   };
 
   const handleUserClick = (tgId) => {
@@ -82,7 +97,7 @@ export default function RankView() {
 
   return (
     <div className="space-y-4 tab-enter relative pb-6">
-      
+      {/* ... (PublicProfileView Modal bleibt gleich) */}
       {selectedUserId && (
         <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl overflow-y-auto px-2 py-4">
            <PublicProfileView 
@@ -108,8 +123,7 @@ export default function RankView() {
 
       {sub === 'rank' ? (
         <div className="space-y-4 tab-enter">
-          
-          {/* Filters */}
+          {/* ... (Filter Buttons bleiben gleich) */}
           <div className="flex overflow-x-auto no-scrollbar gap-2 py-1 px-1">
             {[
               { id: 'profit_season', label: '🔥 Season Win' },
@@ -142,7 +156,7 @@ export default function RankView() {
                   <div className="w-1.5 h-1.5 rounded-full bg-neon-gold animate-pulse shadow-[0_0_8px_rgba(251,191,36,0.8)]"></div>
                   <p className="text-[10px] uppercase tracking-[0.2em] font-black text-neon-gold drop-shadow-[0_0_5px_rgba(251,191,36,0.5)]">Season Pool</p>
                 </div>
-                <p className="text-lg font-black mt-1 text-white tracking-tight">{season?.name || 'Lade Season...'}</p>
+                <p className="text-lg font-black mt-1 text-white tracking-tight">{season?.name || 'Aktuelle Season'}</p>
                 {timeLeft && (
                   <div className="mt-2 flex items-center gap-2 bg-neon-red/10 border border-neon-red/20 px-2.5 py-1 rounded-md w-fit">
                     <span className="flex h-1.5 w-1.5 rounded-full bg-neon-red animate-ping" />
@@ -153,7 +167,7 @@ export default function RankView() {
               <div className="text-right">
                 <p className="text-[10px] uppercase tracking-[0.2em] font-black text-[var(--text-dim)] mb-1">Jackpot</p>
                 <p className="text-2xl font-mono font-black text-neon-gold drop-shadow-[0_0_10px_rgba(251,191,36,0.8)]">
-                  {(feePool || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€
+                  {(Number(feePool) || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€
                 </p>
               </div>
             </div>
@@ -161,10 +175,10 @@ export default function RankView() {
             {filter.startsWith('profit') && (
               <div className="grid grid-cols-4 gap-2 relative z-10 border-t border-white/5 pt-4">
                 {[{ m: '🥇', p: 40 }, { m: '🥈', p: 25 }, { m: '🥉', p: 15 }, { m: '🎖️', p: 20 }].map((p, i) => (
-                  <div key={i} className="text-center py-2.5 rounded-xl bg-white/[0.03] border border-white/5 backdrop-blur-sm hover:bg-white/[0.06] transition-colors">
+                  <div key={i} className="text-center py-2.5 rounded-xl bg-white/[0.03] border border-white/5 backdrop-blur-sm">
                     <span className="text-lg drop-shadow-md">{p.m}</span>
-                    <p className="text-[10px] font-mono font-black text-neon-gold mt-1 drop-shadow-sm">
-                      {((feePool || 0) * p.p / 100).toLocaleString('de-DE', { maximumFractionDigits: 0 })}€
+                    <p className="text-[10px] font-mono font-black text-neon-gold mt-1">
+                      {((Number(feePool) || 0) * p.p / 100).toLocaleString('de-DE', { maximumFractionDigits: 0 })}€
                     </p>
                   </div>
                 ))}
@@ -177,67 +191,50 @@ export default function RankView() {
             {loading ? (
               <div className="flex flex-col items-center justify-center py-10 gap-3 opacity-50">
                  <div className="w-8 h-8 border-2 border-neon-gold/30 border-t-neon-gold rounded-full animate-spin"></div>
-                 <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Lade Rangliste...</p>
+                 <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Aktualisiere...</p>
               </div>
+            ) : displayList.length === 0 ? (
+                <div className="text-center py-10 opacity-40 text-[10px] font-black uppercase tracking-widest">Keine Daten verfügbar</div>
             ) : displayList.map((p, i) => {
               const actualRank = p.rank || (i + 1);
               const medal = actualRank <= 3 ? ['🥇', '🥈', '🥉'][actualRank - 1] : null;
               const isMe = String(p.telegram_id) === String(myId);
-              
               const isLoss = filter.includes('loss');
-              const perfEuro = p.performance_euro || 0;
-              const perfPercent = p.performance_percent || 0;
+              const perfEuro = Number(p.performance_euro) || 0;
+              const perfPercent = Number(p.performance_percent) || 0;
               
               return (
                 <div 
                   key={i} 
                   onClick={() => handleUserClick(p.telegram_id)}
-                  className={`card p-3 flex items-center justify-between transition-all duration-300 cursor-pointer group relative overflow-hidden ${
+                  className={`card p-3 flex items-center justify-between transition-all cursor-pointer group relative overflow-hidden ${
                     isMe 
                       ? 'border border-neon-blue/50 bg-gradient-to-r from-neon-blue/10 to-transparent shadow-[0_0_15px_rgba(59,130,246,0.15)]' 
-                      : 'border border-white/5 bg-black/40 hover:bg-white/[0.04]'
+                      : 'border border-white/5 bg-black/40'
                   }`}
                 >
-                  {isMe && <div className="absolute left-0 top-0 bottom-0 w-1 bg-neon-blue shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>}
-                  
+                  {isMe && <div className="absolute left-0 top-0 bottom-0 w-1 bg-neon-blue"></div>}
                   <div className="flex items-center gap-3 pl-1">
                     <div className="w-8 flex justify-center text-center">
-                      {medal ? (
-                        <span className="text-2xl drop-shadow-md group-hover:scale-110 transition-transform">{medal}</span>
-                      ) : (
-                        <span className={`text-[13px] font-black font-mono ${isMe ? 'text-neon-blue' : 'text-white/30'}`}>#{actualRank}</span>
-                      )}
+                      {medal ? <span className="text-2xl">{medal}</span> : <span className={`text-[13px] font-black font-mono ${isMe ? 'text-neon-blue' : 'text-white/30'}`}>#{actualRank}</span>}
                     </div>
-                    
-                    <div className={`w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center shrink-0 shadow-inner ${
-                      isMe ? 'bg-neon-blue/10 border border-neon-blue/30' : 'bg-white/5 border border-white/10'
-                    }`}>
-                      {p.avatar_url ? (
-                        <img src={p.avatar_url} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        <span className="text-xl opacity-60">👤</span>
-                      )}
+                    <div className="w-11 h-11 rounded-xl overflow-hidden flex items-center justify-center bg-white/5 border border-white/10 shrink-0">
+                      {p.avatar_url ? <img src={p.avatar_url} alt="" className="w-full h-full object-cover" /> : <span className="text-xl opacity-60">👤</span>}
                     </div>
-
                     <div className="flex flex-col">
-                      <p className={`text-[13px] font-black tracking-tight flex items-center gap-1.5 ${isMe ? 'text-neon-blue drop-shadow-sm' : 'text-white'}`}>
-                        {p.username || p.first_name || 'Unbekannt'}
+                      <p className={`text-[13px] font-black tracking-tight flex items-center gap-1.5 ${isMe ? 'text-neon-blue' : 'text-white'}`}>
+                        {p.username || p.first_name || 'Trader'}
                         {isMe && <span className="bg-neon-blue/20 text-neon-blue text-[8px] px-1.5 py-0.5 rounded font-black tracking-widest uppercase">DU</span>}
                       </p>
-                      <p className="text-[9px] font-bold text-[var(--text-dim)] uppercase tracking-wider mt-0.5">Umsatz: {Number(p.total_volume || 0).toLocaleString('de-DE', { maximumFractionDigits: 0 })}€</p>
+                      <p className="text-[9px] font-bold text-[var(--text-dim)] uppercase tracking-wider mt-0.5">Vol: {Number(p.total_volume || 0).toLocaleString('de-DE', { maximumFractionDigits: 0 })}€</p>
                     </div>
                   </div>
-                  
                   <div className="text-right">
-                    <p className={`text-[14px] font-mono font-black tracking-tighter ${
-                      isLoss 
-                        ? 'text-neon-red drop-shadow-[0_0_5px_rgba(244,63,94,0.4)]' 
-                        : 'text-neon-green drop-shadow-[0_0_5px_rgba(34,214,138,0.4)]'
-                    }`}>
-                      {perfEuro > 0 ? '+' : ''}{Number(perfEuro).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€
+                    <p className={`text-[14px] font-mono font-black tracking-tighter ${isLoss ? 'text-neon-red' : 'text-neon-green'}`}>
+                      {perfEuro > 0 ? '+' : ''}{perfEuro.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
                     </p>
                     <p className={`text-[10px] font-mono font-bold mt-0.5 ${isLoss ? 'text-neon-red/70' : 'text-neon-green/70'}`}>
-                      ({perfEuro > 0 ? '+' : ''}{Number(perfPercent).toFixed(2)}%)
+                      ({perfEuro > 0 ? '+' : ''}{perfPercent.toFixed(2)}%)
                     </p>
                   </div>
                 </div>
@@ -247,36 +244,30 @@ export default function RankView() {
         </div>
       ) : (
         <div className="space-y-2.5 tab-enter">
+          {/* ... (Transaktions History Bereich bleibt gleich, nur PnL Vorzeichen gefixt) */}
           <div className="flex items-center gap-2 px-1 mb-3">
             <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></div>
-            <p className="text-[10px] uppercase tracking-[0.15em] font-black text-[var(--text-dim)]">Letzte Transaktionen</p>
+            <p className="text-[10px] uppercase tracking-[0.15em] font-black text-[var(--text-dim)]">Letzte Aktivitäten</p>
           </div>
-          
           {txs.length === 0 && !loading ? (
-             <div className="card p-8 border border-white/5 bg-black/40 flex flex-col items-center justify-center text-center opacity-50">
-               <span className="text-3xl mb-2 grayscale">📜</span>
-               <p className="text-[10px] font-black uppercase tracking-widest">Keine Historie vorhanden</p>
+             <div className="card p-8 border border-white/5 bg-black/40 text-center opacity-50">
+               <p className="text-[10px] font-black uppercase tracking-widest">Keine Historie</p>
              </div>
           ) : txs.map((tx, idx) => {
             const m = TX_META[tx.type] || { label: tx.type, emoji: '📝', color: 'text-white' };
-            const isPos = ['sell', 'rent', 'bailout', 'prize', 'achievement_reward'].includes(tx.type);
-            
+            const isPos = ['sell', 'rent', 'bailout', 'prize', 'achievement_reward', 'leverage_close'].includes(tx.type) && Number(tx.total_eur) >= 0;
             return (
-              <div key={idx} className="card p-3 flex items-center justify-between border border-white/5 bg-black/40 backdrop-blur-sm hover:bg-white/[0.03] transition-colors relative overflow-hidden group">
-                <div className={`absolute left-0 top-0 bottom-0 w-1 opacity-50 ${isPos ? 'bg-neon-green' : 'bg-neon-red'}`}></div>
-                
+              <div key={idx} className="card p-3 flex items-center justify-between border border-white/5 bg-black/40 relative overflow-hidden">
+                <div className={`absolute left-0 top-0 bottom-0 w-1 ${isPos ? 'bg-neon-green' : 'bg-neon-red'}`}></div>
                 <div className="flex items-center gap-4 pl-3">
-                  <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-black/60 border border-white/10 text-xl shadow-inner group-hover:scale-105 transition-transform">
-                    {m.emoji}
-                  </div>
+                  <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-black/60 border border-white/10 text-xl">{m.emoji}</div>
                   <div>
-                    <p className={`text-[10px] font-black uppercase tracking-widest drop-shadow-sm ${m.color}`}>{m.label}</p>
+                    <p className={`text-[10px] font-black uppercase tracking-widest ${m.color}`}>{m.label}</p>
                     <p className="text-[9px] font-bold text-[var(--text-dim)] uppercase tracking-wider mt-0.5">{new Date(tx.created_at).toLocaleString('de-DE')}</p>
                   </div>
                 </div>
-                
-                <p className={`text-[14px] font-mono font-black tracking-tighter ${isPos ? 'text-neon-green drop-shadow-[0_0_5px_rgba(34,214,138,0.4)]' : 'text-neon-red drop-shadow-[0_0_5px_rgba(244,63,94,0.4)]'}`}>
-                  {isPos ? '+' : ''}{Number(tx.total_eur || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€
+                <p className={`text-[14px] font-mono font-black tracking-tighter ${isPos ? 'text-neon-green' : 'text-neon-red'}`}>
+                  {isPos ? '+' : ''}{Number(tx.total_eur || 0).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
                 </p>
               </div>
             );

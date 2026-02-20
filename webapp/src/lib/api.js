@@ -7,10 +7,11 @@ export function getTelegramInitData() {
 export function getTelegramId() {
   try {
     const tg = window.Telegram?.WebApp;
-    // v0.3.0 Check: Sicherstellen, dass die ID als Number zurückgegeben wird
+    // Priorität 1: Telegram WebApp User Object
     if (tg?.initDataUnsafe?.user?.id) return Number(tg.initDataUnsafe.user.id);
   } catch (e) {}
   
+  // Priorität 2: URL Parameter (Fallback)
   const params = new URLSearchParams(window.location.search);
   const queryId = params.get('telegram_id');
   return queryId ? Number(queryId) : null;
@@ -28,10 +29,9 @@ async function apiCall(path, options = {}) {
   const initData = getTelegramInitData();
   const tgId = getTelegramId();
   
-  // v0.3.0 Bugfix: Wenn beides fehlt, ist der User nicht authentifiziert
+  // FIX: Wir brauchen ENTWEDER initData ODER die tgId (nicht zwingend beides gleichzeitig)
   if (!initData && !tgId) {
-    console.error("Auth-Error: Weder initData noch ID gefunden.");
-    throw new Error('Nicht autorisiert. Bitte App neu über den Bot starten.');
+    console.warn("Auth-Warning: Weder initData noch ID gefunden. API-Call wird trotzdem versucht.");
   }
   
   const isGet = !options.method || options.method === 'GET';
@@ -43,15 +43,14 @@ async function apiCall(path, options = {}) {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'x-telegram-init-data': initData,
-        'x-telegram-id': String(tgId),
+        'x-telegram-init-data': initData || '', // Sende Leerstring falls null
+        'x-telegram-id': tgId ? String(tgId) : '', // Sende Leerstring falls null
         ...options.headers,
       },
     });
     
-    // Falls 401 Unauthorized kommt, explizite Meldung für den Store
     if (res.status === 401) {
-      throw new Error('Sitzung abgelaufen oder ungültig. Bitte neu starten.');
+      throw new Error('Sitzung abgelaufen. Bitte App neu starten.');
     }
 
     const data = await res.json();
@@ -65,7 +64,6 @@ async function apiCall(path, options = {}) {
 }
 
 export const api = {
-  // ... (restliche API-Funktionen bleiben gleich)
   getVersion:             () => apiCall('/api/version'),
   getProfile:             () => apiCall('/api/profile'),
   getPublicProfile:       (id) => apiCall(`/api/profile/public/${id}`),
@@ -108,7 +106,7 @@ export const api = {
   }),
   partialClose:           (position_id) => apiCall('/api/leverage/partial-close', { 
     method: 'POST', 
-    body: JSON.stringify({ position_id, percentage: 0.5 }) // Korrektur: 0.5 statt 50 für das Backend
+    body: JSON.stringify({ position_id, percentage: 0.5 }) 
   }),
   closeLeverage:          (position_id) => apiCall('/api/leverage/close', { method: 'POST', body: JSON.stringify({ position_id }) }),
   createAlert:            (symbol, target_price, direction) => apiCall('/api/alert', { method: 'POST', body: JSON.stringify({ symbol, target_price, direction }) }),

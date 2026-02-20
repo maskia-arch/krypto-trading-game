@@ -1,11 +1,28 @@
+const fs = require('fs');
+const path = require('path');
 const { InlineKeyboard } = require('grammy');
 const { db } = require('../core/database');
 const { esc } = require('../core/utils');
 const { WEBAPP_URL } = require('../core/config');
 
+// Dynamische Versionsabfrage
+const getVersion = () => {
+  try {
+    // Sucht die version.txt zwei Ebenen höher (im Hauptverzeichnis)
+    const versionPath = path.join(__dirname, '../../version.txt');
+    if (fs.existsSync(versionPath)) {
+      return fs.readFileSync(versionPath, 'utf8').trim();
+    }
+  } catch (e) {
+    console.error("Fehler beim Lesen der version.txt:", e);
+  }
+  return '0.3.0'; // Fallback
+};
+
 const startCommand = async (ctx) => {
   const tgId = ctx.from.id;
   const payload = ctx.match;
+  const version = getVersion(); // Version hier abrufen
 
   try {
     let profile = await db.getProfile(tgId);
@@ -26,12 +43,14 @@ const startCommand = async (ctx) => {
         `Dein Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>`;
       
       if (profile.is_admin) {
-        welcomeBackText = `👑 <b>Admin-Zentrale</b>\n\nHallo Chef! Dein System läuft auf v0.3.0.\nDein Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE')}€</b>`;
+        // Hier wird nun die dynamische Variable 'version' genutzt
+        welcomeBackText = `👑 <b>Admin-Zentrale</b>\n\nHallo Chef! Dein System läuft auf v${version}.\nDein Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE')}€</b>`;
       }
 
       return ctx.reply(welcomeBackText, { parse_mode: 'HTML', reply_markup: kb });
     }
 
+    // ... (Rest der Registrierungslogik bleibt gleich)
     let promptText = `Willkommen bei <b>ValueTrade</b>! 📈\n\n` +
       `Bevor Onkel Heinrich dir dein Startkapital überweist, benötigst du einen <b>InGame-Namen</b>.\n\n` +
       `👉 <b>Antworte einfach auf diese Nachricht</b> mit deinem gewünschten Namen.\n` +
@@ -58,6 +77,7 @@ const startCommand = async (ctx) => {
   }
 };
 
+// ... (Rest der Datei startCommand.sendWelcomeMessage bleibt unverändert)
 startCommand.sendWelcomeMessage = async (ctx, profile) => {
   const tgId = ctx.from.id;
 

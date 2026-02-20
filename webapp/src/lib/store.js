@@ -38,6 +38,37 @@ const useStore = create((set, get) => ({
     return !!p.is_admin || isPro;
   },
 
+  // --- NEU: CHART LOGIK FIX ---
+  loadChart: async (symbol, range) => {
+    try {
+      // Wir setzen die Daten nicht auf leer, um Flackern zu vermeiden, 
+      // aber wir könnten ein lokales loading-Flag setzen falls gewünscht.
+      const data = await api.getChart(symbol || get().chartSymbol, range || get().chartRange);
+      if (data && data.data) {
+        set({ chartData: data.data });
+      }
+    } catch (e) {
+      console.error("Chart-Ladefehler:", e);
+      set({ chartData: [] }); // Fallback auf leeres Array bei Fehler
+    }
+  },
+
+  // --- NEU: LEADERBOARD LOGIK FIX ---
+  loadLeaderboard: async (filter) => {
+    try {
+      const data = await api.getLeaderboard(filter);
+      if (data) {
+        set({ 
+          leaderboard: data.leaders || [],
+          season: data.season || null,
+          feePool: Number(data.pool) || 0
+        });
+      }
+    } catch (e) {
+      console.error("Leaderboard-Ladefehler:", e);
+    }
+  },
+
   loadVersion: async () => {
     try {
       const data = await api.getVersion();
@@ -73,7 +104,7 @@ const useStore = create((set, get) => ({
       if (retryCount < 2) {
         setTimeout(() => get().fetchProfile(retryCount + 1), 1500);
       } else {
-        set({ error: "Dein Profil konnte nicht geladen werden.", loading: false });
+        set({ error: "Profil-Fehler", loading: false });
       }
     }
   },
@@ -92,85 +123,65 @@ const useStore = create((set, get) => ({
 
   fetchLeveragePositions: async () => {
     try {
-      const [posData, priceData] = await Promise.all([
-        api.getLeveragePositions(),
-        api.getPrices()
-      ]);
-
-      const priceMap = {};
-      (priceData.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
-
+      const posData = await api.getLeveragePositions();
       set({
         leveragePositions: Array.isArray(posData.positions) ? posData.positions : [],
-        leveragePolicy: posData.policy || get().leveragePolicy,
-        prices: priceMap 
+        leveragePolicy: posData.policy || get().leveragePolicy
       });
     } catch (e) {
       console.error("Leverage Fetch Error:", e);
     }
   },
 
-  // --- HANDELSAKTIONEN MIT SYNC-FIX ---
+  getAvailableMargin: () => {
+    const balance = Number(get().profile?.balance || 0);
+    // Verwendete Margin aller offenen Positionen abziehen
+    const usedMargin = get().leveragePositions.reduce((sum, pos) => sum + Number(pos.collateral || 0), 0);
+    return Math.max(0, balance - usedMargin);
+  },
+
+  buyCrypto: async (symbol, amount_eur) => {
+    const res = await api.buy(symbol, amount_eur);
+    await get().fetchProfile();
+    return res;
+  },
+
+  sellCrypto: async (symbol, amount_crypto) => {
+    const res = await api.sell(symbol, amount_crypto);
+    await get().fetchProfile();
+    return res;
+  },
 
   openLeveragePosition: async (symbol, direction, collateral, leverage, options = {}) => {
     try {
-      const { leveragePositions, leveragePolicy } = get();
-      const isPremium = get().isPremiumUser();
-      const maxPos = isPremium ? 3 : (leveragePolicy?.max_positions || 1);
-
-      if (leveragePositions.length >= maxPos) {
-        throw new Error(`Limit erreicht: Max ${maxPos} Positionen erlaubt.`);
-      }
-
-      const data = await api.openLeverage(symbol, direction, collateral, leverage, options);
-      
-      // Erst warten, dann UI updaten
-      await get().fetchProfile();
-      await get().fetchLeveragePositions();
-      
-      get().showToast("Position eröffnet!", "success");
-      return data;
+      const res = await api.openLeverage(symbol, direction, collateral, leverage, options);
+      await Promise.all([get().fetchProfile(), get().fetchLeveragePositions()]);
+      return res;
     } catch (err) {
-      get().showToast(err.message, "error");
       throw err;
     }
   },
 
   partialClosePosition: async (positionId) => {
     try {
-      const data = await api.partialClose(positionId);
-      
-      // Sequentielles Update für stabilen State
-      await get().fetchProfile();
-      await get().fetchLeveragePositions();
-      
-      get().showToast("Teilschließung erfolgreich", "success");
-      return data;
+      const res = await api.partialClose(positionId);
+      await Promise.all([get().fetchProfile(), get().fetchLeveragePositions()]);
+      return res;
     } catch (err) {
-      get().showToast(err.message, "error");
       throw err;
     }
   },
 
   closeLeveragePosition: async (positionId) => {
     try {
-      // 1. Auf API-Bestätigung warten
-      const data = await api.closeLeverage(positionId);
-      
-      // 2. State-Reset erzwingen: Wir setzen die Positionen kurz lokal leer, 
-      // falls das Backend langsam ist (Optimistic UI Update)
+      const res = await api.closeLeverage(positionId);
+      // Optimistic Update: Position sofort aus der Liste entfernen
       set(state => ({
         leveragePositions: state.leveragePositions.filter(p => p.id !== positionId)
       }));
-
-      // 3. Echten DB-Stand laden
-      await get().fetchProfile();
-      await get().fetchLeveragePositions();
-      
-      get().showToast("Position geschlossen", "success");
-      return data;
+      await Promise.all([get().fetchProfile(), get().fetchLeveragePositions()]);
+      return res;
     } catch (err) {
-      get().showToast(err.message, "error");
       throw err;
     }
   }
