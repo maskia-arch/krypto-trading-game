@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { VERSION } = require('../core/config');
 const { db } = require('../core/database');
-const { parseTelegramUser, getUserPermissions } = require('../auth');
+const { parseTelegramUser, getUserPermissions } = require('./auth');
 
 const tradingRoutes = require('./routes/trading');
 const profileRoutes = require('./routes/profile');
