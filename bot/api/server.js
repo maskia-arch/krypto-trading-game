@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { VERSION } = require('../core/config');
 const { db } = require('../core/database');
-const { parseTelegramUser, getUserPermissions } = require('../auth'); // Importiere die neue Logik
+const { parseTelegramUser, getUserPermissions } = require('../auth');
 
 const tradingRoutes = require('./routes/trading');
 const profileRoutes = require('./routes/profile');
@@ -30,27 +30,22 @@ function setupApi(bot) {
   app.use(cors());
   app.use(express.json({ limit: '5mb' }));
 
-  // Middleware 1: Bot verfügbar machen
   app.use((req, res, next) => {
     req.bot = bot;
     next();
   });
 
-  // Middleware 2: Zentrale Authentifizierung (v0.3.0 Fix)
-  // Diese Middleware stellt sicher, dass der proCache befüllt ist
   const authMiddleware = async (req, res, next) => {
-    // Öffentliche Pfade überspringen
     if (req.path === '/' || req.path === '/api/version' || req.path === '/api/stats/global') {
       return next();
     }
 
     try {
-      const tgId = await parseTelegramUser(req); // Hier wird auf die DB gewartet!
+      const tgId = await parseTelegramUser(req);
       if (!tgId) {
         return res.status(401).json({ error: 'Nicht autorisiert' });
       }
 
-      // Daten an req hängen, damit Routen nicht neu abfragen müssen
       req.tgId = tgId;
       req.permissions = getUserPermissions(tgId);
       
@@ -92,12 +87,10 @@ function setupApi(bot) {
     }
   });
 
-  // Ab hier greift die Auth-Middleware für alle folgenden API-Routen
   app.use('/api', authMiddleware);
 
   app.get('/api/referrals', async (req, res) => {
     try {
-      // Nutzt die ID aus der Middleware
       const { data, error } = await db.supabase
         .from('profiles')
         .select('username, first_name, avatar_url, created_at')
