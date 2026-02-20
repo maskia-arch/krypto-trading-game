@@ -1,7 +1,7 @@
 const { InlineKeyboard } = require('grammy');
 const { db } = require('../core/database');
 const { esc } = require('../core/utils');
-const { WEBAPP_URL, VERSION } = require('../core/config');
+const { WEBAPP_URL } = require('../core/config');
 
 const startCommand = async (ctx) => {
   const tgId = ctx.from.id;
@@ -15,12 +15,13 @@ const startCommand = async (ctx) => {
         .webApp('🎮 Trading starten', WEBAPP_URL)
         .row()
         .text('📊 Portfolio', 'portfolio')
-        .text('🏆 Rangliste', 'leaderboard');
+        .text('🏆 Rangliste', 'leaderboard')
+        .row()
+        .text('ℹ️ Info', 'show_info');
 
       return ctx.reply(
         `Willkommen zurück, <b>${esc(profile.username || profile.first_name)}</b>! 💰\n\n` +
-        `Dein Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>\n` +
-        `🎮 v${VERSION}`,
+        `Dein Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>`,
         { parse_mode: 'HTML', reply_markup: kb }
       );
     }

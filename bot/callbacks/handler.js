@@ -4,6 +4,7 @@ const handlePortfolio = require('../commands/portfolio');
 const { handleLeaderboard } = require('../commands/economy');
 const { esc } = require('../core/utils');
 const { InlineKeyboard } = require('grammy');
+const { WEBAPP_URL, VERSION } = require('../core/config');
 
 module.exports = async (ctx) => {
   const data = ctx.callbackQuery.data;
@@ -15,9 +16,40 @@ module.exports = async (ctx) => {
   }
 
   if (data === 'leaderboard' || data === 'refresh_leaderboard') {
-    // Bei refresh_leaderboard wird kein answerCallbackQuery benötigt, 
-    // da handleLeaderboard dies bereits intern verarbeitet.
     return handleLeaderboard(ctx);
+  }
+
+  if (data === 'show_info') {
+    await ctx.answerCallbackQuery();
+    const kb = new InlineKeyboard().text('🔙 Zurück', 'back_to_start');
+    
+    return ctx.editMessageText(
+      `ℹ️ <b>System-Informationen</b>\n\n` +
+      `🎮 <b>Spiel-Channel:</b> @ValueTradeGame\n` +
+      `👨‍💻 <b>System Architect:</b> @autoacts\n` +
+      `⚙️ <b>Version:</b> v${VERSION}`,
+      { parse_mode: 'HTML', reply_markup: kb }
+    );
+  }
+
+  if (data === 'back_to_start') {
+    await ctx.answerCallbackQuery();
+    const profile = await db.getProfile(ctx.from.id);
+    if (!profile) return;
+
+    const kb = new InlineKeyboard()
+      .webApp('🎮 Trading starten', WEBAPP_URL)
+      .row()
+      .text('📊 Portfolio', 'portfolio')
+      .text('🏆 Rangliste', 'leaderboard')
+      .row()
+      .text('ℹ️ Info', 'show_info');
+
+    return ctx.editMessageText(
+      `Willkommen zurück, <b>${esc(profile.username || profile.first_name)}</b>! 💰\n\n` +
+      `Dein Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>`,
+      { parse_mode: 'HTML', reply_markup: kb }
+    );
   }
 
   if (data === 'help') {
