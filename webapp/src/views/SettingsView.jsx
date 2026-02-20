@@ -3,7 +3,7 @@ import useStore from '../lib/store';
 import { api } from '../lib/api';
 
 export default function SettingsView() {
-  const { profile, fetchProfile, showToast, setTab } = useStore();
+  const { profile, fetchProfile, showToast, setTab, version } = useStore();
   const [newName, setNewName] = useState('');
   const [deleteStep, setDeleteStep] = useState(1);
   const [busy, setBusy] = useState(false);
@@ -16,11 +16,6 @@ export default function SettingsView() {
   const isValidChars = /^[a-zA-Z0-9]+$/.test(newName);
   const isValidName = isValidLength && isValidChars;
   const showValidationError = isTyping && !isValidName;
-
-  let inputBorderClass = "border-white/10";
-  if (isTyping) {
-    inputBorderClass = isValidName ? "border-[#4ade80]/50" : "border-[#f87171]/50";
-  }
 
   const handleUpdateName = async () => {
     if (!isValidName || !canChangeName) return;
@@ -49,116 +44,152 @@ export default function SettingsView() {
   };
 
   return (
-    <div className="space-y-4 tab-enter pb-6">
+    <div className="space-y-4 tab-enter pb-8 px-2 pt-2">
       
-      <section className="card p-4 flex items-center justify-between border-neon-blue/20 bg-neon-blue/5">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full border border-neon-blue/30 overflow-hidden bg-black/40 flex items-center justify-center shrink-0">
+      {/* Profile Link Card */}
+      <section className="card p-4 flex items-center justify-between border border-neon-blue/20 bg-gradient-to-br from-neon-blue/10 to-transparent backdrop-blur-md relative overflow-hidden group shadow-[0_4px_20px_rgba(59,130,246,0.05)] transition-all hover:border-neon-blue/40">
+        <div className="absolute -left-10 -top-10 w-32 h-32 bg-neon-blue/20 blur-[50px] pointer-events-none opacity-50 group-hover:opacity-80 transition-opacity"></div>
+        
+        <div className="flex items-center gap-4 relative z-10">
+          <div className="w-12 h-12 rounded-xl border border-neon-blue/30 overflow-hidden bg-black/60 flex items-center justify-center shrink-0 shadow-inner group-hover:scale-105 transition-transform">
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="Profil" className="w-full h-full object-cover" />
             ) : (
-              <span className="text-xl">👤</span>
+              <span className="text-xl opacity-80">👤</span>
             )}
           </div>
           <div>
-            <h3 className="text-sm font-bold text-white">Dein Profil</h3>
-            <p className="text-[10px] text-[var(--text-dim)]">Achievements & Avatar verwalten</p>
+            <h3 className="text-[14px] font-black text-white tracking-tight drop-shadow-sm">Dein Profil</h3>
+            <p className="text-[10px] text-neon-blue font-bold uppercase tracking-wider mt-0.5 opacity-80">Achievements & Avatar</p>
           </div>
         </div>
         <button 
           onClick={() => setTab('profile')}
-          className="bg-neon-blue/20 text-neon-blue border border-neon-blue/30 px-4 py-2 rounded-xl text-xs font-bold hover:bg-neon-blue/30 transition-all"
-        >
-          Ansehen
-        </button>
-      </section>
-
-      <section className="card p-4 flex items-center justify-between border-neon-gold/20 bg-neon-gold/5">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-full border border-neon-gold/30 overflow-hidden bg-black/40 flex items-center justify-center shrink-0">
-            <span className="text-xl">🤝</span>
-          </div>
-          <div>
-            <h3 className="text-sm font-bold text-neon-gold">Affiliate</h3>
-            <p className="text-[10px] text-[var(--text-dim)]">Freunde einladen & 500€ Bonus sichern</p>
-          </div>
-        </div>
-        <button 
-          onClick={() => setTab('affiliate')}
-          className="bg-neon-gold/20 text-neon-gold border border-neon-gold/30 px-4 py-2 rounded-xl text-xs font-bold hover:bg-neon-gold/30 transition-all"
+          className="relative z-10 bg-neon-blue/20 text-neon-blue border border-neon-blue/30 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-neon-blue/30 active:scale-95 transition-all shadow-[0_0_10px_rgba(59,130,246,0.15)]"
         >
           Öffnen
         </button>
       </section>
 
-      <section className="card p-4 space-y-3">
-        <h3 className="text-sm font-bold flex items-center gap-2">
-          👤 Namens-Einstellungen {isPro && <span className="text-[10px] bg-neon-gold/20 text-neon-gold px-2 py-0.5 rounded-full uppercase">Pro</span>}
-        </h3>
+      {/* Affiliate Link Card */}
+      <section className="card p-4 flex items-center justify-between border border-neon-gold/20 bg-gradient-to-br from-neon-gold/10 to-transparent backdrop-blur-md relative overflow-hidden group shadow-[0_4px_20px_rgba(251,191,36,0.05)] transition-all hover:border-neon-gold/40">
+        <div className="absolute -left-10 -top-10 w-32 h-32 bg-neon-gold/20 blur-[50px] pointer-events-none opacity-50 group-hover:opacity-80 transition-opacity"></div>
+        
+        <div className="flex items-center gap-4 relative z-10">
+          <div className="w-12 h-12 rounded-xl border border-neon-gold/30 overflow-hidden bg-black/60 flex items-center justify-center shrink-0 shadow-inner group-hover:scale-105 transition-transform">
+            <span className="text-2xl drop-shadow-md">🤝</span>
+          </div>
+          <div>
+            <h3 className="text-[14px] font-black text-neon-gold tracking-tight drop-shadow-sm">Affiliate</h3>
+            <p className="text-[10px] text-[var(--text-dim)] font-bold uppercase tracking-wider mt-0.5">500€ Bonus sichern</p>
+          </div>
+        </div>
+        <button 
+          onClick={() => setTab('affiliate')}
+          className="relative z-10 bg-neon-gold/20 text-neon-gold border border-neon-gold/30 px-4 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-neon-gold/30 active:scale-95 transition-all shadow-[0_0_10px_rgba(251,191,36,0.15)]"
+        >
+          Öffnen
+        </button>
+      </section>
+
+      {/* Name Settings */}
+      <section className="card p-5 border border-white/5 bg-gradient-to-br from-[#0a0c14] to-black/80 shadow-xl relative overflow-hidden">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="w-1.5 h-1.5 rounded-full bg-white animate-pulse shadow-[0_0_5px_rgba(255,255,255,0.8)]"></div>
+          <h3 className="text-[10px] uppercase tracking-[0.15em] font-black text-[var(--text-dim)] flex items-center gap-2">
+            Namens-Einstellungen 
+            {isPro && <span className="bg-neon-gold/10 border border-neon-gold/20 text-neon-gold px-1.5 py-0.5 rounded text-[8px] tracking-widest shadow-[0_0_8px_rgba(251,191,36,0.2)]">PRO</span>}
+          </h3>
+        </div>
         
         <div>
-          <label className="text-[10px] text-[var(--text-dim)] uppercase font-bold">Anzeigename ändern</label>
-          <div className="flex gap-2 mt-1">
-            <input 
-              type="text" 
-              value={newName} 
-              onChange={(e) => setNewName(e.target.value)}
-              placeholder={profile?.username || 'Neuer Name...'}
-              disabled={!canChangeName || busy}
-              className={`flex-1 bg-white/5 border ${inputBorderClass} outline-none transition-colors rounded-xl px-3 py-2 text-sm`}
-            />
+          <label className="text-[9px] text-[var(--text-dim)] uppercase font-bold tracking-wider ml-1">Anzeigename ändern</label>
+          <div className="flex gap-2 mt-1.5">
+            <div className={`flex-1 flex items-center bg-black/60 rounded-xl px-3 py-1.5 transition-all border ${
+              isTyping 
+                ? isValidName 
+                  ? 'border-neon-green/50 shadow-[0_0_10px_rgba(34,214,138,0.1)]' 
+                  : 'border-neon-red/50 shadow-[0_0_10px_rgba(244,63,94,0.1)]'
+                : 'border-white/10 focus-within:border-white/30'
+            }`}>
+              <input 
+                type="text" 
+                value={newName} 
+                onChange={(e) => setNewName(e.target.value)}
+                placeholder={profile?.username || 'Neuer Name...'}
+                disabled={!canChangeName || busy}
+                className="bg-transparent w-full outline-none text-white font-mono font-bold text-sm py-2 placeholder:text-white/20 disabled:opacity-50"
+              />
+            </div>
+            
             <button 
               onClick={handleUpdateName}
               disabled={!canChangeName || busy || !isValidName}
-              className="bg-white/10 text-white border border-white/20 px-4 rounded-xl text-xs font-bold disabled:opacity-30 disabled:grayscale transition-all"
+              className={`px-5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                isValidName && canChangeName
+                  ? 'bg-white/10 text-white border border-white/20 hover:bg-white/20 active:scale-95 shadow-md'
+                  : 'bg-white/5 text-white/30 border border-transparent cursor-not-allowed'
+              }`}
             >
-              Update
+              {busy ? '⏳' : 'Update'}
             </button>
           </div>
           
-          <p className={`text-[10px] mt-2 transition-colors ${showValidationError ? 'text-[#f87171]' : 'text-[var(--text-dim)]'}`}>
-            ✏️ Erlaubt: 4-16 Zeichen, nur Buchstaben (a-z, A-Z) und Zahlen (0-9).
-          </p>
+          <div className="mt-3 space-y-2">
+            <p className={`text-[9px] font-bold uppercase tracking-wider transition-colors ${showValidationError ? 'text-neon-red drop-shadow-[0_0_5px_rgba(244,63,94,0.4)]' : 'text-[var(--text-dim)]'}`}>
+              ✏️ 4-16 Zeichen, nur Buchstaben & Zahlen.
+            </p>
 
-          <p className="text-[9px] mt-1.5 opacity-60">
-            {isPro 
-              ? '✨ Als Pro-User / Admin kannst du deinen Namen unbegrenzt oft ändern.' 
-              : 'ℹ️ In der Standard-Version ist nur eine Namensänderung möglich.'}
-          </p>
+            <div className="bg-white/[0.02] border border-white/5 p-2 rounded-lg inline-block">
+              <p className="text-[9px] font-medium text-white/60 leading-relaxed">
+                {isPro 
+                  ? '✨ Als Pro-User kannst du deinen Namen unbegrenzt oft ändern.' 
+                  : 'ℹ️ In der Standard-Version ist nur eine Namensänderung möglich.'}
+              </p>
+            </div>
+          </div>
         </div>
       </section>
 
-      <section className="card p-4 border-neon-red/20 bg-neon-red/5">
-        <h3 className="text-sm font-bold text-neon-red">Gefahrenzone</h3>
-        <p className="text-[11px] text-[var(--text-dim)] mt-1">
-          Nach der Löschung werden alle deine Assets, Immobilien und Transaktionen unwiderruflich entfernt.
-        </p>
+      {/* Danger Zone */}
+      <section className="card p-5 border border-neon-red/20 bg-gradient-to-br from-[#0a0c14] to-neon-red/5 relative overflow-hidden shadow-lg">
+        <div className="absolute right-0 top-0 bottom-0 w-32 bg-neon-red/5 blur-2xl pointer-events-none"></div>
+        
+        <div className="relative z-10">
+          <h3 className="text-[12px] font-black text-neon-red uppercase tracking-widest drop-shadow-[0_0_5px_rgba(244,63,94,0.5)]">Gefahrenzone</h3>
+          <p className="text-[10px] text-white/60 mt-1.5 leading-relaxed font-medium">
+            Nach der Löschung werden alle deine Assets, Immobilien und Transaktionen unwiderruflich entfernt.
+          </p>
 
-        {deleteStep === 1 ? (
-          <button 
-            onClick={requestDeletion}
-            disabled={busy}
-            className="w-full mt-3 py-2.5 rounded-xl border border-neon-red/30 text-neon-red text-xs font-bold bg-neon-red/10"
-          >
-            Account Löschung beantragen
-          </button>
-        ) : (
-          <div className="mt-3 p-3 bg-black/40 rounded-xl border border-neon-red/50">
-            <p className="text-[11px] font-bold text-white text-center">
-              Bestätigung erforderlich!
-            </p>
-            <p className="text-[10px] text-center mt-1 text-[var(--text-dim)]">
-              Sende folgende Nachricht an den Bot:
-            </p>
-            <div className="bg-white/5 p-2 rounded mt-2 font-mono text-center text-xs select-all border border-dashed border-white/20">
-              Delete ({profile?.telegram_id})
+          {deleteStep === 1 ? (
+            <button 
+              onClick={requestDeletion}
+              disabled={busy}
+              className="w-full mt-4 py-3.5 rounded-xl border border-neon-red/30 text-neon-red text-[10px] font-black uppercase tracking-widest bg-neon-red/10 hover:bg-neon-red/20 active:scale-95 transition-all shadow-[0_0_15px_rgba(244,63,94,0.1)]"
+            >
+              Account Löschung beantragen
+            </button>
+          ) : (
+            <div className="mt-4 p-4 bg-black/60 rounded-xl border border-neon-red/50 shadow-inner backdrop-blur-sm">
+              <p className="text-[11px] font-black uppercase tracking-widest text-white text-center text-neon-red drop-shadow-sm">
+                Bestätigung erforderlich!
+              </p>
+              <p className="text-[10px] text-center mt-1.5 text-white/70 font-medium">
+                Sende folgende Nachricht an den Bot:
+              </p>
+              <div className="bg-neon-red/10 p-3 rounded-lg mt-3 font-mono text-center text-xs select-all border border-dashed border-neon-red/30 text-white font-bold">
+                Delete ({profile?.telegram_id})
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </section>
 
-      <div className="text-center opacity-30 text-[10px] pt-4">
-        ValueTrade Game v{profile?.version || '1.0'} • ID: {profile?.telegram_id}
+      {/* Footer Info */}
+      <div className="text-center pt-2 pb-4">
+        <p className="opacity-30 text-[9px] font-mono font-bold uppercase tracking-widest text-white">
+          ValueTrade Engine v{version || profile?.version || '0.2.7'} • ID: {profile?.telegram_id}
+        </p>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState } from 'react';
 import useStore from './lib/store';
 import { api } from './lib/api';
 
@@ -6,7 +6,6 @@ import Header from './components/layout/Header';
 import Navbar from './components/layout/Navbar';
 import PriceTicker from './components/layout/PriceTicker';
 
-import ChartView from './views/ChartView';
 import WalletView from './views/WalletView';
 import AssetsView from './views/AssetsView';
 import RankView from './views/RankView';
@@ -15,7 +14,6 @@ import ProfileView from './views/ProfileView';
 import AffiliateView from './views/AffiliateView';
 
 const TABS = [
-  { id: 'chart', label: 'Chart',  icon: '📊' },
   { id: 'wallet', label: 'Wallet', icon: '💳' },
   { id: 'assets', label: 'Assets', icon: '💎' },
   { id: 'rank',  label: 'Rang',   icon: '🏆' },
@@ -36,6 +34,16 @@ export default function App() {
   
   const [authChecking, setAuthChecking] = useState(true);
   const [initError, setInitError] = useState(null);
+
+  // Ziehe die "letzte bekannte Version" aus dem lokalen Speicher (oder zeige '...' beim allerersten Start)
+  const lastKnownVersion = localStorage.getItem('vt_last_version') || '...';
+
+  // Speichere die Version lokal ab, sobald wir sie vom Server bekommen haben
+  useEffect(() => {
+    if (version) {
+      localStorage.setItem('vt_last_version', version);
+    }
+  }, [version]);
 
   // 1. Initialisierung: Version & Profil laden
   useEffect(() => {
@@ -96,9 +104,11 @@ export default function App() {
     return () => clearTimeout(timer);
   }, [profile, loading]);
 
-  // Navigation Fix
+  // Navigation Fix: Leite alte "chart" oder "trade" Zustände sicher auf die neue Startseite "wallet" um
   useEffect(() => {
-    if (tab === 'trade') setTab('wallet');
+    if (tab === 'trade' || tab === 'chart') {
+      setTab('wallet');
+    }
   }, [tab, setTab]);
 
   // Lade-Screen (Während der allererste Check läuft)
@@ -112,7 +122,7 @@ export default function App() {
         <div className="text-center">
           <h1 className="text-xl font-bold tracking-widest animate-pulse">ValueTrade</h1>
           <p className="text-[10px] font-mono text-[var(--text-dim)] mt-1 uppercase tracking-tighter">
-            Verbinde mit Engine {version || '0.2.2'}...
+            Verbinde mit Engine v{version || lastKnownVersion}...
           </p>
         </div>
       </div>
@@ -157,7 +167,6 @@ export default function App() {
 
       <main className="flex-1 view-container overflow-y-auto">
         <div className="px-4 pt-4 pb-20">
-          {tab === 'chart' && <ChartView />}
           {tab === 'wallet' && <WalletView />}
           {tab === 'assets' && <AssetsView />}
           {tab === 'rank' && <RankView />}
