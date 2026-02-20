@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import useStore from '../../lib/store';
+import useStore from '../lib/store';
 
 const RANGES = [
   { key: '1m',  label: 'LIVE' },
