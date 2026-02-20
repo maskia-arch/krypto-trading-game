@@ -14,21 +14,36 @@ export default function LiveChart30m() {
 
   // Effekt zum Laden der Chart-Daten basierend auf Symbol UND Zeitraum
   useEffect(() => {
+    // Wenn kein Symbol da ist, breche ab (sollte nie passieren, aber sicher ist sicher)
+    if (!chartSymbol) return;
+    
     loadChart(chartSymbol, timeRange);
     const interval = setInterval(() => loadChart(chartSymbol, timeRange), 45000);
     return () => clearInterval(interval);
   }, [chartSymbol, timeRange, loadChart]);
 
+  // Sicherstellen, dass activeCoin und currentPrice immer gültige Werte haben
   const activeCoin = coins.find(c => c.id === chartSymbol) || coins[0];
-  const currentPrice = prices[chartSymbol] || 0;
+  const currentPrice = prices?.[chartSymbol] || 0;
 
   const chartInfo = useMemo(() => {
-    if (!chartData || chartData.length === 0) return { points: '', fillPoints: '', min: 0, max: 0, lastX: 0, lastY: 0 };
+    // SICHERHEITS-CHECK: Ist chartData wirklich ein Array?
+    const safeChartData = Array.isArray(chartData) ? chartData : [];
+
+    if (safeChartData.length < 2) {
+      return { points: '', fillPoints: '', min: 0, max: 0, lastX: 0, lastY: 0 };
+    }
     
-    const chartPrices = chartData.map(d => Number(d.price_eur));
+    // Wir filtern NaN/null Preise raus, um SVG-Render-Fehler zu vermeiden
+    const validData = safeChartData.filter(d => !isNaN(Number(d.price_eur)));
+    if (validData.length < 2) {
+       return { points: '', fillPoints: '', min: 0, max: 0, lastX: 0, lastY: 0 };
+    }
+
+    const chartPrices = validData.map(d => Number(d.price_eur));
     const min = Math.min(...chartPrices);
     const max = Math.max(...chartPrices);
-    const range = max - min || 1;
+    const range = (max - min) || 1; // || 1 verhindert Division durch 0, wenn flatline
     
     let lastX = 0;
     let lastY = 0;
@@ -96,8 +111,9 @@ export default function LiveChart30m() {
           <div className="w-full border-t border-dashed border-white/20"></div>
         </div>
 
-        {(!chartData || chartData.length < 2) ? (
-          <div className="absolute inset-0 flex items-center justify-center">
+        {/* Sicherer Array-Längen-Check für Ladeanimation */}
+        {(!Array.isArray(chartData) || chartData.length < 2) ? (
+          <div className="absolute inset-0 flex items-center justify-center flex-col gap-2">
             <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${activeCoin.color}80`, borderTopColor: 'transparent' }}></div>
           </div>
         ) : (

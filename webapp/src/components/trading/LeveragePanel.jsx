@@ -8,6 +8,16 @@ const COINS = {
   LTC: { name: 'Litecoin', emoji: 'Ł', color: '#bfbbbb', bg: 'rgba(191,187,187,0.1)', border: 'rgba(191,187,187,0.2)' },
 };
 
+// InfoBtn außerhalb der Hauptkomponente definiert (verhindert Re-Renders und Memory Leaks)
+const InfoBtn = ({ type, setInfoType }) => (
+  <button 
+    onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInfoType(type); }}
+    className="w-4 h-4 rounded-full bg-white/10 text-[10px] flex items-center justify-center hover:bg-white/20 transition-colors ml-1"
+  >
+    ?
+  </button>
+);
+
 export default function LeveragePanel() {
   const { 
     profile, chartSymbol, setChartSymbol, prices, openLeveragePosition, 
@@ -18,7 +28,6 @@ export default function LeveragePanel() {
   const [collateral, setCollateral] = useState('');
   const [leverage, setLeverage] = useState(2);
   const [loadingDir, setLoadingDir] = useState(null);
-  const [direction, setDirection] = useState('LONG');
 
   // Pro-Features States
   const [showProSettings, setShowProSettings] = useState(false);
@@ -37,7 +46,8 @@ export default function LeveragePanel() {
     fetchLeveragePositions();
   }, [fetchLeveragePositions]);
 
-  if (!leveragePolicy) {
+  // Fallback, solange die Policy oder das Profil noch laden
+  if (!leveragePolicy || !profile) {
     return (
       <div className="flex justify-center p-8">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue"></div>
@@ -45,23 +55,25 @@ export default function LeveragePanel() {
     );
   }
 
-  const coin = chartSymbol;
-  const currentPrice = prices[coin] || 0;
-  const maxLev = leveragePolicy?.max_leverage || 5;
-  const maxPos = isPremium ? 3 : (leveragePolicy?.max_positions || 1);
+  // Sicherheits-Fallbacks für alle Variablen
+  const coin = chartSymbol || 'BTC';
+  const currentPrice = prices?.[coin] || 0;
+  
+  // Akzeptiert sowohl snake_case als auch camelCase vom Backend
+  const maxLev = leveragePolicy?.max_leverage || leveragePolicy?.maxLeverage || 5;
+  const maxPos = isPremium ? 3 : (leveragePolicy?.max_positions || leveragePolicy?.maxPositions || 1);
   const currentOpen = leveragePositions?.length || 0;
-  const availableMargin = getAvailableMargin();
+  
+  // Stellt sicher, dass margin immer eine Zahl ist, um NaN-Fehler beim .toLocaleString zu vermeiden
+  const availableMargin = Number(getAvailableMargin()) || 0;
 
   const collatNum = Number(collateral) || 0;
   const notional = collatNum * leverage;
   const fee = notional * 0.005;
   const totalCost = collatNum + fee;
 
-  const liqLong = currentPrice * (1 - (1 / leverage) * 0.9);
-  const liqShort = currentPrice * (1 + (1 / leverage) * 0.9);
-
   const canOpen = currentOpen < maxPos;
-  const hasMargin = collatNum <= availableMargin && totalCost <= Number(profile?.balance) && collatNum > 0;
+  const hasMargin = collatNum <= availableMargin && totalCost <= Number(profile?.balance || 0) && collatNum > 0;
 
   const handleOpen = async (dir) => {
     if (!canOpen) return showToast(`Limit erreicht: Max ${maxPos} Position(en)`, 'error');
@@ -69,9 +81,9 @@ export default function LeveragePanel() {
     setLoadingDir(dir);
     try {
       const options = {
-        stop_loss: isPremium ? stopLoss : null,
-        take_profit: isPremium ? takeProfit : null,
-        limit_price: isPremium ? limitPrice : null,
+        stop_loss: isPremium && stopLoss ? Number(stopLoss) : null,
+        take_profit: isPremium && takeProfit ? Number(takeProfit) : null,
+        limit_price: isPremium && limitPrice ? Number(limitPrice) : null,
         trailing_stop: isPremium ? trailingStop : false
       };
 
@@ -87,15 +99,6 @@ export default function LeveragePanel() {
       setLoadingDir(null);
     }
   };
-
-  const InfoBtn = ({ type }) => (
-    <button 
-      onClick={(e) => { e.stopPropagation(); setInfoType(type); }}
-      className="w-4 h-4 rounded-full bg-white/10 text-[10px] flex items-center justify-center hover:bg-white/20 transition-colors"
-    >
-      ?
-    </button>
-  );
 
   return (
     <div className="space-y-4 tab-enter">
@@ -134,7 +137,7 @@ export default function LeveragePanel() {
           <div className="flex gap-1.5">
             {[2, 3, 5, 10].map(mult => (
               <button key={mult} disabled={mult > maxLev} onClick={() => setLeverage(mult)}
-                className={`flex-1 py-2.5 rounded-lg text-xs font-black border transition-all ${leverage === mult ? 'bg-neon-blue/20 text-neon-blue border-neon-blue/40' : 'bg-black/40 text-[var(--text-dim)] border-white/5'}`}>
+                className={`flex-1 py-2.5 rounded-lg text-xs font-black border transition-all ${leverage === mult ? 'bg-neon-blue/20 text-neon-blue border-neon-blue/40' : 'bg-black/40 text-[var(--text-dim)] border-white/5 opacity-50'}`}>
                 {mult}x {mult > maxLev && '🔒'}
               </button>
             ))}
@@ -158,13 +161,13 @@ export default function LeveragePanel() {
             <div className="space-y-3 p-2 mt-2 bg-black/20 rounded-xl border border-white/5 tab-enter">
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-[9px] font-black uppercase text-white/40 flex items-center gap-1">Stop Loss <InfoBtn type="stop_loss"/></label>
+                  <label className="text-[9px] font-black uppercase text-white/40 flex items-center">Stop Loss <InfoBtn type="stop_loss" setInfoType={setInfoType}/></label>
                 </div>
                 <input type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="Preis eingeben..." className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-neon-red/50" />
               </div>
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-[9px] font-black uppercase text-white/40 flex items-center gap-1">Take Profit <InfoBtn type="take_profit"/></label>
+                  <label className="text-[9px] font-black uppercase text-white/40 flex items-center">Take Profit <InfoBtn type="take_profit" setInfoType={setInfoType}/></label>
                 </div>
                 <input type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="Preis eingeben..." className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-neon-green/50" />
               </div>
@@ -189,13 +192,13 @@ export default function LeveragePanel() {
             <div className="space-y-3 p-2 mt-2 bg-black/20 rounded-xl border border-white/5 tab-enter">
               <div className="flex flex-col gap-2">
                 <div className="flex items-center justify-between">
-                  <label className="text-[9px] font-black uppercase text-white/40 flex items-center gap-1">Limit Order <InfoBtn type="limit_order"/></label>
+                  <label className="text-[9px] font-black uppercase text-white/40 flex items-center">Limit Order <InfoBtn type="limit_order" setInfoType={setInfoType}/></label>
                 </div>
                 <input type="number" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} placeholder="Einstiegspreis..." className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-neon-blue/50" />
               </div>
               <div className="flex items-center justify-between p-2 bg-black/40 rounded-lg border border-white/10">
-                <div className="flex flex-col">
-                  <span className="text-[9px] font-black uppercase text-white/40 flex items-center gap-1">Trailing Stop <InfoBtn type="trailing_stop"/></span>
+                <div className="flex items-center">
+                  <span className="text-[9px] font-black uppercase text-white/40 flex items-center">Trailing Stop <InfoBtn type="trailing_stop" setInfoType={setInfoType}/></span>
                 </div>
                 <button onClick={() => setTrailingStop(!trailingStop)} className={`w-10 h-5 rounded-full relative transition-all ${trailingStop ? 'bg-neon-blue' : 'bg-white/10'}`}>
                   <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${trailingStop ? 'left-6' : 'left-1'}`} />
@@ -224,12 +227,14 @@ export default function LeveragePanel() {
         )}
       </div>
 
-      {/* Info Modal Integration */}
-      <TradeInfoModal 
-        type={infoType} 
-        isOpen={!!infoType} 
-        onClose={() => setInfoType(null)} 
-      />
+      {/* Info Modal Integration - Safeguarded */}
+      {infoType && (
+        <TradeInfoModal 
+          type={infoType} 
+          isOpen={!!infoType} 
+          onClose={() => setInfoType(null)} 
+        />
+      )}
     </div>
   );
 }

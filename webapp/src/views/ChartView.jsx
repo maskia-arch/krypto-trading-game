@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
 } from 'recharts';
-import useStore from '../lib/store';
+import useStore from '../../lib/store';
 
 const RANGES = [
   { key: '1m',  label: 'LIVE' },
@@ -52,32 +52,36 @@ export default function ChartView() {
   const now = Date.now();
   const oneHourAgo = now - (60 * 60 * 1000);
 
-  let data = chartData.map(d => {
-    const date = new Date(d.recorded_at);
+  // --- SICHERHEITS-PANZERUNG ---
+  // Stellt sicher, dass chartData immer ein Array ist, auch wenn das Backend 'null' sendet
+  const safeChartData = Array.isArray(chartData) ? chartData : [];
+
+  let mappedData = safeChartData.map(d => {
+    const date = new Date(d.recorded_at || Date.now());
     return {
       time: date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
       fullTime: date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-      price: Number(d.price_eur),
+      price: Number(d.price_eur) || 0,
       ts: date.getTime(),
     };
   });
 
   if (chartRange === '1m') {
-    data = data.filter(d => d.ts >= oneHourAgo);
+    mappedData = mappedData.filter(d => d.ts >= oneHourAgo);
   }
 
-  const priceVals = data.map(d => d.price);
+  const priceVals = mappedData.map(d => d.price).filter(p => p > 0);
   const minP = priceVals.length ? Math.min(...priceVals) : 0;
   const maxP = priceVals.length ? Math.max(...priceVals) : 100;
   const pad = (maxP - minP) * 0.05 || 1;
 
-  const first = data.length ? data[0].price : 0;
-  const last = data.length ? data[data.length - 1].price : 0;
+  const first = mappedData.length ? mappedData[0].price : 0;
+  const last = mappedData.length ? mappedData[mappedData.length - 1].price : 0;
   const change = first > 0 ? ((last - first) / first) * 100 : 0;
   const isUp = change >= 0;
 
   const theme = COIN_THEME[chartSymbol] || COIN_THEME.BTC;
-  const livePrice = prices[chartSymbol] || last;
+  const livePrice = prices?.[chartSymbol] || last || 0;
 
   return (
     <div className="space-y-3 tab-enter">
@@ -139,14 +143,14 @@ export default function ChartView() {
           <div className="w-full border-t border-dashed border-white/30"></div>
         </div>
 
-        {loading && data.length === 0 ? (
+        {loading && mappedData.length === 0 ? (
           <div className="flex items-center justify-center h-60">
             <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${theme.stroke}40`, borderTopColor: 'transparent' }}></div>
           </div>
-        ) : data.length > 0 ? (
+        ) : mappedData.length > 0 ? (
           <div style={{ position: 'relative' }}>
             <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={data} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+              <AreaChart data={mappedData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
                 <defs>
                   <linearGradient id={`grad-${chartSymbol}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={theme.gradStart} />
@@ -196,13 +200,13 @@ export default function ChartView() {
         ) : (
           <div className="flex flex-col items-center justify-center h-60 gap-3 opacity-50">
             <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${theme.stroke}40`, borderTopColor: 'transparent' }}></div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Lade Marktdaten...</p>
+            <p className="text-[10px] font-black uppercase tracking-widest text-[var(--text-dim)]">Warte auf Marktdaten...</p>
           </div>
         )}
       </div>
 
       {/* Stats-Grid (Tief, Hoch, Vola) */}
-      {data.length > 0 && (
+      {mappedData.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {[
             { label: 'Tief', value: `${minP.toLocaleString('de-DE', { maximumFractionDigits: 2 })}€`, color: 'text-neon-red' },
