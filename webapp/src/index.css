@@ -21,15 +21,37 @@
   --text-dim: #4b5c72;
 }
 
-* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+/* Scroll-Fix für Mobile WebApps */
+* { 
+  margin: 0; 
+  padding: 0; 
+  box-sizing: border-box; 
+  -webkit-tap-highlight-color: transparent; 
+}
+
+html, body {
+  height: 100%;
+  width: 100%;
+  /* Verhindert das "Gummiband" Ziehen des gesamten Viewports */
+  overflow: hidden; 
+  position: fixed;
+}
 
 body {
   font-family: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--bg-deep);
   color: var(--text-primary);
-  min-height: 100vh;
-  overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Der eigentliche Scroll-Container für deine Views */
+.view-container {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  /* Flüssiges Scrollen auf iOS */
+  -webkit-overflow-scrolling: touch; 
+  padding-bottom: max(5rem, env(safe-area-inset-bottom));
 }
 
 body::before {
@@ -81,12 +103,13 @@ body::before {
 .tick-up { animation: tickUp 0.5s ease-out; }
 .tick-down { animation: tickDown 0.5s ease-out; }
 
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 @keyframes pulse-slow {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
-}
-.animate-pulse-slow {
-  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 .tab-enter { animation: tabSlide 0.22s ease-out; }

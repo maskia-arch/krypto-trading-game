@@ -3,7 +3,7 @@ import { api } from './api';
 
 const useStore = create((set, get) => ({
   appName: 'ValueTradeGame',
-  version: '0.1',
+  version: null, // Startet leer, um hartcodierte Werte zu vermeiden
   profile: null,
   assets: [],
   prices: {},
@@ -31,13 +31,16 @@ const useStore = create((set, get) => ({
     setTimeout(() => set({ toast: null }), 3000);
   },
 
+  // Lädt die Version direkt aus der version.txt via Backend
   loadVersion: async () => {
     try {
       const data = await api.getVersion();
       if (data && data.version) {
         set({ version: data.version });
       }
-    } catch (e) {}
+    } catch (e) {
+      console.error("Versions-Fehler:", e);
+    }
   },
 
   fetchProfile: async () => {
@@ -49,13 +52,15 @@ const useStore = create((set, get) => ({
       
       const data = await api.getProfile();
       const priceMap = {};
-      (data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
+      (data.prices || []).forEach(p => { 
+        priceMap[p.symbol] = Number(p.price_eur); 
+      });
       
       set({
         profile: { ...data.profile, collectibles: data.collectibles || [] },
         assets: data.assets || [],
         prices: priceMap,
-        prevPrices: priceMap,
+        prevPrices: get().prices[Object.keys(priceMap)[0]] ? get().prices : priceMap,
         achievements: data.achievements || [],
         loading: false,
       });
@@ -86,7 +91,9 @@ const useStore = create((set, get) => ({
       const old = { ...get().prices };
       const data = await api.getPrices();
       const priceMap = {};
-      (data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
+      (data.prices || []).forEach(p => { 
+        priceMap[p.symbol] = Number(p.price_eur); 
+      });
       set({ prices: priceMap, prevPrices: old });
     } catch (e) {}
   },
@@ -97,7 +104,6 @@ const useStore = create((set, get) => ({
     
     try {
       const data = await api.getChart(s, r);
-      
       if (data && data.data) {
         set({ 
           chartData: data.data, 
@@ -151,15 +157,20 @@ const useStore = create((set, get) => ({
 
   openLeveragePosition: async (symbol, direction, collateral, leverage) => {
     const data = await api.openLeverage(symbol, direction, collateral, leverage);
-    await get().fetchProfile();
-    await get().fetchLeveragePositions();
+    // Beides parallel aktualisieren für sofortiges Feedback
+    await Promise.all([
+      get().fetchProfile(),
+      get().fetchLeveragePositions()
+    ]);
     return data;
   },
 
   closeLeveragePosition: async (positionId) => {
     const data = await api.closeLeverage(positionId);
-    await get().fetchProfile();
-    await get().fetchLeveragePositions();
+    await Promise.all([
+      get().fetchProfile(),
+      get().fetchLeveragePositions()
+    ]);
     return data;
   }
 }));

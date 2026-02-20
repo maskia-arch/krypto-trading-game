@@ -69,6 +69,8 @@ export default function App() {
       if (!tg) return;
 
       tg.ready();
+      tg.expand(); // Sorgt dafür, dass die App den ganzen Screen nutzt
+      
       const startParam = tg.initDataUnsafe?.start_param;
 
       if (startParam === 'claim_bonus') {
@@ -95,7 +97,7 @@ export default function App() {
 
   if (hasAuthError) {
     return (
-      <div className="min-h-screen bg-[#06080f] flex flex-col items-center justify-center text-white px-6 text-center pb-safe">
+      <div className="flex h-screen items-center justify-center text-white px-6 text-center bg-[#06080f]">
         <p className="text-sm text-[var(--text-dim)]">
           {timeoutError || "Bitte nutze den Telegram Bot, um dich in deinem Spielprofil anzumelden."}
         </p>
@@ -105,25 +107,19 @@ export default function App() {
 
   if (loading && !profile) {
     return (
-      <div className="min-h-screen bg-[#06080f] flex flex-col items-center justify-center text-white pb-safe space-y-2">
-        <h1 className="text-2xl font-bold tracking-widest">
-          ValueTradeGame
-        </h1>
-        <p className="text-sm font-mono text-[var(--text-dim)]">
-          V{version || '0.1'}
-        </p>
-        <p className="text-xs text-[var(--text-dim)] mt-4 animate-pulse">
-          Das Spiel wird geladen...
-        </p>
+      <div className="flex h-screen flex-col items-center justify-center text-white bg-[#06080f] space-y-2">
+        <h1 className="text-2xl font-bold tracking-widest">ValueTradeGame</h1>
+        <p className="text-sm font-mono text-[var(--text-dim)]">V{version || '0.2'}</p>
+        <div className="w-8 h-8 border-2 border-neon-blue border-t-transparent rounded-full animate-spin mt-4"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen text-white pb-24 select-none">
-      <header className="sticky top-0 z-50 backdrop-blur-xl border-b border-white/[0.05] bg-[#06080f]/80">
+    <div className="flex flex-col h-screen overflow-hidden bg-[#06080f]">
+      {/* Feststehender Header */}
+      <header className="flex-none z-50 backdrop-blur-xl border-b border-white/[0.05] bg-[#06080f]/80">
         <Header />
-        
         <div className="flex overflow-x-auto no-scrollbar py-2 border-t border-white/[0.03]">
           {Object.keys(COIN_META).map(sym => (
             <PriceTicker 
@@ -136,17 +132,23 @@ export default function App() {
         </div>
       </header>
 
-      <main className="px-4 pt-4 tab-enter">
-        {tab === 'chart' && <ChartView />}
-        {tab === 'wallet' && <WalletView />}
-        {tab === 'assets' && <AssetsView />}
-        {tab === 'rank' && <RankView />}
-        {tab === 'settings' && <SettingsView />}
-        {tab === 'profile' && <ProfileView />}
-        {tab === 'affiliate' && <AffiliateView />}
+      {/* Scrollbarer Inhaltsbereich */}
+      <main className="flex-1 view-container">
+        <div className="px-4 pt-4">
+          {tab === 'chart' && <ChartView />}
+          {tab === 'wallet' && <WalletView />}
+          {tab === 'assets' && <AssetsView />}
+          {tab === 'rank' && <RankView />}
+          {tab === 'settings' && <SettingsView />}
+          {tab === 'profile' && <ProfileView />}
+          {tab === 'affiliate' && <AffiliateView />}
+        </div>
       </main>
 
-      <Navbar tabs={TABS} currentTab={tab} onTabChange={setTab} />
+      {/* Feststehende Navbar */}
+      <div className="flex-none">
+        <Navbar tabs={TABS} currentTab={tab} onTabChange={setTab} />
+      </div>
     </div>
   );
 }
