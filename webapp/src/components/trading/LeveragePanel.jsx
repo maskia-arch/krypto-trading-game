@@ -1,18 +1,31 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import useStore from '../../lib/store';
 
 export default function LeveragePanel() {
   const { 
     profile, chartSymbol, prices, openLeveragePosition, 
-    showToast, leveragePolicy, leveragePositions, getAvailableMargin 
+    showToast, leveragePolicy, leveragePositions, getAvailableMargin,
+    fetchLeveragePositions
   } = useStore();
   
   const [collateral, setCollateral] = useState('');
   const [leverage, setLeverage] = useState(2);
   const [loadingDir, setLoadingDir] = useState(null);
+  const [direction, setDirection] = useState('LONG');
+
+  useEffect(() => {
+    fetchLeveragePositions();
+  }, [fetchLeveragePositions]);
+
+  if (!leveragePolicy) {
+    return (
+      <div className="flex justify-center p-8">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon-blue"></div>
+      </div>
+    );
+  }
 
   const currentPrice = prices[chartSymbol] || 0;
-  
   const maxLev = leveragePolicy?.max_leverage || 5;
   const maxPos = leveragePolicy?.max_positions || 1;
   const currentOpen = leveragePositions?.length || 0;
@@ -29,20 +42,27 @@ export default function LeveragePanel() {
   const canOpen = currentOpen < maxPos;
   const hasMargin = availableMargin >= totalCost && collatNum > 0;
 
-  const handleOpen = async (direction) => {
-    if (collatNum > availableMargin) return showToast(`Margin-Limit überschritten! Verfügbar: ${availableMargin.toFixed(2)}€`, 'error');
-    if (totalCost > Number(profile?.balance)) return showToast('Nicht genug Cash für Gebühren', 'error');
-    if (!canOpen) return showToast(`Limit erreicht: Max ${maxPos} Position(en)`, 'error');
+  const handleOpen = async (dir) => {
+    if (collatNum > availableMargin) {
+      return showToast(`Margin-Limit überschritten! Verfügbar: ${availableMargin.toFixed(2)}€`, 'error');
+    }
+    if (totalCost > Number(profile?.balance)) {
+      return showToast('Nicht genug Cash für Gebühren', 'error');
+    }
+    if (!canOpen) {
+      return showToast(`Limit erreicht: Max ${maxPos} Position(en)`, 'error');
+    }
 
-    setLoadingDir(direction);
+    setLoadingDir(dir);
     try {
-      await openLeveragePosition(chartSymbol, direction, collatNum, leverage);
-      showToast(`⚡ ${leverage}x ${direction} auf ${chartSymbol} geöffnet!`);
+      await openLeveragePosition(chartSymbol, dir, collatNum, leverage);
+      showToast(`⚡ ${leverage}x ${dir} auf ${chartSymbol} geöffnet!`);
       setCollateral('');
     } catch (err) {
       showToast(`❌ ${err.message || 'Fehler'}`, 'error');
+    } finally {
+      setLoadingDir(null);
     }
-    setLoadingDir(null);
   };
 
   const setPercent = (pct) => {
@@ -54,7 +74,6 @@ export default function LeveragePanel() {
 
   return (
     <div className="card p-4 border border-white/5 space-y-4 bg-gradient-to-b from-bg-card to-black/40">
-      
       <div>
         <div className="flex justify-between items-end mb-2">
           <p className="text-[10px] uppercase tracking-wider font-black text-[var(--text-dim)]">Einsatz (Verfügbare Margin)</p>
@@ -124,7 +143,7 @@ export default function LeveragePanel() {
         <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
           <span className="text-[var(--text-dim)]">Liq. Preis (geschätzt):</span>
           <span className="text-neon-red font-mono">
-            {direction === 'LONG' ? liqLong.toLocaleString('de-DE') : liqShort.toLocaleString('de-DE')}€
+            {direction === 'LONG' ? liqLong.toLocaleString('de-DE', {minimumFractionDigits: 2}) : liqShort.toLocaleString('de-DE', {minimumFractionDigits: 2})}€
           </span>
         </div>
       </div>

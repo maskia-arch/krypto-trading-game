@@ -20,7 +20,7 @@ const useStore = create((set, get) => ({
   tab: 'wallet',
   toast: null,
   leveragePositions: [],
-  leveragePolicy: null, // Enthält max_positions, margin_limit_factor, etc.
+  leveragePolicy: null,
 
   setTab: (tab) => set({ tab }),
   setChartSymbol: (s) => set({ chartSymbol: s }),
@@ -146,27 +146,26 @@ const useStore = create((set, get) => ({
     try {
       const data = await api.getLeveragePositions();
       set({
-        leveragePositions: data.positions || [],
+        leveragePositions: Array.isArray(data.positions) ? data.positions : [],
         leveragePolicy: data.policy || null
       });
     } catch (e) {
       console.error(e);
+      set({ leveragePositions: [] });
     }
   },
 
-  // Hilfsfunktion für das UI: Berechnet verfügbare Margin basierend auf der Policy
   getAvailableMargin: () => {
     const { profile, leveragePositions, leveragePolicy } = get();
     if (!profile || !leveragePolicy) return 0;
 
-    const usedMargin = leveragePositions.reduce((sum, p) => sum + Number(p.collateral), 0);
-    const maxMargin = Number(profile.balance) * leveragePolicy.margin_limit_factor;
+    const usedMargin = (leveragePositions || []).reduce((sum, p) => sum + Number(p.collateral), 0);
+    const maxMargin = Number(profile.balance) * (leveragePolicy.margin_limit_factor || 0);
     
     return Math.max(0, maxMargin - usedMargin);
   },
 
   openLeveragePosition: async (symbol, direction, collateral, leverage) => {
-    // Vorab-Check im Frontend (optional, Backend validiert ohnehin)
     const available = get().getAvailableMargin();
     if (Number(collateral) > available) {
       throw new Error(`Limit überschritten. Verfügbare Margin: ${available.toFixed(2)}€`);
