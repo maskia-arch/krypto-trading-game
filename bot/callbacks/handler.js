@@ -1,7 +1,7 @@
 const { db } = require('../core/database');
 const { priceService } = require('../services/priceService');
 const handlePortfolio = require('../commands/portfolio');
-const { handleLeaderboard } = require('../commands/economy');
+const { handleLeaderboard, handlePro } = require('../commands/economy');
 const { esc } = require('../core/utils');
 const { InlineKeyboard } = require('grammy');
 const { WEBAPP_URL, VERSION } = require('../core/config');
@@ -19,6 +19,11 @@ module.exports = async (ctx) => {
     return handleLeaderboard(ctx);
   }
 
+  if (data === 'pro') {
+    await ctx.answerCallbackQuery();
+    return handlePro(ctx);
+  }
+
   if (data === 'show_info') {
     await ctx.answerCallbackQuery();
     
@@ -30,7 +35,7 @@ module.exports = async (ctx) => {
       `🎮 <b>Spiel-Channel:</b> @ValueTradeGame\n` +
       `👨‍💻 <b>System Architect:</b> @autoacts\n` +
       `⚙️ <b>Version:</b> v${VERSION}\n\n` +
-      `<i>ValueTrade Engine v${engineVersion}</i>`,
+      `<i>ValueTrade Engine v${engineVersion} - Pro Features Aktiv</i>`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
   }
@@ -40,12 +45,15 @@ module.exports = async (ctx) => {
     const profile = await db.getProfile(ctx.from.id);
     if (!profile) return;
 
+    const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
+
     const kb = new InlineKeyboard()
       .webApp('🎮 Trading starten', WEBAPP_URL)
       .row()
       .text('📊 Portfolio', 'portfolio')
       .text('🏆 Rangliste', 'leaderboard')
       .row()
+      .text(isPro ? '⭐ Pro Menü' : '💎 Pro Upgrade', 'pro')
       .text('ℹ️ Info', 'show_info');
 
     return ctx.editMessageText(
@@ -113,13 +121,13 @@ module.exports = async (ctx) => {
       .text('❌ Ablehnen', `reject_pro:${profile.id}`);
 
     await ctx.api.sendMessage(adminId,
-      `💳 <b>PRO-ANFRAGE</b>\n\n` +
+      `💳 <b>PRO-ANFRAGE v0.3.0</b>\n\n` +
       `👤 ${esc(profile.first_name)} (@${profile.username || '-'})\n` +
       `🆔 ${profile.telegram_id}\n\n` +
-      `Freischalten? (Hebel-Limit & Hintergrundbild)`,
+      `Freischalten für SL/TP, Trailing Stops & Limit Orders?`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
-    return ctx.reply('✅ Anfrage gesendet! Der Admin wird dein Profil in Kürze für Pro-Features freischalten.');
+    return ctx.reply('✅ Anfrage gesendet! Der Admin wird dein Profil in Kürze für alle v0.3.0 Pro-Features freischalten.');
   }
 
   if (data.startsWith('approve_pro:')) {
@@ -139,7 +147,14 @@ module.exports = async (ctx) => {
     if (!error && profile) {
       await db.supabase.from('pro_requests').update({ status: 'approved' }).eq('profile_id', profileId);
       try {
-        await ctx.api.sendMessage(profile.telegram_id, `⭐ <b>PRO AKTIVIERT!</b>\n\nDeine Pro-Vorteile sind jetzt aktiv:\n• 10x Hebel (Hebel-Montag)\n• 3 Offene Hebel-Positionen\n• Eigenes Profil-Hintergrundbild\n• Unbegrenzte Namensänderungen`);
+        await ctx.api.sendMessage(profile.telegram_id, 
+          `⭐ <b>PRO v0.3.0 AKTIVIERT!</b>\n\n` +
+          `Deine Profi-Werkzeuge sind jetzt bereit:\n` +
+          `• 🛡️ Stop-Loss & Take-Profit\n` +
+          `• 📈 Trailing-Stops (Auto-Gewinn)\n` +
+          `• 🎯 Limit-Orders (Auto-Buy/Sell)\n` +
+          `• 📦 3 Parallele Positionen\n` +
+          `• 🎨 Eigenes Hintergrundbild`);
       } catch (e) {}
       await ctx.editMessageText(`✅ Pro für ${esc(profile.first_name)} aktiviert.`);
     }
@@ -177,22 +192,6 @@ module.exports = async (ctx) => {
     await ctx.answerCallbackQuery('Fetching prices...');
     await priceService.fetchAndStorePrices();
     return ctx.reply('✅ ValueTrade Engine: Preise & Chart-Snapshots aktualisiert.');
-  }
-
-  if (data === 'admin_stats') {
-    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
-    await ctx.answerCallbackQuery();
-    
-    const { count: users } = await db.supabase.from('profiles').select('*', { count: 'exact', head: true });
-    const { count: openLevers } = await db.supabase.from('leveraged_positions').select('*', { count: 'exact', head: true }).eq('status', 'OPEN');
-    
-    return ctx.reply(
-      `📊 <b>System-Status</b>\n\n` +
-      `User gesamt: <b>${users}</b>\n` +
-      `Aktive Hebel-Trades: <b>${openLevers}</b>\n` +
-      `Server-Zeit: <code>${new Date().toLocaleTimeString('de-DE')}</code>`,
-      { parse_mode: 'HTML' }
-    );
   }
 
   if (data === 'close') {

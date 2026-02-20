@@ -11,19 +11,25 @@ const startCommand = async (ctx) => {
     let profile = await db.getProfile(tgId);
 
     if (profile) {
+      const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
+      
       const kb = new InlineKeyboard()
         .webApp('🎮 Trading starten', WEBAPP_URL)
         .row()
         .text('📊 Portfolio', 'portfolio')
         .text('🏆 Rangliste', 'leaderboard')
         .row()
+        .text(isPro ? '⭐ Pro Menü' : '💎 Pro Upgrade', 'pro')
         .text('ℹ️ Info', 'show_info');
 
-      return ctx.reply(
-        `Willkommen zurück, <b>${esc(profile.username || profile.first_name)}</b>! 💰\n\n` +
-        `Dein Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>`,
-        { parse_mode: 'HTML', reply_markup: kb }
-      );
+      let welcomeBackText = `Willkommen zurück, <b>${esc(profile.username || profile.first_name)}</b>! 💰\n\n` +
+        `Dein Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b>`;
+      
+      if (profile.is_admin) {
+        welcomeBackText = `👑 <b>Admin-Zentrale</b>\n\nHallo Chef! Dein System läuft auf v0.3.0.\nDein Kontostand: <b>${Number(profile.balance).toLocaleString('de-DE')}€</b>`;
+      }
+
+      return ctx.reply(welcomeBackText, { parse_mode: 'HTML', reply_markup: kb });
     }
 
     let promptText = `Willkommen bei <b>ValueTrade</b>! 📈\n\n` +
@@ -113,9 +119,9 @@ startCommand.sendWelcomeMessage = async (ctx, profile) => {
       .webApp('🎮 Jetzt traden!', WEBAPP_URL)
       .row()
       .text('📊 Portfolio', 'portfolio')
-      .text('ℹ️ Hilfe', 'help');
+      .text('💎 Pro Features', 'pro');
       
-    await ctx.reply('Bereit für deine erste Million? 🚀', { reply_markup: kb });
+    await ctx.reply('Bereit für deine erste Million? 🚀\n<i>PS: Schau dir die neuen Pro-Features an!</i>', { reply_markup: kb });
   }, 2000);
 
   const adminId = Number(process.env.ADMIN_ID);

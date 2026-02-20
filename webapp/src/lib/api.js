@@ -1,6 +1,5 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'https://your-bot.onrender.com';
 
-// Hilfsfunktion zum Abrufen der rohen Telegram-Init-Daten
 export function getTelegramInitData() {
   return window.Telegram?.WebApp?.initData || '';
 }
@@ -27,7 +26,6 @@ async function apiCall(path, options = {}) {
   const initData = getTelegramInitData();
   const tgId = getTelegramId();
   
-  // Wir brauchen mindestens initData oder eine ID für den Fallback
   if (!initData && !tgId) {
     throw new Error('Keine Authentifizierung gefunden. Bitte über den Bot starten.');
   }
@@ -41,9 +39,7 @@ async function apiCall(path, options = {}) {
     cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
-      // Der neue Standard: Komplette verschlüsselte InitData
       'x-telegram-init-data': initData,
-      // Fallback für Legacy-Funktionen
       'x-telegram-id': String(tgId),
       ...options.headers,
     },
@@ -88,7 +84,28 @@ export const api = {
   sellCollectible:        (user_collectible_id) => apiCall('/api/economy/collectibles/sell', { method: 'POST', body: JSON.stringify({ user_collectible_id }) }),
   
   getLeveragePositions:   () => apiCall('/api/leverage/positions'),
-  openLeverage:           (symbol, direction, collateral, leverage) => apiCall('/api/leverage/open', { method: 'POST', body: JSON.stringify({ symbol, direction, collateral, leverage }) }),
+  
+  // Erweiterte Funktion für SL, TP, Limit und Trailing Stop
+  openLeverage:           (symbol, direction, collateral, leverage, options = {}) => apiCall('/api/leverage/open', { 
+    method: 'POST', 
+    body: JSON.stringify({ 
+      symbol, 
+      direction, 
+      collateral, 
+      leverage,
+      stop_loss: options.stop_loss || null,
+      take_profit: options.take_profit || null,
+      limit_price: options.limit_price || null,
+      trailing_stop: options.trailing_stop || false
+    }) 
+  }),
+  
+  // Teilschließung (50%)
+  partialClose:           (position_id) => apiCall('/api/leverage/partial-close', { 
+    method: 'POST', 
+    body: JSON.stringify({ position_id, percentage: 50 }) 
+  }),
+
   closeLeverage:          (position_id) => apiCall('/api/leverage/close', { method: 'POST', body: JSON.stringify({ position_id }) }),
   
   createAlert:            (symbol, target_price, direction) => apiCall('/api/alert', { method: 'POST', body: JSON.stringify({ symbol, target_price, direction }) }),

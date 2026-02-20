@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-let VERSION = '0.2.2'; 
+let VERSION = '0.3.0'; 
 try {
   const versionPath = path.resolve(__dirname, '../../version.txt');
   if (fs.existsSync(versionPath)) {
@@ -39,6 +39,19 @@ const COINS = {
 
 const FEE_RATE = 0.005;
 
+const TRADING_LIMITS = {
+  FREE: {
+    MAX_POSITIONS: 1,
+    MARGIN_LIMIT_FACTOR: 0.50,
+    MAX_LEVERAGE: 5
+  },
+  PRO: {
+    MAX_POSITIONS: 3,
+    MARGIN_LIMIT_FACTOR: 0.90,
+    MAX_LEVERAGE: 10
+  }
+};
+
 module.exports = {
   VERSION,
   botConfig,
@@ -48,5 +61,6 @@ module.exports = {
   BONUS_CLAIM_URL,
   supabaseConfig,
   COINS,
-  FEE_RATE
+  FEE_RATE,
+  TRADING_LIMITS
 };

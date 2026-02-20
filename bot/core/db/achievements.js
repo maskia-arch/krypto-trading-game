@@ -45,6 +45,14 @@ module.exports = (db) => ({
         case 'balance':
           if (Number(profile.balance || 0) >= targetValue) unlocked = true;
           break;
+        case 'leverage_count':
+          const { count } = await db.supabase
+            .from('leveraged_positions')
+            .select('*', { count: 'exact', head: true })
+            .eq('profile_id', profileId)
+            .eq('status', 'CLOSED');
+          if (count >= targetValue) unlocked = true;
+          break;
       }
 
       if (unlocked) {
@@ -56,6 +64,8 @@ module.exports = (db) => ({
           achievement_id: ach.id,
           earned_at: new Date().toISOString()
         });
+        
+        await db.logTransaction(profileId, 'achievement_reward', 'REWARD', 0, 0, 0, ach.reward_eur, `Achievement: ${ach.name}`);
       }
     }
 

@@ -1,11 +1,14 @@
 module.exports = (db) => ({
-  async logTransaction(profileId, type, symbol, amount, priceEur, feeEur, totalEur) {
+  async logTransaction(profileId, type, symbol, amount, priceEur, feeEur, totalEur, details = null) {
     await db.supabase.from('transactions').insert({
       profile_id: profileId,
-      type, symbol, amount,
+      type, 
+      symbol, 
+      amount,
       price_eur: priceEur,
       fee_eur: feeEur,
-      total_eur: totalEur
+      total_eur: totalEur,
+      details: details
     });
   },
 
@@ -41,7 +44,7 @@ module.exports = (db) => ({
         bailout_count: count + 1,
         bailout_last: new Date().toISOString()
       }).eq('id', profileId);
-      await db.logTransaction(profileId, 'bailout', null, null, null, 0, 1000);
+      await db.logTransaction(profileId, 'bailout', null, null, null, 0, 1000, 'Onkel Rettungspaket');
       return { ok: true, msg: `💰 Onkel hat dir 1.000€ geschickt! (${2 - count} Rettungen übrig)` };
     } else {
       if (p.bailout_last) {
@@ -57,7 +60,7 @@ module.exports = (db) => ({
         balance: newBal,
         bailout_last: new Date().toISOString()
       }).eq('id', profileId);
-      await db.logTransaction(profileId, 'bailout', null, null, null, 0, 50);
+      await db.logTransaction(profileId, 'bailout', null, null, null, 0, 50, 'Onkel Taschengeld');
       return { ok: true, msg: `💸 Onkel schickt dir 50€ Taschengeld. (Max 500€)` };
     }
   }

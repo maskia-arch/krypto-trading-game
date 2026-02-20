@@ -10,7 +10,7 @@ const useStore = create((set, get) => ({
   prevPrices: {},
   chartData: [],
   chartSymbol: 'BTC',
-  chartRange: '30m', // Standard auf 30m für Hebel-Ansicht
+  chartRange: '30m',
   leaderboard: [],
   season: null,
   feePool: 0,
@@ -31,6 +31,14 @@ const useStore = create((set, get) => ({
     setTimeout(() => set({ toast: null }), 3000);
   },
 
+  // Hilfsfunktion zur Prüfung des Premium-Status (Pro oder Admin)
+  isPremiumUser: () => {
+    const p = get().profile;
+    if (!p) return false;
+    const isPro = p.is_pro && new Date(p.pro_until) > new Date();
+    return p.is_admin || isPro;
+  },
+
   loadVersion: async () => {
     try {
       const data = await api.getVersion();
@@ -44,9 +52,7 @@ const useStore = create((set, get) => ({
 
   fetchProfile: async () => {
     try {
-      if (!get().profile) {
-        set({ loading: true });
-      }
+      if (!get().profile) set({ loading: true });
       set({ error: null });
       
       const data = await api.getProfile();
@@ -100,7 +106,6 @@ const useStore = create((set, get) => ({
   loadChart: async (symbol, range) => {
     const s = symbol || get().chartSymbol;
     const r = range || get().chartRange;
-    
     try {
       const data = await api.getChart(s, r);
       if (data && data.data) {
@@ -175,13 +180,33 @@ const useStore = create((set, get) => ({
     return Math.max(0, maxMargin - usedMargin);
   },
 
-  openLeveragePosition: async (symbol, direction, collateral, leverage) => {
+  openLeveragePosition: async (symbol, direction, collateral, leverage, options = {}) => {
+    const { leveragePositions, leveragePolicy } = get();
+    const isPremium = get().isPremiumUser();
+    
+    // Dynamisches Limit: 3 für Pro/Admin, sonst das Limit aus der Policy (Standard 1)
+    const maxPos = isPremium ? 3 : (leveragePolicy?.max_positions || 1);
+
+    if (leveragePositions.length >= maxPos) {
+      throw new Error(`Limit erreicht: Max ${maxPos} Position(en) erlaubt. Upgrade auf PRO für mehr!`);
+    }
+
     const available = get().getAvailableMargin();
     if (Number(collateral) > available) {
       throw new Error(`Limit überschritten. Verfügbare Margin: ${available.toFixed(2)}€`);
     }
 
-    const data = await api.openLeverage(symbol, direction, collateral, leverage);
+    const data = await api.openLeverage(symbol, direction, collateral, leverage, options);
+    await Promise.all([
+      get().fetchProfile(),
+      get().fetchLeveragePositions()
+    ]);
+    return data;
+  },
+
+  // Neue Action für Partial Close (50% Schließen)
+  partialClosePosition: async (positionId) => {
+    const data = await api.partialClose(positionId);
     await Promise.all([
       get().fetchProfile(),
       get().fetchLeveragePositions()

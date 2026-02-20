@@ -34,7 +34,7 @@ db.getAllOpenLeveragedPositions = async function() {
   return data || [];
 };
 
-db.openLeveragedPosition = async function(profileId, symbol, direction, collateral, leverage, entryPrice) {
+db.openLeveragedPosition = async function(profileId, symbol, direction, collateral, leverage, entryPrice, options = {}) {
   const { data: profile } = await this.supabase
     .from('profiles')
     .select('*')
@@ -48,7 +48,7 @@ db.openLeveragedPosition = async function(profileId, symbol, direction, collater
 
   const maxPositions = isPro ? 3 : 1;
   const maxLeverage = (isPro || isMonday) ? 10 : 5;
-  const marginLimitFactor = isPro ? 0.80 : 0.50;
+  const marginLimitFactor = isPro ? 0.90 : 0.50;
 
   if (leverage > maxLeverage) {
     throw new Error(`Maximaler Hebel aktuell bei ${maxLeverage}x.`);
@@ -66,7 +66,7 @@ db.openLeveragedPosition = async function(profileId, symbol, direction, collater
 
   if ((currentUsedMargin + newCollateral) > maxAllowedMargin) {
     const available = Math.max(0, maxAllowedMargin - currentUsedMargin);
-    throw new Error(`Margin-Limit überschritten (${isPro ? '80%' : '50%'} vom Cash). Verfügbar: ${available.toFixed(2)}€`);
+    throw new Error(`Margin-Limit überschritten (${isPro ? '90%' : '50%'} vom Cash). Verfügbar: ${available.toFixed(2)}€`);
   }
 
   const notional = newCollateral * Number(leverage);
@@ -103,7 +103,12 @@ db.openLeveragedPosition = async function(profileId, symbol, direction, collater
     leverage: Number(leverage),
     entry_price: Number(entryPrice),
     liquidation_price: liqPrice,
-    status: 'OPEN'
+    status: 'OPEN',
+    stop_loss: options.stop_loss || null,
+    take_profit: options.take_profit || null,
+    limit_price: options.limit_price || null,
+    trailing_stop: options.trailing_stop || false,
+    is_limit_order: !!options.limit_price
   }).select().single();
 
   if (error) throw error;
@@ -176,6 +181,64 @@ db.closeLeveragedPosition = async function(positionId, closePrice, isLiquidation
   });
 
   return { pnl, payout, equity, status };
+};
+
+db.partialCloseLeveragedPosition = async function(positionId) {
+  const { data: pos } = await this.supabase
+    .from('leveraged_positions')
+    .select('*')
+    .eq('id', positionId)
+    .single();
+
+  if (!pos || pos.status !== 'OPEN') throw new Error('Position nicht gefunden');
+
+  const { data: currentPriceData } = await this.supabase
+    .from('current_prices')
+    .select('price_eur')
+    .eq('symbol', pos.symbol)
+    .single();
+
+  const closePrice = currentPriceData.price_eur;
+  const partialFactor = 0.5;
+  const closingCollateral = Number(pos.collateral) * partialFactor;
+  const closingNotional = closingCollateral * Number(pos.leverage);
+
+  let pnl = 0;
+  if (pos.direction === 'LONG') {
+    pnl = ((Number(closePrice) - Number(pos.entry_price)) / Number(pos.entry_price)) * closingNotional;
+  } else {
+    pnl = ((Number(pos.entry_price) - Number(closePrice)) / Number(pos.entry_price)) * closingNotional;
+  }
+
+  const fee = closingNotional * 0.005;
+  const payout = (closingCollateral + pnl) - fee;
+
+  await this.supabase.from('leveraged_positions').update({
+    collateral: Number(pos.collateral) - closingCollateral
+  }).eq('id', positionId);
+
+  if (payout > 0) {
+    const { data: profile } = await this.supabase
+      .from('profiles')
+      .select('balance')
+      .eq('id', pos.profile_id)
+      .single();
+    await this.updateBalance(pos.profile_id, Number(profile.balance) + payout);
+  }
+
+  await this.supabase.from('transactions').insert({
+    profile_id: pos.profile_id,
+    type: 'leverage_close',
+    symbol: pos.symbol,
+    total_eur: payout,
+    price_eur: Number(closePrice),
+    amount: closingNotional,
+    fee_eur: fee,
+    details: 'Partial Close 50%',
+    created_at: new Date().toISOString()
+  });
+
+  return { pnl, payout };
 };
 
 db.checkAndGrantAchievements = async function(profileId) {

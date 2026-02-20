@@ -31,10 +31,30 @@ function getJoinYear(dateString) {
   return new Date(dateString).getFullYear();
 }
 
+function calculateLiquidationPrice(entryPrice, leverage, direction) {
+  const maintenanceMargin = 0.1; 
+  if (direction === 'LONG') {
+    return entryPrice * (1 - (1 / leverage) * (1 - maintenanceMargin));
+  } else {
+    return entryPrice * (1 + (1 / leverage) * (1 - maintenanceMargin));
+  }
+}
+
+function calculatePnL(entryPrice, currentPrice, leverage, collateral, direction) {
+  const notional = Number(collateral) * Number(leverage);
+  if (direction === 'LONG') {
+    return ((currentPrice - entryPrice) / entryPrice) * notional;
+  } else {
+    return ((entryPrice - currentPrice) / entryPrice) * notional;
+  }
+}
+
 module.exports = {
   esc,
   formatEuro,
   formatCompact,
   getMinutesDiff,
-  getJoinYear
+  getJoinYear,
+  calculateLiquidationPrice,
+  calculatePnL
 };

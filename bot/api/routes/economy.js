@@ -17,7 +17,8 @@ router.get('/chart/:symbol', async (req, res) => {
     };
 
     const minutes = rangeMap[range] || 180;
-    const startTime = new Date(Date.now() - ((minutes + 120) * 60 * 1000)).toISOString();
+    // v0.3.0: Puffer erhöht auf 150 Min für stabilere Chart-Anzeige
+    const startTime = new Date(Date.now() - ((minutes + 150) * 60 * 1000)).toISOString();
 
     const { data, error } = await db.supabase
       .from('market_history')
@@ -91,6 +92,25 @@ router.get('/realestate/mine', async (req, res) => {
   }
 });
 
+// NEU: Miete direkt über die WebApp einsammeln
+router.post('/realestate/collect', async (req, res) => {
+  const tgId = parseTelegramUser(req);
+  if (!tgId) return res.status(401).json({ error: 'Unauthorized' });
+
+  try {
+    const profile = await db.getProfile(tgId);
+    const collected = await db.collectRent(profile.id);
+    
+    res.json({ 
+      success: true, 
+      amount: collected, 
+      message: collected > 0 ? `${collected.toFixed(2)}€ Miete erhalten!` : 'Noch keine Miete fällig.' 
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Miet-Sammeln fehlgeschlagen' });
+  }
+});
+
 router.post('/realestate/buy', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Unauthorized' });
@@ -106,7 +126,7 @@ router.post('/realestate/buy', async (req, res) => {
       .single();
 
     if (Number(profile.total_volume) < Number(reType.min_volume)) {
-      return res.status(400).json({ error: 'Umsatz zu gering' });
+      return res.status(400).json({ error: 'Umsatz zu gering für dieses Objekt' });
     }
     
     if (Number(profile.balance) < Number(reType.price_eur)) {
@@ -120,39 +140,18 @@ router.post('/realestate/buy', async (req, res) => {
       last_collect: new Date().toISOString() 
     });
 
+    // Transaktion loggen
+    await db.supabase.from('transactions').insert({
+      profile_id: profile.id,
+      type: 'buy_realestate',
+      symbol: 'HOUSE',
+      total_eur: -Number(reType.price_eur),
+      details: `Kauf: ${reType.name}`
+    });
+
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: 'Kauf Fehler' });
-  }
-});
-
-router.get('/collectibles/types', async (req, res) => {
-  try {
-    const { data, error } = await db.supabase
-      .from('collectible_types')
-      .select('*')
-      .order('price_eur', { ascending: true });
-    
-    if (error) throw error;
-    res.json({ types: data || [] });
-  } catch (err) {
-    res.status(500).json({ error: 'Collectibles Fehler' });
-  }
-});
-
-router.get('/collectibles/mine', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Unauthorized' });
-
-  try {
-    const profile = await db.getProfile(tgId);
-    const { data } = await db.supabase
-      .from('collectibles')
-      .select('*, collectible_types(*)')
-      .eq('profile_id', profile.id);
-    res.json({ collectibles: data });
-  } catch (err) {
-    res.status(500).json({ error: 'Sammlung Fehler' });
   }
 });
 

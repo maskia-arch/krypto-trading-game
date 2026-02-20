@@ -9,8 +9,6 @@ async function handleLeaderboard(ctx) {
     const result = await db.getLeaderboard(filter, 10);
     const pool = result.pool;
     const season = result.season;
-    
-    // Die Daten kommen bereits fertig berechnet aus der Datenbank
     const leaders = result.leaders;
 
     let text = `🏆 <b>ValueTrade Rangliste</b>\n\n`;
@@ -35,7 +33,8 @@ async function handleLeaderboard(ctx) {
 
     leaders.slice(0, 10).forEach((l, i) => {
       const medal = ['🥇', '🥈', '🥉'][i] || `<b>${i + 1}.</b>`;
-      const name = esc(l.username || l.first_name || 'Trader');
+      const badge = l.is_admin ? '👑 ' : (l.is_pro ? '⭐ ' : '');
+      const name = badge + esc(l.username || l.first_name || 'Trader');
       
       const perfEuro = Number(l.performance_euro || 0).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const perfPercent = Number(l.performance_percent || 0).toFixed(2);
@@ -48,7 +47,6 @@ async function handleLeaderboard(ctx) {
     if (myProfile) {
       const allLeadersRaw = await db.getLeaderboard(filter, 1000);
       const allLeaders = allLeadersRaw.leaders;
-
       const myRank = allLeaders.findIndex(p => String(p.telegram_id) === String(ctx.from.id)) + 1;
       
       if (myRank > 10) {
@@ -57,7 +55,7 @@ async function handleLeaderboard(ctx) {
         const myPerfPercent = Number(me.performance_percent || 0).toFixed(2);
         
         text += `\n━━ 👤 <b>Deine Platzierung</b> ━━\n\n`;
-        text += `<b>${myRank}.</b> ${esc(me.username || me.first_name)} (Du)\n`;
+        text += `<b>${myRank}.</b> ${me.is_pro ? '⭐ ' : ''}${esc(me.username || me.first_name)} (Du)\n`;
         text += ` └ Profit: <b>${me.performance_euro >= 0 ? '+' : ''}${myPerfEuro}€</b> (${myPerfPercent}%)\n`;
       }
     }
@@ -101,27 +99,35 @@ async function handlePro(ctx) {
     const profile = await db.getProfile(ctx.from.id);
     if (!profile) return ctx.reply('Starte zuerst mit /start');
     
+    const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
+    
     if (profile.is_admin) {
-      return ctx.reply(`👑 <b>Admin-Status aktiv!</b>\n\nDu bist der Boss. Alle Pro-Features sind für dich dauerhaft kostenlos freigeschaltet.`, { parse_mode: 'HTML' });
+      return ctx.reply(`👑 <b>Admin-Status aktiv!</b>\n\nDu hast unbegrenzten Zugriff auf alle v0.3.0 Features.\n\n` +
+      `🛡️ Stop-Loss & Take-Profit\n` +
+      `📈 Trailing-Stops (Auto-Profit)\n` +
+      `🎯 Limit-Orders\n` +
+      `⚡ Bis zu 3 parallele Trades`, { parse_mode: 'HTML' });
     }
     
-    if (profile.is_pro && new Date(profile.pro_until) > new Date()) {
+    if (isPro) {
       const until = new Date(profile.pro_until).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
-      return ctx.reply(`✅ Du bist bereits Pro-Mitglied!\nAktiv bis: ${until}`);
+      return ctx.reply(`✅ <b>Pro-Mitgliedschaft aktiv!</b>\n\nDu genießt alle Vorteile bis zum <b>${until}</b>.\n\nDeine Features sind in der WebApp im Hebel-Panel freigeschaltet!`, { parse_mode: 'HTML' });
     }
     
     const kb = new InlineKeyboard()
-      .text('💳 Pro kaufen (5€/Monat)', 'buy_pro')
+      .text('💎 Pro jetzt freischalten (5€)', 'buy_pro')
       .row()
       .text('❌ Abbrechen', 'close');
+
     return ctx.reply(
-      `⭐ <b>PRO VERSION - 5€/Monat</b>\n\n` +
-      `Features:\n` +
-      `🔥 Hebelwetten (2x-10x)\n` +
-      `🔔 Preis-Alarme bei Dips\n` +
-      `🎨 Exklusive Themes\n` +
-      `📊 Erweiterte Charts\n` +
-      `⚡ Priority Support`,
+      `⭐ <b>UPGRADE AUF VALUE-PRO (v0.3.0)</b>\n\n` +
+      `Werde zum Profi-Trader und schalte exklusive Werkzeuge frei:\n\n` +
+      `⚡ <b>Hebel-Boost:</b> Trade mit bis zu 10x Hebel!\n` +
+      `🛡️ <b>Automatisierung:</b> Stop-Loss & Take-Profit nutzen.\n` +
+      `📈 <b>Trailing-Stop:</b> Lass Gewinne automatisch absichern.\n` +
+      `🎯 <b>Limit-Orders:</b> Kaufe den Dip auch wenn du schläfst.\n` +
+      `📦 <b>Mehr Trades:</b> Bis zu 3 Positionen gleichzeitig offen.\n\n` +
+      `<i>Sichere dir den entscheidenden Vorteil in der Season-Rangliste!</i>`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
   } catch (err) {

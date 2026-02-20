@@ -49,6 +49,28 @@ function setupApi(bot) {
 
   app.get('/api/version', (req, res) => res.json({ version: getGameVersion() }));
 
+  // NEU: Globale Statistiken für das v0.3.0 Dashboard
+  app.get('/api/stats/global', async (req, res) => {
+    try {
+      const stats = await db.getStats();
+      const pool = await db.getFeePool();
+      const { count: openPositions } = await db.supabase
+        .from('leveraged_positions')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'OPEN');
+
+      res.json({
+        totalUsers: stats.userCount,
+        totalTransactions: stats.txCount,
+        currentFeePool: pool,
+        activeTrades: openPositions || 0,
+        serverTime: new Date().toISOString()
+      });
+    } catch (err) {
+      res.status(500).json({ error: 'Stats konnten nicht geladen werden' });
+    }
+  });
+
   app.get('/api/referrals', async (req, res) => {
     const tgId = parseTelegramUser(req);
     if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });

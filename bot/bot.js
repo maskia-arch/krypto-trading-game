@@ -71,18 +71,28 @@ bot.on('message:story', async (ctx) => {
     const userId = ctx.from.id;
     const { data: profile } = await db.supabase
       .from('profiles')
-      .select('story_bonus_claimed, balance_eur')
+      .select('id, story_bonus_claimed, balance')
       .eq('telegram_id', userId)
       .single();
 
     if (profile && !profile.story_bonus_claimed) {
-      const newBalance = (profile.balance_eur || 0) + 1000;
+      const bonusAmount = 1000.00;
+      const newBalance = (Number(profile.balance) || 0) + bonusAmount;
+      
       await db.supabase
         .from('profiles')
-        .update({ balance_eur: newBalance, story_bonus_claimed: true })
-        .eq('telegram_id', userId);
+        .update({ balance: newBalance, story_bonus_claimed: true })
+        .eq('id', profile.id);
 
-      await ctx.reply("🌟 **Bonus aktiviert!**\n\nDanke für deine Story-Erwähnung! Ich habe dir soeben **1.000€ extra Guthaben** gutgeschrieben. Viel Erfolg beim Trading!");
+      await db.supabase.from('transactions').insert({
+        profile_id: profile.id,
+        type: 'achievement_reward',
+        symbol: 'STORY',
+        total_eur: bonusAmount,
+        details: 'Story Bonus Belohnung'
+      });
+
+      await ctx.reply("🌟 <b>Bonus aktiviert!</b>\n\nDanke für deine Story-Erwähnung! Ich habe dir soeben <b>1.000€ extra Guthaben</b> gutgeschrieben. Viel Erfolg beim Trading!", { parse_mode: 'HTML' });
     }
   } catch (e) {
     console.error('Story Bonus Fehler:', e);

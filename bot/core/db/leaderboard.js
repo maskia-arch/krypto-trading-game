@@ -14,7 +14,7 @@ module.exports = (db) => ({
     }
 
     const [profilesRes, assetsRes, pricesRes, levRes, season, pool] = await Promise.all([
-      db.supabase.from('profiles').select('id, telegram_id, username, first_name, balance, avatar_url, is_pro, pro_until, total_volume, season_start_worth, day_start_worth, bonus_received'),
+      db.supabase.from('profiles').select('id, telegram_id, username, first_name, balance, avatar_url, is_pro, pro_until, total_volume, season_start_worth, day_start_worth, bonus_received, is_admin'),
       db.supabase.from('assets').select('profile_id, symbol, amount'),
       db.supabase.from('current_prices').select('symbol, price_eur'),
       db.supabase.from('leveraged_positions').select('profile_id, symbol, direction, collateral, leverage, entry_price').eq('status', 'OPEN'),
@@ -64,8 +64,7 @@ module.exports = (db) => ({
                pnl = ((Number(pos.entry_price) - currentPrice) / Number(pos.entry_price)) * notional;
             }
             let equity = Number(pos.collateral) + pnl;
-            if (equity < 0) equity = 0;
-            leverageValue += equity;
+            leverageValue += Math.max(0, equity);
           } else {
             leverageValue += Number(pos.collateral);
           }
@@ -97,11 +96,11 @@ module.exports = (db) => ({
         username: p.username,
         first_name: p.first_name,
         avatar_url: p.avatar_url,
-        is_pro: p.is_pro,
+        is_pro: p.is_pro || p.is_admin,
         pro_until: p.pro_until,
         total_volume: p.total_volume,
         bonus_received: geschenkt,
-        net_worth: currentNetWorth,
+        net_worth: parseFloat(currentNetWorth.toFixed(2)),
         performance_euro: parseFloat(diffEuro.toFixed(2)),
         performance_percent: parseFloat(diffPercent.toFixed(2))
       };
@@ -165,9 +164,7 @@ module.exports = (db) => ({
             } else {
                pnl = ((Number(pos.entry_price) - currentPrice) / Number(pos.entry_price)) * notional;
             }
-            let equity = Number(pos.collateral) + pnl;
-            if (equity < 0) equity = 0;
-            leverageValue += equity;
+            leverageValue += Math.max(0, Number(pos.collateral) + pnl);
           } else {
             leverageValue += Number(pos.collateral);
           }

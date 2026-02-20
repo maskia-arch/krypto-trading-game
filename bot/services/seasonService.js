@@ -100,6 +100,11 @@ const seasonService = {
     const priceMap = {};
     prices.forEach(p => priceMap[p.symbol] = Number(p.price_eur));
 
+    const { data: allLevPositions } = await db.supabase
+      .from('leveraged_positions')
+      .select('*')
+      .eq('status', 'OPEN');
+
     for (const user of users) {
       const assets = await db.getAssets(user.id);
       let cryptoValue = 0;
@@ -107,7 +112,26 @@ const seasonService = {
         cryptoValue += Number(a.amount) * (priceMap[a.symbol] || 0);
       });
 
-      const currentNetWorth = parseFloat((Number(user.balance) + cryptoValue).toFixed(2));
+      let leverageValue = 0;
+      const userPositions = (allLevPositions || []).filter(pos => pos.profile_id === user.id);
+      
+      userPositions.forEach(pos => {
+        const curPrice = priceMap[pos.symbol];
+        if (curPrice) {
+          const notional = Number(pos.collateral) * Number(pos.leverage);
+          let pnl = 0;
+          if (pos.direction === 'LONG') {
+            pnl = ((curPrice - Number(pos.entry_price)) / Number(pos.entry_price)) * notional;
+          } else {
+            pnl = ((Number(pos.entry_price) - curPrice) / Number(pos.entry_price)) * notional;
+          }
+          leverageValue += Math.max(0, Number(pos.collateral) + pnl);
+        } else {
+          leverageValue += Number(pos.collateral);
+        }
+      });
+
+      const currentNetWorth = parseFloat((Number(user.balance) + cryptoValue + leverageValue).toFixed(2));
 
       await db.supabase
         .from('profiles')

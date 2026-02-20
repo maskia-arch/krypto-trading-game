@@ -6,6 +6,68 @@ const { priceService } = require('../services/priceService');
 const { tradeService } = require('../services/tradeService');
 const { seasonService } = require('../services/seasonService');
 
+async function checkLeverageAutoExits(bot) {
+  try {
+    const openPositions = await db.getAllOpenLeveragedPositions();
+    if (!openPositions || openPositions.length === 0) return;
+
+    const currentPrices = await db.getAllPrices();
+    const priceMap = {};
+    currentPrices.forEach(p => priceMap[p.symbol] = Number(p.price_eur));
+
+    for (const pos of openPositions) {
+      if (pos.is_limit_order) continue;
+
+      const currentPrice = priceMap[pos.symbol];
+      if (!currentPrice) continue;
+
+      const sl = pos.stop_loss ? Number(pos.stop_loss) : null;
+      const tp = pos.take_profit ? Number(pos.take_profit) : null;
+      const isLong = pos.direction === 'LONG';
+      
+      let triggerType = null;
+
+      if (sl) {
+        if ((isLong && currentPrice <= sl) || (!isLong && currentPrice >= sl)) {
+          triggerType = 'SL';
+        }
+      }
+
+      if (!triggerType && tp) {
+        if ((isLong && currentPrice >= tp) || (!isLong && currentPrice <= tp)) {
+          triggerType = 'TP';
+        }
+      }
+
+      if (triggerType) {
+        await db.closeLeveragedPosition(pos.id, currentPrice, false);
+        
+        try {
+          const { data: profile } = await db.supabase
+            .from('profiles')
+            .select('telegram_id')
+            .eq('id', pos.profile_id)
+            .single();
+            
+          if (profile && profile.telegram_id) {
+            const emoji = triggerType === 'TP' ? '✅' : '🛑';
+            const title = triggerType === 'TP' ? 'TAKE PROFIT' : 'STOP LOSS';
+            
+            await bot.api.sendMessage(
+              profile.telegram_id, 
+              `${emoji} <b>${title} AUSGELÖST!</b>\n\nDeine <b>${pos.leverage}x ${pos.direction}</b> Position für <b>${pos.symbol}</b> wurde automatisch geschlossen.\n\n` +
+              `Trigger-Preis: ${currentPrice.toLocaleString('de-DE', {minimumFractionDigits: 2})}€`, 
+              { parse_mode: 'HTML' }
+            );
+          }
+        } catch(e) {}
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 async function checkLeverageLiquidations(bot) {
   try {
     const openPositions = await db.getAllOpenLeveragedPositions();
@@ -16,6 +78,8 @@ async function checkLeverageLiquidations(bot) {
     currentPrices.forEach(p => priceMap[p.symbol] = Number(p.price_eur));
 
     for (const pos of openPositions) {
+      if (pos.is_limit_order) continue;
+
       const currentPrice = priceMap[pos.symbol];
       if (!currentPrice) continue;
 
@@ -62,13 +126,20 @@ function setupCronJobs(bot) {
   const runFrequentTasks = async () => {
     try {
       await priceService.fetchAndStorePrices();
+      
+      if (tradeService && tradeService.executeLimitOrders) {
+        await tradeService.executeLimitOrders(bot);
+      }
+
       if (tradeService && tradeService.checkLiquidations) {
         await tradeService.checkLiquidations(bot);
       }
+
       if (tradeService && tradeService.checkPriceAlerts) {
         await tradeService.checkPriceAlerts(bot);
       }
       
+      await checkLeverageAutoExits(bot);
       await checkLeverageLiquidations(bot);
       
     } catch (err) {
@@ -77,7 +148,7 @@ function setupCronJobs(bot) {
   };
 
   runFrequentTasks();
-  setInterval(runFrequentTasks, 45000);
+  setInterval(runFrequentTasks, 30000);
 
   cron.schedule('*/15 * * * *', async () => {
     try {

@@ -56,6 +56,11 @@ async function userInfo(ctx) {
       .map(a => `  ${a.symbol}: ${Number(a.amount).toFixed(6)}`)
       .join('\n') || '  (keine)';
 
+    const positions = await db.getOpenLeveragedPositions(profile.id);
+    const posText = positions
+      .map(p => `  ${p.symbol} ${p.leverage}x ${p.direction} (Einsatz: ${Number(p.collateral).toFixed(2)}€)`)
+      .join('\n') || '  (keine)';
+
     const lastActive = profile.last_active 
       ? new Date(profile.last_active).toLocaleString('de-DE') 
       : 'Nie';
@@ -67,10 +72,10 @@ async function userInfo(ctx) {
       `ID: <code>${profile.telegram_id}</code>\n` +
       `Balance: ${Number(profile.balance).toLocaleString('de-DE')}€\n` +
       `Umsatz: ${Number(profile.total_volume).toLocaleString('de-DE')}€\n` +
-      `Pro: ${profile.is_pro ? '✅' : '❌'}\n` +
-      `Letzte Aktivität: ${lastActive}\n` +
-      `Registriert: ${new Date(profile.created_at).toLocaleDateString('de-DE')}\n\n` +
-      `📦 Assets:\n${assetsText}`,
+      `Pro: ${profile.is_pro ? '✅' : '❌'}${profile.is_admin ? ' (ADMIN)' : ''}\n` +
+      `Letzte Aktivität: ${lastActive}\n\n` +
+      `📦 Assets:\n${assetsText}\n\n` +
+      `⚡ Offene Trades:\n${posText}`,
       { parse_mode: 'HTML' }
     );
   } catch (err) {
@@ -95,6 +100,33 @@ async function setBalance(ctx) {
     return ctx.reply(`✅ Balance von ${esc(profile.first_name)} auf ${amount.toLocaleString('de-DE')}€ gesetzt.`);
   } catch (err) {
     ctx.reply('❌ Fehler beim Setzen der Balance.');
+  }
+}
+
+async function setPro(ctx) {
+  if (ctx.from.id !== ADMIN_ID) return;
+
+  const args = ctx.message.text.split(' ');
+  if (args.length < 3) return ctx.reply('Benutzung: /setpro <id> <tage>');
+
+  const tgId = Number(args[1]);
+  const days = Number(args[2]);
+
+  try {
+    const profile = await db.getProfile(tgId);
+    if (!profile) return ctx.reply('User nicht gefunden.');
+
+    const proUntil = new Date();
+    proUntil.setDate(proUntil.getDate() + days);
+
+    await db.supabase
+      .from('profiles')
+      .update({ is_pro: true, pro_until: proUntil.toISOString() })
+      .eq('id', profile.id);
+
+    return ctx.reply(`✅ Pro-Status für ${esc(profile.username || profile.first_name)} bis ${proUntil.toLocaleDateString('de-DE')} aktiviert.`);
+  } catch (err) {
+    ctx.reply('❌ Fehler beim Setzen des Pro-Status.');
   }
 }
 
@@ -124,5 +156,6 @@ module.exports = {
   dashboard,
   userInfo,
   setBalance,
+  setPro,
   broadcast
 };

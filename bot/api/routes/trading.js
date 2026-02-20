@@ -52,7 +52,7 @@ router.get('/leverage/positions', async (req, res) => {
       positions,
       policy: {
         max_positions: isPro ? 3 : 1,
-        margin_limit_factor: isPro ? 0.8 : 0.5,
+        margin_limit_factor: isPro ? 0.9 : 0.8,
         max_leverage: (isMonday || isPro) ? 10 : 5,
         is_monday: isMonday,
         is_pro: isPro
@@ -67,7 +67,7 @@ router.post('/leverage/open', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
 
-  const { symbol, direction, collateral, leverage } = req.body;
+  const { symbol, direction, collateral, leverage, stop_loss, take_profit, limit_price, trailing_stop } = req.body;
 
   try {
     const profile = await db.getProfile(tgId);
@@ -76,21 +76,58 @@ router.post('/leverage/open', async (req, res) => {
     const price = await db.getCurrentPrice(symbol);
     if (!price) return res.status(500).json({ error: 'Kurs nicht verfügbar' });
 
+    const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
+    
+    const options = {
+      stop_loss: isPro ? stop_loss : null,
+      take_profit: isPro ? take_profit : null,
+      limit_price: isPro ? limit_price : null,
+      trailing_stop: isPro ? trailing_stop : false
+    };
+
     const position = await db.openLeveragedPosition(
       profile.id, 
       symbol, 
       direction.toUpperCase(), 
       Number(collateral), 
       Number(leverage), 
-      price
+      price,
+      options
     );
 
     if (req.bot) {
-      const msg = `⚡ <b>HEBEL-TRADE GESTARTET</b>\n\n<b>${symbol} ${direction.toUpperCase()}</b>\nHebel: <b>${leverage}x</b>\nMargin: <b>${Number(collateral).toFixed(2)}€</b>\nEinstieg: <b>${price.toLocaleString('de-DE')}€</b>`;
+      let msg = `⚡ <b>HEBEL-TRADE GESTARTET</b>\n\n`;
+      if (options.limit_price) {
+        msg = `⏳ <b>LIMIT-ORDER PLATZIERT</b>\n\n`;
+      }
+      msg += `<b>${symbol} ${direction.toUpperCase()}</b>\nHebel: <b>${leverage}x</b>\nMargin: <b>${Number(collateral).toFixed(2)}€</b>\n`;
+      msg += options.limit_price ? `Ziel: <b>${Number(options.limit_price).toLocaleString('de-DE')}€</b>` : `Einstieg: <b>${price.toLocaleString('de-DE')}€</b>`;
+      
       req.bot.api.sendMessage(profile.telegram_id, msg, { parse_mode: 'HTML' }).catch(() => {});
     }
 
     res.json({ success: true, position });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/leverage/partial-close', async (req, res) => {
+  const tgId = parseTelegramUser(req);
+  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
+
+  const { position_id, percentage } = req.body;
+
+  try {
+    const profile = await db.getProfile(tgId);
+    const result = await db.partialCloseLeveragedPosition(position_id, profile.id, percentage);
+
+    if (req.bot) {
+      const msg = `✂️ <b>TEILSCHLIESSUNG</b>\n\nDu hast <b>${(percentage * 100).toFixed(0)}%</b> deiner Position geschlossen.\nPayout: <b>${result.payout.toFixed(2)}€</b>\nRest-Margin: <b>${result.remaining_collateral.toFixed(2)}€</b>`;
+      req.bot.api.sendMessage(profile.telegram_id, msg, { parse_mode: 'HTML' }).catch(() => {});
+    }
+
+    res.json({ success: true, ...result });
   } catch (err) {
     res.status(400).json({ error: err.message });
   }

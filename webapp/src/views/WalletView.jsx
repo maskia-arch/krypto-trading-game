@@ -10,7 +10,6 @@ export default function WalletView() {
   const [mode, setMode] = useState('spot');
   const { fetchLeveragePositions } = useStore();
 
-  // Automatisches Update der Positionen im Hintergrund (alle 5 Sekunden)
   useEffect(() => {
     fetchLeveragePositions();
 
@@ -23,7 +22,7 @@ export default function WalletView() {
 
   return (
     <div className="space-y-4 pb-6 tab-enter">
-      {/* Mode Switcher: Spot vs. Hebel */}
+      {/* Mode Switcher */}
       <div className="flex bg-black/60 backdrop-blur-md p-1.5 rounded-2xl border border-white/5 shadow-inner">
         <button
           onClick={() => setMode('spot')}
@@ -50,20 +49,28 @@ export default function WalletView() {
       {/* Content Rendering */}
       {mode === 'spot' ? (
         <div className="space-y-4 tab-enter">
-          {/* Im Spot-Modus: Chart oben, dann Trade-Kacheln und Eingabe */}
           <ChartView />
           <TradeView />
         </div>
       ) : (
-        <div className="space-y-4 tab-enter">
-          {/* Im Hebel-Modus: Live-Chart mit neuem 10m/30m Toggle */}
+        <div className="flex flex-col tab-enter">
+          {/* 1. Chart (Bleibt oben) */}
           <LiveChart30m />
           
-          {/* Aktive Positionen direkt unter dem Chart für maximale Sichtbarkeit */}
-          <PositionsTable /> 
+          {/* 2. LeveragePanel (Coin-Wechsler & Kaufmenü) 
+              Hier liegen die Buttons, die fest unter dem Chart kleben sollen.
+          */}
+          <div className="mt-4 order-1">
+            <LeveragePanel />
+          </div>
           
-          {/* Eingabe-Panel für neue Hebel-Trades ganz unten */}
-          <LeveragePanel />
+          {/* 3. PositionsTable (Aktive Positionen) 
+              Durch 'order-2' und die Platzierung im Code wandern sie UNTER das Panel 
+              oder bleiben übersichtlich getrennt.
+          */}
+          <div className="mt-6 order-2">
+            <PositionsTable /> 
+          </div>
         </div>
       )}
     </div>

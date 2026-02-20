@@ -8,12 +8,18 @@ module.exports = (db) => ({
     
     if (data) {
       const adminId = Number(process.env.ADMIN_ID);
-      if (Number(telegramId) === adminId) {
+      const isSystemAdmin = Number(telegramId) === adminId;
+
+      if (isSystemAdmin) {
         data.is_admin = true;
         data.is_pro = true;
         const futureDate = new Date();
         futureDate.setFullYear(futureDate.getFullYear() + 100);
         data.pro_until = futureDate.toISOString();
+        
+        if (!data.background_url) {
+          data.background_url = 'https://images.unsplash.com/photo-1639762681485-074b7f938ba0?q=80&w=2832&auto=format&fit=crop';
+        }
       }
 
       await db.supabase
@@ -27,7 +33,7 @@ module.exports = (db) => ({
   async getPublicProfile(telegramId) {
     const { data } = await db.supabase
       .from('profiles')
-      .select('id, telegram_id, username, created_at, is_pro, pro_until, avatar_url')
+      .select('id, telegram_id, username, created_at, is_pro, pro_until, avatar_url, is_admin')
       .eq('telegram_id', telegramId)
       .maybeSingle();
 
@@ -35,24 +41,28 @@ module.exports = (db) => ({
 
     let status = 'Trader';
     const adminId = Number(process.env.ADMIN_ID);
-    if (Number(telegramId) === adminId) {
+    const isProActive = data.is_pro && new Date(data.pro_until) > new Date();
+
+    if (Number(telegramId) === adminId || data.is_admin) {
       status = 'Admin';
-    } else if (data.is_pro && new Date(data.pro_until) > new Date()) {
+    } else if (isProActive) {
       status = 'Pro';
     }
 
     const { data: achievements } = await db.supabase
       .from('user_achievements')
-      .select('achievements(id, name, icon)')
+      .select('achievement_id')
       .eq('profile_id', data.id);
 
     return {
+      id: data.id,
       telegram_id: data.telegram_id,
       username: data.username,
       avatar_url: data.avatar_url,
       created_at: data.created_at,
       status: status,
-      achievements: achievements ? achievements.map(a => a.achievements) : []
+      is_pro: isProActive || data.is_admin,
+      achievements: achievements || []
     };
   },
 
@@ -68,6 +78,8 @@ module.exports = (db) => ({
 
   async createProfile(telegramId, username, firstName, referredBy = null) {
     const safeUsername = username ? username : `trader_${telegramId}`;
+    const adminId = Number(process.env.ADMIN_ID);
+    const isAdmin = Number(telegramId) === adminId;
 
     const profileData = {
       telegram_id: telegramId,
@@ -75,6 +87,8 @@ module.exports = (db) => ({
       first_name: firstName || 'Trader',
       balance: 10000.00,
       referred_by: referredBy,
+      is_admin: isAdmin,
+      is_pro: isAdmin,
       last_active: new Date().toISOString(),
       created_at: new Date().toISOString()
     };
@@ -85,10 +99,7 @@ module.exports = (db) => ({
       .select()
       .single();
 
-    if (error) {
-      console.error('DB Insert Error:', error);
-      throw new Error(error.message);
-    }
+    if (error) throw new Error(error.message);
 
     try {
        await db.supabase.from('profiles').update({
@@ -107,15 +118,13 @@ module.exports = (db) => ({
       .eq('telegram_id', telegramId)
       .single();
 
-    if (!profile) throw new Error('Profil in der Datenbank nicht gefunden.');
+    if (!profile) throw new Error('Profil nicht gefunden.');
 
     const changes = profile.username_changes || 0;
-    const canChange = isPro ? true : (changes < 1);
-    
-    if (!canChange) throw new Error('Namensänderung bereits verbraucht.');
+    if (!isPro && changes >= 1) throw new Error('Namensänderung bereits verbraucht.');
 
     const taken = await db.isUsernameTaken(newUsername);
-    if (taken) throw new Error('Dieser Username ist bereits vergeben.');
+    if (taken) throw new Error('Username vergeben.');
 
     const { error } = await db.supabase
       .from('profiles')
@@ -141,7 +150,7 @@ module.exports = (db) => ({
     await db.supabase.from('deletion_requests').insert({
       profile_id: profileId,
       status: 'pending',
-      requested_at: new Date().toISOString()
+      created_at: new Date().toISOString()
     });
   },
 
@@ -155,10 +164,8 @@ module.exports = (db) => ({
     await db.supabase.from('assets').delete().eq('profile_id', profileId);
     await db.supabase.from('transactions').delete().eq('profile_id', profileId);
     await db.supabase.from('real_estate').delete().eq('profile_id', profileId);
-    await db.supabase.from('collectibles').delete().eq('profile_id', profileId);
-    await db.supabase.from('pro_requests').delete().eq('profile_id', profileId);
-    await db.supabase.from('deletion_requests').delete().eq('profile_id', profileId);
-    await db.supabase.from('user_achievements').delete().eq('profile_id', profileId);
+    await db.supabase.from('user_collectibles').delete().eq('profile_id', profileId);
+    await db.supabase.from('leveraged_positions').delete().eq('profile_id', profileId);
     
     const { error } = await db.supabase.from('profiles').delete().eq('id', profileId);
     

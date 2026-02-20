@@ -11,7 +11,7 @@ module.exports = (db) => ({
     return data || [];
   },
 
-  async openPosition(profileId, symbol, direction, collateral, leverage) {
+  async openPosition(profileId, symbol, direction, collateral, leverage, options = {}) {
     const price = await db.getCurrentPrice(symbol);
     if (!price) throw new Error('Preis nicht verfügbar');
 
@@ -29,8 +29,8 @@ module.exports = (db) => ({
     }
 
     const liqPrice = direction === 'LONG' 
-      ? price * (1 - 1 / leverage) 
-      : price * (1 + 1 / leverage);
+      ? price * (1 - (1 / leverage) * 0.9) 
+      : price * (1 + (1 / leverage) * 0.9);
 
     const { data: pos, error: posErr } = await db.supabase
       .from('leveraged_positions')
@@ -42,7 +42,12 @@ module.exports = (db) => ({
         collateral,
         entry_price: price,
         liquidation_price: liqPrice,
-        status: 'OPEN'
+        status: 'OPEN',
+        stop_loss: options.stop_loss || null,
+        take_profit: options.take_profit || null,
+        limit_price: options.limit_price || null,
+        trailing_stop: options.trailing_stop || false,
+        is_limit_order: !!options.limit_price
       })
       .select()
       .single();
@@ -54,7 +59,7 @@ module.exports = (db) => ({
     await db.supabase.from('transactions').insert({
       profile_id: profileId,
       type: 'LEVERAGE_OPEN',
-      amount_eur: -totalCost,
+      total_eur: -totalCost,
       symbol: symbol.toUpperCase(),
       details: `${leverage}x ${direction} @ ${price.toFixed(2)}€`
     });
@@ -86,7 +91,8 @@ module.exports = (db) => ({
       pnl = ((entryPrice - currentPrice) / entryPrice) * notional;
     }
 
-    let payout = collateral + pnl;
+    const fee = notional * 0.005;
+    let payout = (collateral + pnl) - fee;
     if (payout < 0) payout = 0;
 
     const { error: updErr } = await db.supabase
@@ -95,7 +101,8 @@ module.exports = (db) => ({
         status: 'CLOSED',
         exit_price: currentPrice,
         closed_at: new Date().toISOString(),
-        pnl: pnl
+        pnl: pnl,
+        equity_at_close: collateral + pnl
       })
       .eq('id', positionId);
 
@@ -107,9 +114,53 @@ module.exports = (db) => ({
     await db.supabase.from('transactions').insert({
       profile_id: profileId,
       type: 'LEVERAGE_CLOSE',
-      amount_eur: payout,
+      total_eur: payout,
       symbol: pos.symbol,
-      details: `PnL: ${pnl.toFixed(2)}€`
+      details: `PnL: ${pnl.toFixed(2)}€ (Fee: ${fee.toFixed(2)}€)`
+    });
+
+    return { pnl, payout };
+  },
+
+  async partialClose(positionId, profileId, percentage = 0.5) {
+    const { data: pos } = await db.supabase
+      .from('leveraged_positions')
+      .select('*')
+      .eq('id', positionId)
+      .eq('profile_id', profileId)
+      .eq('status', 'OPEN')
+      .single();
+
+    if (!pos) throw new Error('Position nicht gefunden');
+
+    const currentPrice = await db.getCurrentPrice(pos.symbol);
+    const closingCollateral = Number(pos.collateral) * percentage;
+    const closingNotional = closingCollateral * Number(pos.leverage);
+
+    let pnl = 0;
+    if (pos.direction === 'LONG') {
+      pnl = ((currentPrice - Number(pos.entry_price)) / Number(pos.entry_price)) * closingNotional;
+    } else {
+      pnl = ((Number(pos.entry_price) - currentPrice) / Number(pos.entry_price)) * closingNotional;
+    }
+
+    const fee = closingNotional * 0.005;
+    const payout = (closingCollateral + pnl) - fee;
+
+    await db.supabase
+      .from('leveraged_positions')
+      .update({ collateral: Number(pos.collateral) - closingCollateral })
+      .eq('id', positionId);
+
+    const { data: profile } = await db.supabase.from('profiles').select('balance').eq('id', profileId).single();
+    await db.updateBalance(profileId, Number(profile.balance) + Math.max(0, payout));
+
+    await db.supabase.from('transactions').insert({
+      profile_id: profileId,
+      type: 'LEVERAGE_CLOSE',
+      total_eur: payout,
+      symbol: pos.symbol,
+      details: `Partial Close ${percentage * 100}% | PnL: ${pnl.toFixed(2)}€`
     });
 
     return { pnl, payout };
@@ -147,14 +198,15 @@ module.exports = (db) => ({
             status: 'LIQUIDATED',
             exit_price: currentPrice,
             closed_at: new Date().toISOString(),
-            pnl: -Number(pos.collateral)
+            pnl: -Number(pos.collateral),
+            liquidation_reason: 'AUTO_LIQUIDATION'
           })
           .eq('id', pos.id);
 
         await db.supabase.from('transactions').insert({
           profile_id: pos.profile_id,
           type: 'LIQUIDATION',
-          amount_eur: 0,
+          total_eur: 0,
           symbol: pos.symbol,
           details: `Totalverlust bei ${currentPrice.toFixed(2)}€`
         });
@@ -163,5 +215,18 @@ module.exports = (db) => ({
       }
     }
     return liquidated;
+  },
+
+  async getHistory(profileId) {
+    const { data, error } = await db.supabase
+      .from('leveraged_positions')
+      .select('*')
+      .eq('profile_id', profileId)
+      .neq('status', 'OPEN')
+      .order('closed_at', { ascending: false })
+      .limit(20);
+
+    if (error) throw error;
+    return data || [];
   }
 });
