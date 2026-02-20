@@ -4,12 +4,16 @@ const { db } = require('../../core/database');
 const { parseTelegramUser } = require('../auth');
 
 async function getProfileCollectibles(profileId) {
-  const { data, error } = await db.supabase
-    .from('user_collectibles')
-    .select('*, collectibles(*)')
-    .eq('profile_id', profileId);
-  if (error) throw error;
-  return data || [];
+  try {
+    const { data, error } = await db.supabase
+      .from('user_collectibles')
+      .select('*, collectibles(*)')
+      .eq('profile_id', profileId);
+    if (error) return [];
+    return data || [];
+  } catch (e) {
+    return [];
+  }
 }
 
 router.get('/', async (req, res) => {
@@ -48,8 +52,10 @@ router.get('/public/:id', async (req, res) => {
     if (!publicProfile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     let collectibles = [];
-    if (!publicProfile.hide_collectibles) {
-      collectibles = await getProfileCollectibles(publicProfile.id);
+    const fullProfile = await db.getProfile(req.params.id);
+
+    if (fullProfile && !fullProfile.hide_collectibles) {
+      collectibles = await getProfileCollectibles(fullProfile.id);
     }
 
     res.json({ 
