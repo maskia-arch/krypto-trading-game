@@ -157,10 +157,13 @@ const useStore = create((set, get) => ({
 
   getAvailableMargin: () => {
     const { profile, leveragePositions, leveragePolicy } = get();
-    if (!profile || !leveragePolicy) return 0;
+    if (!profile) return 0;
 
+    // Fallback auf 0.5 (50%), falls Policy noch nicht geladen wurde
+    const factor = leveragePolicy?.margin_limit_factor ?? 0.5;
+    
     const usedMargin = (leveragePositions || []).reduce((sum, p) => sum + Number(p.collateral), 0);
-    const maxMargin = Number(profile.balance) * (leveragePolicy.margin_limit_factor || 0);
+    const maxMargin = Number(profile.balance) * factor;
     
     return Math.max(0, maxMargin - usedMargin);
   },
