@@ -1,8 +1,10 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import useStore from '../../lib/store';
 
 export default function LiveChart30m() {
-  const { chartSymbol, setChartSymbol, chartData, loadChart, prices } = useStore();
+  const { chartSymbol, chartData, loadChart, prices } = useStore();
+  // Lokaler State für den Zeitbereich (10m oder 30m)
+  const [timeRange, setTimeRange] = useState('30m');
 
   const coins = [
     { id: 'BTC', label: 'Bitcoin', color: '#F7931A' },
@@ -10,11 +12,12 @@ export default function LiveChart30m() {
     { id: 'LTC', label: 'Litecoin', color: '#BFBBBB' }
   ];
 
+  // Effekt zum Laden der Chart-Daten basierend auf Symbol UND Zeitraum
   useEffect(() => {
-    loadChart(chartSymbol, '30m');
-    const interval = setInterval(() => loadChart(chartSymbol, '30m'), 45000);
+    loadChart(chartSymbol, timeRange);
+    const interval = setInterval(() => loadChart(chartSymbol, timeRange), 45000);
     return () => clearInterval(interval);
-  }, [chartSymbol, loadChart]);
+  }, [chartSymbol, timeRange, loadChart]);
 
   const activeCoin = coins.find(c => c.id === chartSymbol) || coins[0];
   const currentPrice = prices[chartSymbol] || 0;
@@ -55,29 +58,30 @@ export default function LiveChart30m() {
       <div className="absolute top-0 right-0 w-32 h-32 blur-[60px] rounded-full pointer-events-none transition-colors duration-500" style={{ backgroundColor: activeCoin.color + '1A' }}></div>
 
       <div className="flex justify-between items-start relative z-10">
+        {/* Neuer Time-Range-Switcher statt Coin-Selector */}
         <div className="flex gap-1 bg-black/60 p-1 rounded-xl border border-white/5 backdrop-blur-md">
-          {coins.map(c => (
+          {['10m', '30m'].map(range => (
             <button
-              key={c.id}
-              onClick={() => setChartSymbol(c.id)}
-              className={`px-3 py-1.5 text-[11px] font-black tracking-wider rounded-lg transition-all ${
-                chartSymbol === c.id 
+              key={range}
+              onClick={() => setTimeRange(range)}
+              className={`px-3 py-1.5 text-[11px] font-black uppercase tracking-wider rounded-lg transition-all ${
+                timeRange === range 
                   ? 'bg-white/10 text-white shadow-sm scale-105' 
                   : 'text-[var(--text-dim)] hover:text-white/80'
               }`}
-              style={chartSymbol === c.id ? { color: c.color, textShadow: `0 0 10px ${c.color}80` } : {}}
             >
-              {c.id}
+              {range}
             </button>
           ))}
         </div>
+
         <div className="text-right flex flex-col items-end">
           <div className="flex items-center gap-1.5">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: activeCoin.color }}></span>
               <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: activeCoin.color }}></span>
             </span>
-            <p className="text-[9px] text-[var(--text-dim)] uppercase tracking-[0.2em] font-black">30m Live</p>
+            <p className="text-[9px] text-[var(--text-dim)] uppercase tracking-[0.2em] font-black">{timeRange} Live</p>
           </div>
           <p className="text-lg font-mono font-black text-white tracking-tighter mt-0.5">
             {currentPrice.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€

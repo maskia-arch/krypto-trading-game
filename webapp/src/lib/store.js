@@ -10,7 +10,7 @@ const useStore = create((set, get) => ({
   prevPrices: {},
   chartData: [],
   chartSymbol: 'BTC',
-  chartRange: '3h',
+  chartRange: '30m', // Standard auf 30m für Hebel-Ansicht
   leaderboard: [],
   season: null,
   feePool: 0,
@@ -144,14 +144,23 @@ const useStore = create((set, get) => ({
 
   fetchLeveragePositions: async () => {
     try {
-      const data = await api.getLeveragePositions();
+      const [posData, priceData] = await Promise.all([
+        api.getLeveragePositions(),
+        api.getPrices()
+      ]);
+
+      const priceMap = {};
+      (priceData.prices || []).forEach(p => { 
+        priceMap[p.symbol] = Number(p.price_eur); 
+      });
+
       set({
-        leveragePositions: Array.isArray(data.positions) ? data.positions : [],
-        leveragePolicy: data.policy || null
+        leveragePositions: Array.isArray(posData.positions) ? posData.positions : [],
+        leveragePolicy: posData.policy || get().leveragePolicy,
+        prices: priceMap 
       });
     } catch (e) {
-      console.error(e);
-      set({ leveragePositions: [] });
+      console.error("Leverage Fetch Error:", e);
     }
   },
 
@@ -159,9 +168,7 @@ const useStore = create((set, get) => ({
     const { profile, leveragePositions, leveragePolicy } = get();
     if (!profile) return 0;
 
-    // Fallback auf 0.5 (50%), falls Policy noch nicht geladen wurde
     const factor = leveragePolicy?.margin_limit_factor ?? 0.5;
-    
     const usedMargin = (leveragePositions || []).reduce((sum, p) => sum + Number(p.collateral), 0);
     const maxMargin = Number(profile.balance) * factor;
     

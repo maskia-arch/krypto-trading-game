@@ -1,16 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import TradeView from './TradeView';
 import ChartView from './ChartView';
 import LiveChart30m from '../components/trading/LiveChart30m';
 import LeveragePanel from '../components/trading/LeveragePanel';
 import PositionsTable from '../components/trading/PositionsTable';
+import useStore from '../lib/store';
 
 export default function WalletView() {
   const [mode, setMode] = useState('spot');
+  const { fetchLeveragePositions } = useStore();
+
+  // Automatisches Update der Positionen im Hintergrund (alle 5 Sekunden)
+  useEffect(() => {
+    fetchLeveragePositions();
+
+    const interval = setInterval(() => {
+      fetchLeveragePositions();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [fetchLeveragePositions]);
 
   return (
     <div className="space-y-4 pb-6 tab-enter">
-      {/* Mode Switcher */}
+      {/* Mode Switcher: Spot vs. Hebel */}
       <div className="flex bg-black/60 backdrop-blur-md p-1.5 rounded-2xl border border-white/5 shadow-inner">
         <button
           onClick={() => setMode('spot')}
@@ -37,14 +50,20 @@ export default function WalletView() {
       {/* Content Rendering */}
       {mode === 'spot' ? (
         <div className="space-y-4 tab-enter">
+          {/* Im Spot-Modus: Chart oben, dann Trade-Kacheln und Eingabe */}
           <ChartView />
           <TradeView />
         </div>
       ) : (
         <div className="space-y-4 tab-enter">
+          {/* Im Hebel-Modus: Live-Chart mit neuem 10m/30m Toggle */}
           <LiveChart30m />
+          
+          {/* Aktive Positionen direkt unter dem Chart für maximale Sichtbarkeit */}
+          <PositionsTable /> 
+          
+          {/* Eingabe-Panel für neue Hebel-Trades ganz unten */}
           <LeveragePanel />
-          <PositionsTable />
         </div>
       )}
     </div>
