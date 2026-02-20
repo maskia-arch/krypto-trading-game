@@ -13,13 +13,10 @@ export default function PriceTicker({ symbol, price, prevPrice }) {
   useEffect(() => {
     if (!ref.current || price === undefined || price === lastPrice.current) return;
     
-    // Animation basierend auf Preisrichtung
     const isUp = price > lastPrice.current;
     
-    // Entferne alte Klassen für sauberen Neustart der Animation
     ref.current.classList.remove('tick-up', 'tick-down', 'glow-green', 'glow-red');
     
-    // Trigger Reflow für CSS-Animation
     void ref.current.offsetWidth; 
 
     if (isUp) {
@@ -30,7 +27,6 @@ export default function PriceTicker({ symbol, price, prevPrice }) {
     
     lastPrice.current = price;
     
-    // Animation nach 800ms zurücksetzen
     const t = setTimeout(() => {
       if (ref.current) {
         ref.current.classList.remove('tick-up', 'tick-down', 'glow-green', 'glow-red');
@@ -44,14 +40,13 @@ export default function PriceTicker({ symbol, price, prevPrice }) {
   const meta = COIN_META[symbol] || { emoji: '🪙', name: symbol, color: 'var(--text-dim)' };
 
   return (
-    <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all duration-300"
+    <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all duration-300 ml-2 first:ml-4 last:mr-4"
          style={{ 
            background: 'rgba(255,255,255,0.03)', 
            border: '1px solid rgba(255,255,255,0.06)',
            backdropFilter: 'blur(4px)'
          }}>
       
-      {/* Coin Icon mit dezentem Branding-Farbakzent */}
       <span className="text-[11px] leading-none" style={{ color: meta.color }}>
         {meta.emoji}
       </span>

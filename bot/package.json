@@ -1,7 +1,7 @@
 {
-  "name": "krypto-trading-bot",
-  "version": "1.0.0",
-  "description": "Telegram Krypto Trading Game",
+  "name": "valuetradegame-backend",
+  "version": "0.2.0",
+  "description": "ValueTradeGame - Telegram Leverage Trading Game Backend",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js",

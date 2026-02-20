@@ -8,14 +8,14 @@ export default function Navbar({ tabs, currentTab, onTabChange }) {
            borderColor: 'rgba(255,255,255,0.06)',
            paddingBottom: 'max(env(safe-area-inset-bottom), 0.6rem)' 
          }}>
-      <div className="flex justify-around items-center pt-2">
+      <div className="flex justify-around items-center pt-2 px-1">
         {tabs.map(t => {
           const active = currentTab === t.id;
           return (
             <button 
               key={t.id} 
               onClick={() => onTabChange(t.id)}
-              className="relative flex flex-col items-center px-4 py-1 group"
+              className="relative flex flex-col items-center px-2 py-1 group flex-1"
               style={{ WebkitTapHighlightColor: 'transparent' }}
             >
               {/* Aktiver Hintergrund-Glow */}

@@ -3,17 +3,65 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  
   <meta name="theme-color" content="#06080f" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="format-detection" content="telephone=no" />
+  <meta name="description" content="ValueTradeGame - Das ultimative Krypto-Trading-Erlebnis mit Hebel-Montag und Pro-Features." />
   
-  <title>ValueTradeGame</title>
+  <title>ValueTradeGame v0.2</title>
   
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <style>
+    body {
+      background-color: #06080f;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    /* Einfacher Loader für den ersten Moment des App-Starts */
+    #initial-loading {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      background: #06080f;
+    }
+    .loader-pulse {
+      width: 40px;
+      height: 40px;
+      border: 2px solid rgba(56, 189, 248, 0.1);
+      border-top-color: #38bdf8;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
 </head>
-<body style="background-color: #06080f;">
+<body>
+  <div id="initial-loading">
+    <div class="loader-pulse"></div>
+  </div>
+
   <div id="root"></div>
+
   <script type="module" src="/src/main.jsx"></script>
+
+  <script>
+    // Entfernt den Initial-Loader, sobald die React-App übernimmt
+    window.addEventListener('load', () => {
+      const loader = document.getElementById('initial-loading');
+      if (loader) {
+        setTimeout(() => {
+          loader.style.opacity = '0';
+          setTimeout(() => loader.remove(), 300);
+        }, 500);
+      }
+    });
+  </script>
 </body>
 </html>

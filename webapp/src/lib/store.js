@@ -17,8 +17,10 @@ const useStore = create((set, get) => ({
   achievements: [],
   loading: true,
   error: null,
-  tab: 'trade',
+  tab: 'wallet',
   toast: null,
+  leveragePositions: [],
+  leveragePolicy: null,
 
   setTab: (tab) => set({ tab }),
   setChartSymbol: (s) => set({ chartSymbol: s }),
@@ -40,10 +42,15 @@ const useStore = create((set, get) => ({
 
   fetchProfile: async () => {
     try {
-      set({ loading: true, error: null });
+      if (!get().profile) {
+        set({ loading: true });
+      }
+      set({ error: null });
+      
       const data = await api.getProfile();
       const priceMap = {};
       (data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
+      
       set({
         profile: { ...data.profile, collectibles: data.collectibles || [] },
         assets: data.assets || [],
@@ -69,7 +76,7 @@ const useStore = create((set, get) => ({
         collectibles: data.collectibles || [] 
       };
     } catch (e) {
-      console.error('Public Profile Error:', e);
+      console.error(e);
       throw e;
     }
   },
@@ -126,9 +133,35 @@ const useStore = create((set, get) => ({
         feePool: data.pool || 0 
       });
     } catch (e) {
-      console.error('Leaderboard Store Error:', e);
+      console.error(e);
     }
   },
+
+  fetchLeveragePositions: async () => {
+    try {
+      const data = await api.getLeveragePositions();
+      set({
+        leveragePositions: data.positions || [],
+        leveragePolicy: data.policy || null
+      });
+    } catch (e) {
+      console.error(e);
+    }
+  },
+
+  openLeveragePosition: async (symbol, direction, collateral, leverage) => {
+    const data = await api.openLeverage(symbol, direction, collateral, leverage);
+    await get().fetchProfile();
+    await get().fetchLeveragePositions();
+    return data;
+  },
+
+  closeLeveragePosition: async (positionId) => {
+    const data = await api.closeLeverage(positionId);
+    await get().fetchProfile();
+    await get().fetchLeveragePositions();
+    return data;
+  }
 }));
 
 export default useStore;

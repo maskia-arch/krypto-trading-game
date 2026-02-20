@@ -9,6 +9,7 @@ router.get('/chart/:symbol', async (req, res) => {
 
   try {
     const rangeMap = {
+      '30m': 30,
       '1m': 60,
       '3h': 180,
       '12h': 720,
@@ -152,67 +153,6 @@ router.get('/collectibles/mine', async (req, res) => {
     res.json({ collectibles: data });
   } catch (err) {
     res.status(500).json({ error: 'Sammlung Fehler' });
-  }
-});
-
-router.get('/leverage/positions', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Unauthorized' });
-
-  try {
-    const profile = await db.getProfile(tgId);
-    const { data } = await db.supabase
-      .from('leverage_positions')
-      .select('*')
-      .eq('profile_id', profile.id)
-      .eq('is_open', true);
-
-    const prices = await db.getAllPrices();
-    const priceMap = {};
-    prices.forEach(p => priceMap[p.symbol] = Number(p.price_eur));
-
-    const positions = (data || []).map(pos => {
-      const currentPrice = priceMap[pos.symbol] || Number(pos.entry_price);
-      const priceDiff = currentPrice - Number(pos.entry_price);
-      const pnlMultiplier = pos.direction === 'long' ? 1 : -1;
-      const pnlPercent = (priceDiff / Number(pos.entry_price)) * pos.leverage * pnlMultiplier;
-      return { ...pos, current_price: currentPrice, unrealized_pnl: Number(pos.amount_eur) * pnlPercent };
-    });
-
-    res.json({ positions });
-  } catch (err) {
-    res.status(500).json({ error: 'Hebel Fehler' });
-  }
-});
-
-router.post('/leverage/open', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Unauthorized' });
-
-  const { symbol, direction, leverage, amount_eur } = req.body;
-
-  try {
-    const profile = await db.getProfile(tgId);
-    if (!profile.is_pro) return res.status(403).json({ error: 'Pro benötigt' });
-    if (Number(amount_eur) > Number(profile.balance)) return res.status(400).json({ error: 'Guthaben unzureichend' });
-
-    const price = await db.getCurrentPrice(symbol);
-    const liqPrice = direction === 'long' ? price * (1 - 1 / leverage) : price * (1 + 1 / leverage);
-
-    await db.updateBalance(profile.id, Number(profile.balance) - Number(amount_eur));
-
-    await db.supabase.from('leverage_positions').insert({
-      profile_id: profile.id,
-      symbol, direction, leverage,
-      entry_price: price,
-      amount_eur: Number(amount_eur),
-      liquidation: liqPrice,
-      is_open: true
-    });
-
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: 'Hebel Fehler' });
   }
 });
 

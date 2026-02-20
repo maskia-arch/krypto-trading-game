@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import useStore from '../lib/store';
-import TradeView from './TradeView';
 
 export default function AssetsView() {
   const { profile, fetchProfile, showToast } = useStore();
-  const [sub, setSub] = useState('wallet');
+  const [sub, setSub] = useState('collectibles');
   
   const [reTypes, setReTypes] = useState([]);
   const [myRE, setMyRE] = useState([]);
@@ -93,9 +92,8 @@ export default function AssetsView() {
     <div className="space-y-3 pb-4 tab-enter">
       <div className="flex gap-1.5">
         {[
-          { id: 'wallet', label: '💳 Wallet', color: 'text-neon-gold', bg: 'bg-neon-gold/10', border: 'border-neon-gold/25' },
-          { id: 'realestate', label: '🏠 Immobilien', color: 'text-neon-blue', bg: 'bg-neon-blue/10', border: 'border-neon-blue/25' },
           { id: 'collectibles', label: '💎 Besitztümer', color: 'text-neon-purple', bg: 'bg-neon-purple/10', border: 'border-neon-purple/25' },
+          { id: 'realestate', label: '🏠 Immobilien', color: 'text-neon-blue', bg: 'bg-neon-blue/10', border: 'border-neon-blue/25' }
         ].map(t => {
           const act = sub === t.id;
           return (
@@ -109,11 +107,7 @@ export default function AssetsView() {
         })}
       </div>
 
-      {sub === 'wallet' ? (
-        <div className="mt-2">
-          <TradeView />
-        </div>
-      ) : loading ? (
+      {loading ? (
         <div className="flex flex-col gap-3 mt-4">
           <div className="shimmer h-16 w-full rounded-xl" />
           <div className="shimmer h-24 w-full rounded-xl" />

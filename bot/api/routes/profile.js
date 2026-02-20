@@ -3,6 +3,12 @@ const router = express.Router();
 const { db } = require('../../core/database');
 const { parseTelegramUser } = require('../auth');
 
+function isPro(profile) {
+  if (profile.is_admin) return true;
+  if (!profile.is_pro || !profile.pro_until) return false;
+  return new Date(profile.pro_until) > new Date();
+}
+
 async function getProfileCollectibles(profileId) {
   try {
     const { data, error } = await db.supabase
@@ -24,9 +30,23 @@ router.get('/', async (req, res) => {
     const profile = await db.getProfile(tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
+    if (!isPro(profile) && profile.background_url) {
+      if (!profile.background_disabled_at) {
+        await db.supabase
+          .from('profiles')
+          .update({ background_disabled_at: new Date().toISOString() })
+          .eq('id', profile.id);
+      }
+      profile.background_url = null;
+    } else if (isPro(profile) && profile.background_disabled_at) {
+      await db.supabase
+        .from('profiles')
+        .update({ background_disabled_at: null })
+        .eq('id', profile.id);
+    }
+
     const assets = await db.getAssets(profile.id);
     const prices = await db.getAllPrices();
-    
     const collectibles = await getProfileCollectibles(profile.id);
     
     let achievements = [];
@@ -51,11 +71,14 @@ router.get('/public/:id', async (req, res) => {
     const publicProfile = await db.getPublicProfile(req.params.id);
     if (!publicProfile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
-    let collectibles = [];
-    const fullProfile = await db.getProfile(req.params.id);
+    const fullProfileForCheck = await db.getProfile(req.params.id);
+    if (fullProfileForCheck && !isPro(fullProfileForCheck)) {
+      publicProfile.background_url = null;
+    }
 
-    if (fullProfile && !fullProfile.hide_collectibles) {
-      collectibles = await getProfileCollectibles(fullProfile.id);
+    let collectibles = [];
+    if (fullProfileForCheck && !fullProfileForCheck.hide_collectibles) {
+      collectibles = await getProfileCollectibles(fullProfileForCheck.id);
     }
 
     res.json({ 
@@ -67,25 +90,78 @@ router.get('/public/:id', async (req, res) => {
   }
 });
 
-router.post('/update-privacy', async (req, res) => {
+router.post('/background', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
 
-  const { hide_collectibles } = req.body;
+  const { background_url } = req.body;
+  if (!background_url) return res.status(400).json({ error: 'Keine Bilddaten angegeben' });
+
+  try {
+    const profile = await db.getProfile(tgId);
+    if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
+    if (!isPro(profile)) return res.status(403).json({ error: 'Pro-Status erforderlich' });
+
+    const matches = background_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return res.status(400).json({ error: 'Ungültiges Bildformat' });
+
+    const contentType = matches[1];
+    if (!contentType.startsWith('image/')) return res.status(400).json({ error: 'Nur Bilder erlaubt' });
+
+    const buffer = Buffer.from(matches[2], 'base64');
+    const extension = contentType.split('/')[1] || 'jpg';
+    const fileName = `bg_${profile.id}_${Date.now()}.${extension}`;
+
+    if (profile.background_url) {
+      const oldFile = profile.background_url.split('/').pop();
+      await db.supabase.storage.from('backgrounds').remove([oldFile]);
+    }
+
+    const { error: uploadError } = await db.supabase.storage
+      .from('backgrounds')
+      .upload(fileName, buffer, { contentType, upsert: true });
+
+    if (uploadError) throw uploadError;
+
+    const { data: { publicUrl } } = db.supabase.storage
+      .from('backgrounds')
+      .getPublicUrl(fileName);
+
+    await db.supabase
+      .from('profiles')
+      .update({ 
+        background_url: publicUrl, 
+        background_disabled_at: null 
+      })
+      .eq('id', profile.id);
+
+    res.json({ success: true, background_url: publicUrl });
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Upload des Hintergrunds' });
+  }
+});
+
+router.delete('/background', async (req, res) => {
+  const tgId = parseTelegramUser(req);
+  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
 
   try {
     const profile = await db.getProfile(tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
-    const { error } = await db.supabase
+    if (profile.background_url) {
+      const fileName = profile.background_url.split('/').pop();
+      await db.supabase.storage.from('backgrounds').remove([fileName]);
+    }
+
+    await db.supabase
       .from('profiles')
-      .update({ hide_collectibles: !!hide_collectibles })
+      .update({ background_url: null, background_disabled_at: null })
       .eq('id', profile.id);
 
-    if (error) throw error;
-    res.json({ success: true, hide_collectibles: !!hide_collectibles });
+    res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Fehler beim Aktualisieren der Privatsphäre' });
+    res.status(500).json({ error: 'Fehler beim Löschen' });
   }
 });
 
@@ -167,13 +243,35 @@ router.post('/update-username', async (req, res) => {
     const profile = await db.getProfile(tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
-    const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
+    const proValid = isPro(profile);
 
-    await db.updateUsername(tgId, username, isPro);
+    await db.updateUsername(tgId, username, proValid);
     
     res.json({ success: true, username });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/update-privacy', async (req, res) => {
+  const tgId = parseTelegramUser(req);
+  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
+
+  const { hide_collectibles } = req.body;
+
+  try {
+    const profile = await db.getProfile(tgId);
+    if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
+
+    const { error } = await db.supabase
+      .from('profiles')
+      .update({ hide_collectibles: !!hide_collectibles })
+      .eq('id', profile.id);
+
+    if (error) throw error;
+    res.json({ success: true, hide_collectibles: !!hide_collectibles });
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Aktualisieren der Privatsphäre' });
   }
 });
 

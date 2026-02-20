@@ -37,7 +37,7 @@ const seasonService = {
 
     const { leaders } = await db.getLeaderboard('profit_season', 10);
     
-    const distribution = [0.40, 0.25, 0.15, 0.20/7, 0.20/7, 0.20/7, 0.20/7, 0.20/7, 0.20/7, 0.20/7];
+    const distribution = [0.40, 0.25, 0.15, 0.04, 0.04, 0.04, 0.04, 0.04, 0.04, 0.04];
 
     for (let i = 0; i < leaders.length; i++) {
       const winner = leaders[i];
@@ -45,19 +45,26 @@ const seasonService = {
       const prizeMoney = parseFloat((pool * share).toFixed(2));
 
       if (prizeMoney > 0) {
-        const newBalance = parseFloat((Number(winner.balance) + prizeMoney).toFixed(2));
+        const { data: profile } = await db.supabase.from('profiles').select('balance').eq('id', winner.id).single();
+        const newBalance = parseFloat((Number(profile.balance) + prizeMoney).toFixed(2));
         await db.updateBalance(winner.id, newBalance);
 
-        await db.logTransaction(winner.id, 'prize', null, null, null, 0, prizeMoney);
+        await db.supabase.from('transactions').insert({
+          profile_id: winner.id,
+          type: 'achievement_reward',
+          symbol: 'PRIZE',
+          total_eur: prizeMoney,
+          details: `Season Prize: ${season.name}`
+        });
 
         const medals = ['🥇', '🥈', '🥉', '🎖️', '🎖️', '🎖️', '🎖️', '🎖️', '🎖️', '🎖️'];
         const medal = medals[i] || '🎖️';
         
         try {
           await bot.api.sendMessage(winner.telegram_id, 
-            `${medal} <b>CONGRATULATIONS!</b>\n\n` +
+            `${medal} <b>HERZLICHEN GLÜCKWUNSCH!</b>\n\n` +
             `Du hast die <b>${esc(season.name)}</b> auf Platz <b>${i + 1}</b> abgeschlossen!\n` +
-            `Dein Preisgeld von <b>${prizeMoney.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b> wurde deinem Konto gutgeschrieben.\n\nViel Erfolg in der nächsten Season! 🚀`,
+            `Dein Preisgeld von <b>${prizeMoney.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€</b> wurde deinem Konto gutgeschrieben.\n\nViel Erfolg in der nächsten Season von ValueTradeGame! 🚀`,
             { parse_mode: 'HTML' }
           );
         } catch (e) {
@@ -74,8 +81,8 @@ const seasonService = {
     const endDate = new Date();
     endDate.setDate(startDate.getDate() + 30);
 
-    const { data: seasons } = await db.supabase.from('seasons').select('id', { count: 'exact' });
-    const seasonNumber = (seasons?.length || 0) + 1;
+    const { count } = await db.supabase.from('seasons').select('*', { count: 'exact', head: true });
+    const seasonNumber = (count || 0) + 1;
 
     await db.supabase.from('seasons').insert({
       name: `Season ${seasonNumber}`,

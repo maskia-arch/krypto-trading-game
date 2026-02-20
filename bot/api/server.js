@@ -3,12 +3,13 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const { VERSION } = require('../core/config');
-const { db } = require('../core/database'); // NEU: Datenbank-Import für die Affiliate-Route
+const { db } = require('../core/database');
 
 const tradingRoutes = require('./routes/trading');
 const profileRoutes = require('./routes/profile');
 const economyRoutes = require('./routes/economy');
 const collectiblesRoutes = require('./routes/collectibles');
+const leverageRoutes = require('./routes/leverage');
 
 function getGameVersion() {
   try {
@@ -48,7 +49,6 @@ function setupApi(bot) {
 
   app.get('/api/version', (req, res) => res.json({ version: getGameVersion() }));
 
-  // --- NEU: Affiliate / Referrals Endpunkt ---
   app.get('/api/referrals', async (req, res) => {
     const tgId = parseTelegramUser(req);
     if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
@@ -67,12 +67,12 @@ function setupApi(bot) {
       res.status(500).json({ error: 'Server Fehler beim Laden der Referrals' });
     }
   });
-  // -------------------------------------------
 
   app.use('/api/trade', tradingRoutes);
   app.use('/api/profile', profileRoutes);
   app.use('/api/economy/collectibles', collectiblesRoutes);
   app.use('/api/economy', economyRoutes);
+  app.use('/api/leverage', leverageRoutes);
 
   app.use((err, req, res, next) => {
     console.error(err.stack);

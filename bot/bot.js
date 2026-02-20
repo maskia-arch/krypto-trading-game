@@ -106,7 +106,6 @@ bot.on('message:text', async (ctx) => {
       return ctx.reply("❌ Nur Buchstaben (a-z, A-Z) und Zahlen (0-9) sind erlaubt. Bitte antworte erneut auf meine vorherige Nachricht.", { reply_markup: { force_reply: true } });
     }
 
-    // EXTRAKTION DER WERBER-ID
     let referredBy = null;
     const refMatch = ctx.message.reply_to_message.text.match(/Ticket: REF-(\d+)/);
     if (refMatch) {
@@ -229,8 +228,15 @@ async function startApp() {
     });
 
     setupCronJobs(bot);
+
+    if (db.cleanupExpiredBackgrounds) {
+      await db.cleanupExpiredBackgrounds();
+    }
     
     setInterval(checkFeedbackUsers, 10 * 60 * 1000);
+    setInterval(async () => {
+      if (db.cleanupExpiredBackgrounds) await db.cleanupExpiredBackgrounds();
+    }, 24 * 60 * 60 * 1000);
 
     bot.start({
       drop_pending_updates: true,

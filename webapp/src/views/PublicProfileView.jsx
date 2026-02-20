@@ -53,16 +53,27 @@ export default function PublicProfileView({ userId, onClose }) {
     <div className="space-y-4 tab-enter pb-20 relative pt-2">
       <button 
         onClick={onClose}
-        className="absolute top-0 right-2 z-50 bg-black/50 border border-white/10 w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:bg-white/10 transition-colors"
+        className="absolute top-4 right-4 z-50 bg-black/60 border border-white/10 w-8 h-8 rounded-full flex items-center justify-center text-white/70 hover:bg-white/10 transition-colors shadow-lg"
       >
         ✕
       </button>
 
-      <section className="card p-6 flex flex-col items-center relative overflow-hidden">
-        <div className="absolute top-0 left-0 w-full h-24 bg-gradient-to-b from-neon-blue/20 to-transparent"></div>
+      <section className="card p-0 flex flex-col items-center relative overflow-hidden min-h-[220px]">
+        {/* Background Bild Bereich */}
+        <div className="absolute top-0 left-0 w-full h-32 bg-black/40 overflow-hidden">
+          {profileInfo.background_url ? (
+            <img 
+              src={profileInfo.background_url} 
+              alt="Background" 
+              className="w-full h-full object-cover"
+            />
+          ) : (
+            <div className="w-full h-full bg-gradient-to-b from-neon-blue/20 to-transparent"></div>
+          )}
+        </div>
         
-        <div className="relative z-10 flex flex-col items-center mt-2">
-          <div className="w-24 h-24 rounded-full border-2 border-neon-blue/50 overflow-hidden bg-black/50 flex items-center justify-center shadow-[0_0_15px_rgba(59,130,246,0.2)]">
+        <div className="relative z-10 flex flex-col items-center mt-12 pb-6">
+          <div className="w-24 h-24 rounded-full border-4 border-[#0c1019] overflow-hidden bg-black/50 flex items-center justify-center shadow-2xl">
             {profileInfo.avatar_url ? (
               <img 
                 src={profileInfo.avatar_url} 
@@ -74,7 +85,7 @@ export default function PublicProfileView({ userId, onClose }) {
             )}
           </div>
           
-          <h2 className="text-xl font-bold mt-3 text-white">
+          <h2 className="text-xl font-bold mt-3 text-white drop-shadow-md">
             {profileInfo.username || 'Unbekannter Trader'}
           </h2>
           
@@ -82,7 +93,7 @@ export default function PublicProfileView({ userId, onClose }) {
             <span className={`px-2.5 py-0.5 rounded-full border text-[10px] font-bold uppercase tracking-wider ${getStatusColor()}`}>
               {profileInfo.status || 'Trader'}
             </span>
-            <span className="text-[10px] text-white/40">
+            <span className="text-[10px] text-white/40 font-medium">
               Seit {joinYear}
             </span>
           </div>
@@ -102,7 +113,7 @@ export default function PublicProfileView({ userId, onClose }) {
                 className="w-12 h-12 rounded-lg bg-black/40 border border-white/5 flex items-center justify-center text-2xl shadow-inner relative group cursor-default"
               >
                 {item.collectibles?.icon || '💎'}
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/90 border border-white/10 text-[9px] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/90 border border-white/10 text-[9px] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-10">
                   {item.collectibles?.name || 'Unbekannt'}
                 </div>
               </div>
@@ -128,7 +139,7 @@ export default function PublicProfileView({ userId, onClose }) {
                 className="w-14 h-14 rounded-full bg-neon-gold/10 border border-neon-gold/30 flex items-center justify-center text-2xl shadow-[0_0_12px_rgba(255,215,0,0.15)] relative group cursor-default"
               >
                 {ach.icon || '🎖️'}
-                <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/90 border border-white/10 text-[10px] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                <div className="absolute -top-8 left-1/2 -translate-x-1/2 whitespace-nowrap bg-black/90 border border-white/10 text-[10px] text-white px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-10">
                   {ach.name || 'Geheimnis'}
                 </div>
               </div>

@@ -2,7 +2,7 @@ let leaderboardCache = {};
 
 module.exports = (db) => ({
   async getLeaderboard(filter = 'profit_season', limit = 20) {
-    const CACHE_DURATION = 0; // Cache deaktiviert für sofortiges Live-Update
+    const CACHE_DURATION = 0;
     const now = Date.now();
 
     if (CACHE_DURATION > 0 && leaderboardCache[filter] && (now - leaderboardCache[filter].lastUpdate) < CACHE_DURATION) {
@@ -13,10 +13,11 @@ module.exports = (db) => ({
       };
     }
 
-    const [profilesRes, assetsRes, pricesRes, season, pool] = await Promise.all([
+    const [profilesRes, assetsRes, pricesRes, levRes, season, pool] = await Promise.all([
       db.supabase.from('profiles').select('id, telegram_id, username, first_name, balance, avatar_url, is_pro, pro_until, total_volume, season_start_worth, day_start_worth, bonus_received'),
       db.supabase.from('assets').select('profile_id, symbol, amount'),
       db.supabase.from('current_prices').select('symbol, price_eur'),
+      db.supabase.from('leveraged_positions').select('profile_id, symbol, direction, collateral, leverage, entry_price').eq('status', 'OPEN'),
       this.getActiveSeason(),
       db.getFeePool()
     ]);
@@ -24,6 +25,7 @@ module.exports = (db) => ({
     const profiles = profilesRes.data || [];
     const assets = assetsRes.data || [];
     const prices = pricesRes.data || [];
+    const levPositions = levRes.data || [];
 
     const priceMap = {};
     prices.forEach(p => priceMap[p.symbol] = Number(p.price_eur));
@@ -34,6 +36,12 @@ module.exports = (db) => ({
       userAssets[a.profile_id].push(a);
     });
 
+    const userLev = {};
+    levPositions.forEach(p => {
+      if (!userLev[p.profile_id]) userLev[p.profile_id] = [];
+      userLev[p.profile_id].push(p);
+    });
+
     let leaders = profiles.map(p => {
       let cryptoValue = 0;
       if (userAssets[p.id]) {
@@ -42,8 +50,29 @@ module.exports = (db) => ({
           cryptoValue += Number(asset.amount) * currentPrice;
         });
       }
+
+      let leverageValue = 0;
+      if (userLev[p.id]) {
+        userLev[p.id].forEach(pos => {
+          const currentPrice = priceMap[pos.symbol];
+          if (currentPrice) {
+            const notional = Number(pos.collateral) * Number(pos.leverage);
+            let pnl = 0;
+            if (pos.direction === 'LONG') {
+               pnl = ((currentPrice - Number(pos.entry_price)) / Number(pos.entry_price)) * notional;
+            } else {
+               pnl = ((Number(pos.entry_price) - currentPrice) / Number(pos.entry_price)) * notional;
+            }
+            let equity = Number(pos.collateral) + pnl;
+            if (equity < 0) equity = 0;
+            leverageValue += equity;
+          } else {
+            leverageValue += Number(pos.collateral);
+          }
+        });
+      }
       
-      const currentNetWorth = Number(p.balance || 0) + cryptoValue;
+      const currentNetWorth = Number(p.balance || 0) + cryptoValue + leverageValue;
       const geschenkt = Number(p.bonus_received || 0);
       const START_KAPITAL = 10000;
       
@@ -108,13 +137,44 @@ module.exports = (db) => ({
     const priceMap = {};
     prices.forEach(p => priceMap[p.symbol] = Number(p.price_eur));
 
+    const { data: levPositions } = await db.supabase.from('leveraged_positions').select('*').eq('status', 'OPEN');
+    const userLev = {};
+    if (levPositions) {
+      levPositions.forEach(p => {
+        if (!userLev[p.profile_id]) userLev[p.profile_id] = [];
+        userLev[p.profile_id].push(p);
+      });
+    }
+
     for (const user of users) {
       const assets = await db.getAssets(user.id);
       let cryptoValue = 0;
       assets.forEach(a => {
         cryptoValue += Number(a.amount) * (priceMap[a.symbol] || 0);
       });
-      const total = Number(user.balance) + cryptoValue;
+
+      let leverageValue = 0;
+      if (userLev[user.id]) {
+        userLev[user.id].forEach(pos => {
+          const currentPrice = priceMap[pos.symbol];
+          if (currentPrice) {
+            const notional = Number(pos.collateral) * Number(pos.leverage);
+            let pnl = 0;
+            if (pos.direction === 'LONG') {
+               pnl = ((currentPrice - Number(pos.entry_price)) / Number(pos.entry_price)) * notional;
+            } else {
+               pnl = ((Number(pos.entry_price) - currentPrice) / Number(pos.entry_price)) * notional;
+            }
+            let equity = Number(pos.collateral) + pnl;
+            if (equity < 0) equity = 0;
+            leverageValue += equity;
+          } else {
+            leverageValue += Number(pos.collateral);
+          }
+        });
+      }
+
+      const total = Number(user.balance) + cryptoValue + leverageValue;
       await db.supabase.from('profiles').update({ day_start_worth: total }).eq('id', user.id);
     }
   },

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import useStore from './lib/store';
 import { api } from './lib/api';
 
@@ -7,14 +7,16 @@ import Navbar from './components/layout/Navbar';
 import PriceTicker from './components/layout/PriceTicker';
 
 import ChartView from './views/ChartView';
+import WalletView from './views/WalletView';
 import AssetsView from './views/AssetsView';
 import RankView from './views/RankView';
 import SettingsView from './views/SettingsView';
 import ProfileView from './views/ProfileView';
-import AffiliateView from './views/AffiliateView'; // NEU: Import für das Affiliate-System
+import AffiliateView from './views/AffiliateView';
 
 const TABS = [
   { id: 'chart', label: 'Chart',  icon: '📊' },
+  { id: 'wallet', label: 'Wallet', icon: '💳' },
   { id: 'assets', label: 'Assets', icon: '💎' },
   { id: 'rank',  label: 'Rang',   icon: '🏆' },
   { id: 'settings', label: 'Settings', icon: '⚙️' },
@@ -27,7 +29,12 @@ const COIN_META = {
 };
 
 export default function App() {
-  const { tab, setTab, fetchProfile, refreshPrices, loadVersion, prices, prevPrices, showToast } = useStore();
+  const { 
+    tab, setTab, fetchProfile, refreshPrices, loadVersion, 
+    prices, prevPrices, showToast, loading, error, version, profile 
+  } = useStore();
+  
+  const [timeoutError, setTimeoutError] = useState(null);
 
   useEffect(() => {
     loadVersion();
@@ -38,14 +45,23 @@ export default function App() {
     }, 60000);
 
     const profileInterval = setInterval(() => {
-      fetchProfile();
+      if (!timeoutError) fetchProfile();
     }, 15000);
 
     return () => {
       clearInterval(priceInterval);
       clearInterval(profileInterval);
     };
-  }, [fetchProfile, refreshPrices, loadVersion]);
+  }, [fetchProfile, refreshPrices, loadVersion, timeoutError]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!profile) {
+        setTimeoutError("Bitte nutze den Telegram Bot, um dich in deinem Spielprofil anzumelden.");
+      }
+    }, 60000);
+    return () => clearTimeout(timer);
+  }, [profile]);
 
   useEffect(() => {
     const handleStartParam = async () => {
@@ -71,9 +87,37 @@ export default function App() {
 
   useEffect(() => {
     if (tab === 'trade') {
-      setTab('chart');
+      setTab('wallet');
     }
   }, [tab, setTab]);
+
+  const hasAuthError = timeoutError || (!profile && !loading && error);
+
+  if (hasAuthError) {
+    return (
+      <div className="min-h-screen bg-[#06080f] flex flex-col items-center justify-center text-white px-6 text-center pb-safe">
+        <p className="text-sm text-[var(--text-dim)]">
+          {timeoutError || "Bitte nutze den Telegram Bot, um dich in deinem Spielprofil anzumelden."}
+        </p>
+      </div>
+    );
+  }
+
+  if (loading && !profile) {
+    return (
+      <div className="min-h-screen bg-[#06080f] flex flex-col items-center justify-center text-white pb-safe space-y-2">
+        <h1 className="text-2xl font-bold tracking-widest">
+          ValueTradeGame
+        </h1>
+        <p className="text-sm font-mono text-[var(--text-dim)]">
+          V{version || '0.1'}
+        </p>
+        <p className="text-xs text-[var(--text-dim)] mt-4 animate-pulse">
+          Das Spiel wird geladen...
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen text-white pb-24 select-none">
@@ -94,11 +138,12 @@ export default function App() {
 
       <main className="px-4 pt-4 tab-enter">
         {tab === 'chart' && <ChartView />}
+        {tab === 'wallet' && <WalletView />}
         {tab === 'assets' && <AssetsView />}
         {tab === 'rank' && <RankView />}
         {tab === 'settings' && <SettingsView />}
         {tab === 'profile' && <ProfileView />}
-        {tab === 'affiliate' && <AffiliateView />} {/* NEU: Hier wird die Ansicht gerendert */}
+        {tab === 'affiliate' && <AffiliateView />}
       </main>
 
       <Navbar tabs={TABS} currentTab={tab} onTabChange={setTab} />

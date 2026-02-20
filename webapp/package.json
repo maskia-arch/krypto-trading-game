@@ -1,6 +1,6 @@
 {
-  "name": "krypto-trading-webapp",
-  "version": "1.0.0",
+  "name": "valuetradegame-frontend",
+  "version": "0.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",

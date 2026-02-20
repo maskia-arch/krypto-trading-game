@@ -6,12 +6,71 @@ const { priceService } = require('../services/priceService');
 const { tradeService } = require('../services/tradeService');
 const { seasonService } = require('../services/seasonService');
 
+async function checkLeverageLiquidations(bot) {
+  try {
+    const openPositions = await db.getAllOpenLeveragedPositions();
+    if (!openPositions || openPositions.length === 0) return;
+
+    const currentPrices = await db.getAllPrices();
+    const priceMap = {};
+    currentPrices.forEach(p => priceMap[p.symbol] = Number(p.price_eur));
+
+    for (const pos of openPositions) {
+      const currentPrice = priceMap[pos.symbol];
+      if (!currentPrice) continue;
+
+      const notional = Number(pos.collateral) * Number(pos.leverage);
+      let pnl = 0;
+      
+      if (pos.direction === 'LONG') {
+        pnl = ((currentPrice - Number(pos.entry_price)) / Number(pos.entry_price)) * notional;
+      } else {
+        pnl = ((Number(pos.entry_price) - currentPrice) / Number(pos.entry_price)) * notional;
+      }
+      
+      const equity = Number(pos.collateral) + pnl;
+
+      if (equity <= 0) {
+        await db.closeLeveragedPosition(pos.id, currentPrice, true);
+        
+        try {
+          const { data: profile } = await db.supabase
+            .from('profiles')
+            .select('telegram_id')
+            .eq('id', pos.profile_id)
+            .single();
+            
+          if (profile && profile.telegram_id) {
+            await bot.api.sendMessage(
+              profile.telegram_id, 
+              `🚨 <b>LIQUIDIERUNG!</b>\n\nDeine <b>${pos.leverage}x ${pos.direction}</b> Position für <b>${pos.symbol}</b> wurde zwangsgeschlossen, da deine Sicherheitsmarge (Equity) aufgebraucht ist.\n\n` +
+              `Einstieg: ${Number(pos.entry_price).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}€\n` +
+              `Exit: ${currentPrice.toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}€\n` +
+              `Verlust: -${Number(pos.collateral).toLocaleString('de-DE', {minimumFractionDigits: 2, maximumFractionDigits: 2})}€`, 
+              { parse_mode: 'HTML' }
+            );
+          }
+        } catch(e) {}
+      }
+    }
+  } catch (err) {
+    console.error(err);
+  }
+}
+
 function setupCronJobs(bot) {
   const runFrequentTasks = async () => {
     try {
       await priceService.fetchAndStorePrices();
-      await tradeService.checkLiquidations(bot);
-      await tradeService.checkPriceAlerts(bot);
+      if (tradeService && tradeService.checkLiquidations) {
+        await tradeService.checkLiquidations(bot);
+      }
+      if (tradeService && tradeService.checkPriceAlerts) {
+        await tradeService.checkPriceAlerts(bot);
+      }
+      
+      await checkLeverageLiquidations(bot);
+      
     } catch (err) {
       console.error(err);
     }
@@ -23,6 +82,30 @@ function setupCronJobs(bot) {
   cron.schedule('*/15 * * * *', async () => {
     try {
       await seasonService.checkAndHandleSeasonTransition(bot);
+    } catch (err) {
+      console.error(err);
+    }
+  });
+
+  cron.schedule('0 8 * * 1', async () => {
+    try {
+      const { data: users, error } = await db.supabase.from('profiles').select('telegram_id, notifications_enabled');
+      if (error || !users) return;
+
+      const messages = [
+        "🔥 <b>Hebel-Montag ist da!</b>\n\nNur heute: Der <b>10x Hebel</b> ist für ALLE Spieler freigeschaltet! Nutze die Chance auf maximale Profite (oder Totalverlust). Viel Erfolg!",
+        "🚀 <b>Es ist wieder Hebel-Montag!</b>\n\nDas Limit wurde für 24 Stunden aufgehoben. Du kannst ab sofort mit <b>10x Hebel</b> traden. Zeig dem Markt, wer der Boss ist!",
+        "⚠️ <b>High Risk, High Reward!</b>\n\nDer Hebel-Montag ist aktiv. Wir haben den Max-Hebel für alle auf 10x erhöht. Trade clever und setz nicht dein ganzes Hemd aufs Spiel!"
+      ];
+
+      const randomMsg = messages[Math.floor(Math.random() * messages.length)];
+
+      for (const user of users) {
+        if (user.notifications_enabled === false) continue;
+        try {
+          await bot.api.sendMessage(user.telegram_id, randomMsg, { parse_mode: 'HTML' });
+        } catch (e) {}
+      }
     } catch (err) {
       console.error(err);
     }

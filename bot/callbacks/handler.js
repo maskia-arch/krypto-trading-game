@@ -10,6 +10,7 @@ module.exports = async (ctx) => {
   const data = ctx.callbackQuery.data;
   const adminId = Number(process.env.ADMIN_ID);
 
+  // Basis-Navigation
   if (data === 'portfolio') {
     await ctx.answerCallbackQuery();
     return handlePortfolio(ctx);
@@ -27,7 +28,8 @@ module.exports = async (ctx) => {
       `ℹ️ <b>System-Informationen</b>\n\n` +
       `🎮 <b>Spiel-Channel:</b> @ValueTradeGame\n` +
       `👨‍💻 <b>System Architect:</b> @autoacts\n` +
-      `⚙️ <b>Version:</b> v${VERSION}`,
+      `⚙️ <b>Version:</b> v${VERSION}\n\n` +
+      `<i>ValueTrade Engine v0.2 - Leverage & Pro Update aktiv.</i>`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
   }
@@ -52,33 +54,19 @@ module.exports = async (ctx) => {
     );
   }
 
-  if (data === 'help') {
-    await ctx.answerCallbackQuery();
-    return ctx.reply(
-      `📖 <b>Hilfe & Befehle</b>\n\n` +
-      `/start - Spiel starten\n` +
-      `/portfolio - Dein Portfolio\n` +
-      `/rank - Rangliste\n` +
-      `/bailout - Rettungsschirm\n` +
-      `/rent - Miete einsammeln\n` +
-      `/settings - Einstellungen\n` +
-      `/pro - Pro-Version\n\n` +
-      `💡 Nutze die Web App zum Traden!`,
-      { parse_mode: 'HTML' }
-    );
-  }
-
+  // Einstellungen & User-Profile
   if (data === 'set_name_start') {
     await ctx.answerCallbackQuery();
     const profile = await db.getProfile(ctx.from.id);
-    const isPro = profile.is_pro && new Date(profile.pro_until) > new Date();
+    const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
     
-    if (!isPro && profile.username_changes >= 1) {
-      return ctx.reply("❌ Du hast deine Namensänderung bereits verbraucht. Pro-User können ihren Namen alle 30 Tage ändern.");
+    if (!isPro && (profile.username_changes || 0) >= 1) {
+      return ctx.reply("❌ Du hast deine Namensänderung bereits verbraucht. Pro-User können ihren Namen unbegrenzt oft ändern.");
     }
-    return ctx.reply("✍️ Bitte antworte auf diese Nachricht mit deinem neuen gewünschten Usernamen (einfach Text senden).");
+    return ctx.reply("✍️ Bitte antworte auf diese Nachricht mit deinem neuen gewünschten Usernamen (einfach Text senden, 4-16 Zeichen).");
   }
 
+  // Account-Löschung
   if (data === 'set_delete_start') {
     await ctx.answerCallbackQuery();
     const kb = new InlineKeyboard()
@@ -88,7 +76,7 @@ module.exports = async (ctx) => {
     return ctx.editMessageText(
       "⚠️ <b>ACHTUNG: KONTOLÖSCHUNG</b>\n\n" +
       "Möchtest du wirklich einen Löschantrag stellen? " +
-      "Alle Assets, Immobilien und dein Rang werden unwiderruflich gelöscht.",
+      "Alle Assets, Immobilien, Hebel-Positionen und dein Rang werden unwiderruflich gelöscht.",
       { parse_mode: 'HTML', reply_markup: kb }
     );
   }
@@ -96,13 +84,13 @@ module.exports = async (ctx) => {
   if (data === 'confirm_deletion_request') {
     await ctx.answerCallbackQuery();
     const profile = await db.getProfile(ctx.from.id);
-    await db.requestAccountDeletion(profile.id);
+    await db.supabase.from('deletion_requests').insert({ profile_id: profile.id, status: 'pending' });
 
     await ctx.api.sendMessage(adminId, 
       `⚠️ <b>NEUER LÖSCHANTRAG</b>\n\n` +
       `User: ${esc(profile.first_name)} (@${profile.username || '-'})\n` +
       `ID: <code>${profile.telegram_id}</code>\n\n` +
-      `Wartet auf Verifizierung durch den User.`,
+      `Wartet auf Bestätigungs-Code: <code>Delete (${ctx.from.id})</code>`,
       { parse_mode: 'HTML' }
     );
     
@@ -114,48 +102,67 @@ module.exports = async (ctx) => {
     );
   }
 
+  // Pro-System Handling
   if (data === 'buy_pro') {
     await ctx.answerCallbackQuery();
     const profile = await db.getProfile(ctx.from.id);
     if (!profile) return;
-    await db.createProRequest(profile.id);
+    
+    await db.supabase.from('pro_requests').insert({ profile_id: profile.id, status: 'pending' });
+    
     const kb = new InlineKeyboard()
       .text('✅ Freischalten', `approve_pro:${profile.id}`)
       .text('❌ Ablehnen', `reject_pro:${profile.id}`);
+
     await ctx.api.sendMessage(adminId,
       `💳 <b>PRO-ANFRAGE</b>\n\n` +
       `👤 ${esc(profile.first_name)} (@${profile.username || '-'})\n` +
       `🆔 ${profile.telegram_id}\n\n` +
-      `Freischalten?`,
+      `Freischalten? (Hebel-Limit & Hintergrundbild)`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
-    return ctx.reply('✅ Anfrage gesendet! Du wirst benachrichtigt, sobald dein Pro-Zugang aktiviert wird.');
+    return ctx.reply('✅ Anfrage gesendet! Der Admin wird dein Profil in Kürze für Pro-Features freischalten.');
   }
 
   if (data.startsWith('approve_pro:')) {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌ Keine Admin-Rechte');
     const profileId = data.split(':')[1];
-    const success = await db.approveProRequestForUser(profileId); 
-    if (success) {
-      const p = await db.supabase.from('profiles').select('telegram_id, first_name').eq('id', profileId).single();
+    
+    const proUntil = new Date();
+    proUntil.setDate(proUntil.getDate() + 30);
+
+    const { data: profile, error } = await db.supabase
+      .from('profiles')
+      .update({ is_pro: true, pro_until: proUntil.toISOString() })
+      .eq('id', profileId)
+      .select('telegram_id, first_name')
+      .single();
+
+    if (!error && profile) {
+      await db.supabase.from('pro_requests').update({ status: 'approved' }).eq('profile_id', profileId);
       try {
-        await ctx.api.sendMessage(p.data.telegram_id, `⭐ <b>PRO AKTIVIERT!</b>\n\nHerzlichen Glückwunsch! Deine Pro-Version ist jetzt 30 Tage aktiv.`);
+        await ctx.api.sendMessage(profile.telegram_id, `⭐ <b>PRO AKTIVIERT!</b>\n\nDeine Pro-Vorteile sind jetzt aktiv:\n• 10x Hebel (Hebel-Montag)\n• 3 Offene Hebel-Positionen\n• Eigenes Profil-Hintergrundbild\n• Unbegrenzte Namensänderungen`);
       } catch (e) {}
-      await ctx.editMessageText(`✅ Pro für ${esc(p.data.first_name)} aktiviert.`);
+      await ctx.editMessageText(`✅ Pro für ${esc(profile.first_name)} aktiviert.`);
     }
     return ctx.answerCallbackQuery('✅ Erledigt');
   }
 
+  // Admin-Kommandos für Kontolöschung
   if (data.startsWith('confirm_delete:')) {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
     const profileId = data.split(':')[1];
-    const { success, telegramId } = await db.deleteUserCompletely(profileId);
-    if (success && telegramId) {
-      try {
-        await ctx.api.sendMessage(telegramId, `👋 <b>Account gelöscht</b>\n\nDeine Daten wurden vollständig aus unserem System entfernt. Auf Wiedersehen!`);
-        await ctx.api.deleteChatMessages(telegramId, [ctx.callbackQuery.message.message_id]); 
-      } catch (e) {}
-      await ctx.editMessageText(`✅ Account ID ${profileId} wurde final gelöscht.`);
+    
+    const { data: p } = await db.supabase.from('profiles').select('telegram_id').eq('id', profileId).single();
+    const { error } = await db.supabase.from('profiles').delete().eq('id', profileId);
+
+    if (!error) {
+      if (p?.telegram_id) {
+        try {
+          await ctx.api.sendMessage(p.telegram_id, `👋 <b>Account gelöscht</b>\n\nDeine Daten wurden vollständig entfernt.`);
+        } catch (e) {}
+      }
+      await ctx.editMessageText(`✅ Account final aus der DB entfernt.`);
     }
     return ctx.answerCallbackQuery('🗑️ Gelöscht');
   }
@@ -163,28 +170,33 @@ module.exports = async (ctx) => {
   if (data.startsWith('reject_delete:')) {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
     const profileId = data.split(':')[1];
-    await db.supabase.from('deletion_requests').update({ status: 'rejected' }).eq('profile_id', profileId);
-    await ctx.editMessageText(`❌ Löschantrag für ID ${profileId} abgelehnt.`);
+    await db.supabase.from('deletion_requests').delete().eq('profile_id', profileId);
+    await ctx.editMessageText(`❌ Löschantrag abgelehnt.`);
     return ctx.answerCallbackQuery('Abgelehnt');
   }
 
+  // Admin System-Tools
   if (data === 'admin_fetch') {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
     await ctx.answerCallbackQuery('Fetching prices...');
     await priceService.fetchAndStorePrices();
-    return ctx.reply('✅ Preise manuell aktualisiert.');
+    return ctx.reply('✅ ValueTrade Engine: Preise & Chart-Snapshots aktualisiert.');
   }
 
-  if (data === 'admin_users') {
+  if (data === 'admin_stats') {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
     await ctx.answerCallbackQuery();
-    const { data: users } = await db.supabase
-      .from('profiles')
-      .select('first_name, balance')
-      .order('balance', { ascending: false })
-      .limit(10);
-    const list = users.map((u, i) => `${i + 1}. ${esc(u.first_name)}: ${Number(u.balance).toFixed(0)}€`).join('\n');
-    return ctx.reply(`👥 <b>Top 10 User</b>\n\n${list}`, { parse_mode: 'HTML' });
+    
+    const { count: users } = await db.supabase.from('profiles').select('*', { count: 'exact', head: true });
+    const { count: openLevers } = await db.supabase.from('leveraged_positions').select('*', { count: 'exact', head: true }).eq('status', 'OPEN');
+    
+    return ctx.reply(
+      `📊 <b>System-Status</b>\n\n` +
+      `User gesamt: <b>${users}</b>\n` +
+      `Aktive Hebel-Trades: <b>${openLevers}</b>\n` +
+      `Server-Zeit: <code>${new Date().toLocaleTimeString('de-DE')}</code>`,
+      { parse_mode: 'HTML' }
+    );
   }
 
   if (data === 'close') {
