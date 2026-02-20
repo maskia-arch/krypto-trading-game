@@ -31,12 +31,11 @@ const useStore = create((set, get) => ({
     setTimeout(() => set({ toast: null }), 3000);
   },
 
-  // Hilfsfunktion zur Prüfung des Premium-Status (Pro oder Admin)
   isPremiumUser: () => {
     const p = get().profile;
     if (!p) return false;
     const isPro = p.is_pro && new Date(p.pro_until) > new Date();
-    return p.is_admin || isPro;
+    return !!p.is_admin || isPro;
   },
 
   loadVersion: async () => {
@@ -50,12 +49,18 @@ const useStore = create((set, get) => ({
     }
   },
 
-  fetchProfile: async () => {
+  // v0.3.0 Fix: Robustes Fetching mit Retry-Logik
+  fetchProfile: async (retryCount = 0) => {
     try {
-      if (!get().profile) set({ loading: true });
-      set({ error: null });
+      // Nur beim ersten Laden den Loading-State triggern
+      if (!get().profile && retryCount === 0) set({ loading: true });
       
       const data = await api.getProfile();
+      
+      if (!data || !data.profile) {
+        throw new Error("Profil-Daten unvollständig.");
+      }
+
       const priceMap = {};
       (data.prices || []).forEach(p => { 
         priceMap[p.symbol] = Number(p.price_eur); 
@@ -65,12 +70,23 @@ const useStore = create((set, get) => ({
         profile: { ...data.profile, collectibles: data.collectibles || [] },
         assets: data.assets || [],
         prices: priceMap,
-        prevPrices: get().prices[Object.keys(priceMap)[0]] ? get().prices : priceMap,
+        prevPrices: Object.keys(get().prices).length > 0 ? get().prices : priceMap,
         achievements: data.achievements || [],
         loading: false,
+        error: null // Fehler löschen, wenn erfolgreich
       });
     } catch (err) {
-      set({ error: err.message, loading: false });
+      console.error(`Profil-Fetch Fehler (Versuch ${retryCount + 1}):`, err.message);
+      
+      // Automatischer Retry nach 1.5 Sekunden, falls Auth-Handshake im Backend noch läuft
+      if (retryCount < 2) {
+        setTimeout(() => get().fetchProfile(retryCount + 1), 1500);
+      } else {
+        set({ 
+          error: "Dein Profil konnte nicht geladen werden. Bitte starte die App direkt aus dem Bot.", 
+          loading: false 
+        });
+      }
     }
   },
 
@@ -173,7 +189,7 @@ const useStore = create((set, get) => ({
     const { profile, leveragePositions, leveragePolicy } = get();
     if (!profile) return 0;
 
-    const factor = leveragePolicy?.margin_limit_factor ?? 0.5;
+    const factor = leveragePolicy?.margin_limit_factor ?? 0.8;
     const usedMargin = (leveragePositions || []).reduce((sum, p) => sum + Number(p.collateral), 0);
     const maxMargin = Number(profile.balance) * factor;
     
@@ -184,7 +200,6 @@ const useStore = create((set, get) => ({
     const { leveragePositions, leveragePolicy } = get();
     const isPremium = get().isPremiumUser();
     
-    // Dynamisches Limit: 3 für Pro/Admin, sonst das Limit aus der Policy (Standard 1)
     const maxPos = isPremium ? 3 : (leveragePolicy?.max_positions || 1);
 
     if (leveragePositions.length >= maxPos) {
@@ -204,7 +219,6 @@ const useStore = create((set, get) => ({
     return data;
   },
 
-  // Neue Action für Partial Close (50% Schließen)
   partialClosePosition: async (positionId) => {
     const data = await api.partialClose(positionId);
     await Promise.all([

@@ -33,19 +33,15 @@ export default function App() {
   } = useStore();
   
   const [authChecking, setAuthChecking] = useState(true);
-  const [initError, setInitError] = useState(null);
 
-  // Ziehe die "letzte bekannte Version" aus dem lokalen Speicher (oder zeige '...' beim allerersten Start)
   const lastKnownVersion = localStorage.getItem('vt_last_version') || '...';
 
-  // Speichere die Version lokal ab, sobald wir sie vom Server bekommen haben
   useEffect(() => {
     if (version) {
       localStorage.setItem('vt_last_version', version);
     }
   }, [version]);
 
-  // 1. Initialisierung: Version & Profil laden
   useEffect(() => {
     const initApp = async () => {
       try {
@@ -53,9 +49,13 @@ export default function App() {
         if (tg) {
           tg.ready();
           tg.expand();
+          // v0.3.0 Fix: Setze Hintergrundfarbe für nahtlosen Übergang
+          tg.setBackgroundColor('#06080f');
+          tg.setHeaderColor('#06080f');
         }
         
         await loadVersion();
+        // Das Error-Handling übernimmt nun die Retry-Logik im Store
         await fetchProfile();
       } catch (err) {
         console.error("Initialization error:", err);
@@ -68,20 +68,20 @@ export default function App() {
 
     const priceInterval = setInterval(refreshPrices, 60000);
     const profileInterval = setInterval(() => {
-      if (window.Telegram?.WebApp?.initData) fetchProfile();
+      // Nur pollen, wenn wir bereits autorisiert sind
+      if (window.Telegram?.WebApp?.initData && profile) fetchProfile();
     }, 20000);
 
     return () => {
       clearInterval(priceInterval);
       clearInterval(profileInterval);
     };
-  }, [fetchProfile, refreshPrices, loadVersion]);
+  }, [fetchProfile, refreshPrices, loadVersion, profile]);
 
-  // 2. Bonus handling via Start-Parameter
   useEffect(() => {
     const checkBonus = async () => {
       const startParam = window.Telegram?.WebApp?.initDataUnsafe?.start_param;
-      if (startParam === 'claim_bonus' && profile) {
+      if (startParam === 'claim_bonus' && profile && !profile.inactivity_bonus_claimed) {
         try {
           const res = await api.claimBonus();
           showToast(`🎁 Bonus aktiviert: +${res.claimed}€!`, 'success');
@@ -94,25 +94,13 @@ export default function App() {
     checkBonus();
   }, [profile, fetchProfile, showToast]);
 
-  // 3. Authentifizierungs-Timeout (Falls nach 10 Sek kein Profil da ist)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (!profile && !loading) {
-        setInitError("Authentifizierung fehlgeschlagen. Bitte starte die App über den Telegram Bot neu.");
-      }
-    }, 10000); // 10 Sekunden Puffer
-    return () => clearTimeout(timer);
-  }, [profile, loading]);
-
-  // Navigation Fix: Leite alte "chart" oder "trade" Zustände sicher auf die neue Startseite "wallet" um
   useEffect(() => {
     if (tab === 'trade' || tab === 'chart') {
       setTab('wallet');
     }
   }, [tab, setTab]);
 
-  // Lade-Screen (Während der allererste Check läuft)
-  if (authChecking || (loading && !profile && !initError)) {
+  if (authChecking || (loading && !profile && !error)) {
     return (
       <div className="flex h-screen flex-col items-center justify-center text-white bg-[#06080f] space-y-4">
         <div className="relative">
@@ -129,20 +117,22 @@ export default function App() {
     );
   }
 
-  // Fehler-Screen
-  if (initError || (!profile && error)) {
+  if (error && !profile) {
     return (
       <div className="flex h-screen items-center justify-center text-white px-8 text-center bg-[#06080f]">
-        <div className="space-y-4">
-          <div className="text-4xl">⚠️</div>
-          <p className="text-sm text-[var(--text-dim)] leading-relaxed">
-            {initError || "Dein Profil konnte nicht geladen werden. Bitte stelle sicher, dass du die App aus dem offiziellen Bot startest."}
-          </p>
+        <div className="space-y-6 max-w-xs">
+          <div className="text-5xl animate-bounce">⚠️</div>
+          <div className="space-y-2">
+            <h2 className="text-lg font-bold">Verbindung unterbrochen</h2>
+            <p className="text-xs text-[var(--text-dim)] leading-relaxed">
+              {error || "Dein Profil konnte nicht verifiziert werden. Bitte starte die App aus dem offiziellen Bot."}
+            </p>
+          </div>
           <button 
             onClick={() => window.location.reload()}
-            className="px-6 py-2 bg-white/5 border border-white/10 rounded-full text-xs font-bold active:scale-95 transition-transform"
+            className="w-full py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all hover:bg-white/10"
           >
-            Erneut versuchen
+            🔄 System Neustart
           </button>
         </div>
       </div>
@@ -166,7 +156,7 @@ export default function App() {
       </header>
 
       <main className="flex-1 view-container overflow-y-auto">
-        <div className="px-4 pt-4 pb-20">
+        <div className="px-4 pt-4 pb-24">
           {tab === 'wallet' && <WalletView />}
           {tab === 'assets' && <AssetsView />}
           {tab === 'rank' && <RankView />}
