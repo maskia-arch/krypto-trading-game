@@ -1,20 +1,18 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../../core/database');
-const { parseTelegramUser } = require('../auth');
 
 router.get('/positions', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   try {
-    const profile = await db.getProfile(tgId);
+    // Profil laden für Kontostand und Detailinfos
+    const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     const positions = await db.getOpenLeveragedPositions(profile.id);
     const history = await db.getLeverageHistory ? await db.getLeverageHistory(profile.id) : [];
     
-    const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
+    // Pro-Status direkt aus den Middleware-Permissions beziehen
+    const isPro = req.permissions.isPro;
     const isMonday = new Date().getDay() === 1;
     const maxLeverage = (isPro || isMonday) ? 10 : 5;
     const maxPositions = isPro ? 3 : 1;
@@ -30,10 +28,6 @@ router.get('/positions', async (req, res) => {
 });
 
 router.post('/open', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
-  // v0.3.0: Erweiterte Parameter für Pro-Features
   const { symbol, direction, collateral, leverage, stop_loss, take_profit, limit_price, trailing_stop } = req.body;
   
   if (!symbol || !direction || !collateral || !leverage) {
@@ -41,10 +35,10 @@ router.post('/open', async (req, res) => {
   }
 
   try {
-    const profile = await db.getProfile(tgId);
-    const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
+    const profile = await db.getProfile(req.tgId);
+    const isPro = req.permissions.isPro;
     
-    // Validierung der Pro-Features
+    // Validierung der Pro-Features basierend auf Middleware-Permissions
     if (!isPro && (stop_loss || take_profit || limit_price || trailing_stop)) {
       return res.status(403).json({ error: 'Diese Funktionen sind nur für Pro-Mitglieder verfügbar.' });
     }
@@ -53,7 +47,6 @@ router.post('/open', async (req, res) => {
     const currentPriceObj = prices.find(p => p.symbol === symbol.toUpperCase());
     if (!currentPriceObj) return res.status(400).json({ error: 'Coin nicht gefunden' });
 
-    // In v0.3.0 übergeben wir das options-Objekt an die DB-Funktion
     const options = {
       stop_loss: stop_loss ? Number(stop_loss) : null,
       take_profit: take_profit ? Number(take_profit) : null,
@@ -77,15 +70,11 @@ router.post('/open', async (req, res) => {
   }
 });
 
-// NEU in v0.3.0: Partial Close (Teilschließung)
 router.post('/partial-close', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
-  const { position_id, percentage } = req.body; // percentage z.B. 0.5 für 50%
+  const { position_id, percentage } = req.body;
   
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     const result = await db.partialCloseLeveragedPosition(position_id, profile.id, percentage || 0.5);
     res.json({ success: true, result });
   } catch (err) {
@@ -94,13 +83,10 @@ router.post('/partial-close', async (req, res) => {
 });
 
 router.post('/close', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   const { position_id } = req.body;
 
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     const { data: pos } = await db.supabase
       .from('leveraged_positions')
       .select('symbol, profile_id')

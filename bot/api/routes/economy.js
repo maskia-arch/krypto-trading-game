@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../../core/database');
-const { parseTelegramUser } = require('../auth');
 
 router.get('/chart/:symbol', async (req, res) => {
   const { symbol } = req.params;
@@ -17,7 +16,6 @@ router.get('/chart/:symbol', async (req, res) => {
     };
 
     const minutes = rangeMap[range] || 180;
-    // v0.3.0: Puffer erhöht auf 150 Min für stabilere Chart-Anzeige
     const startTime = new Date(Date.now() - ((minutes + 150) * 60 * 1000)).toISOString();
 
     const { data, error } = await db.supabase
@@ -80,11 +78,10 @@ router.get('/realestate/types', async (req, res) => {
 });
 
 router.get('/realestate/mine', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Unauthorized' });
-
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
+    if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
+    
     const props = await db.getUserRealEstate(profile.id);
     res.json({ properties: props });
   } catch (err) {
@@ -92,13 +89,11 @@ router.get('/realestate/mine', async (req, res) => {
   }
 });
 
-// NEU: Miete direkt über die WebApp einsammeln
 router.post('/realestate/collect', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Unauthorized' });
-
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
+    if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
+    
     const collected = await db.collectRent(profile.id);
     
     res.json({ 
@@ -112,25 +107,26 @@ router.post('/realestate/collect', async (req, res) => {
 });
 
 router.post('/realestate/buy', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Unauthorized' });
-
   const { type_id } = req.body;
 
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
+    if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
+
     const { data: reType } = await db.supabase
       .from('real_estate_types')
       .select('*')
       .eq('id', type_id)
       .single();
 
+    if (!reType) return res.status(404).json({ error: 'Immobilientyp nicht gefunden' });
+
     if (Number(profile.total_volume) < Number(reType.min_volume)) {
-      return res.status(400).json({ error: 'Umsatz zu gering für dieses Objekt' });
+      return res.status(400).json({ error: 'Handelsvolumen zu gering für dieses Objekt' });
     }
     
     if (Number(profile.balance) < Number(reType.price_eur)) {
-      return res.status(400).json({ error: 'Guthaben zu gering' });
+      return res.status(400).json({ error: 'Guthaben unzureichend' });
     }
 
     await db.updateBalance(profile.id, Number(profile.balance) - Number(reType.price_eur));
@@ -140,7 +136,6 @@ router.post('/realestate/buy', async (req, res) => {
       last_collect: new Date().toISOString() 
     });
 
-    // Transaktion loggen
     await db.supabase.from('transactions').insert({
       profile_id: profile.id,
       type: 'buy_realestate',
@@ -151,7 +146,7 @@ router.post('/realestate/buy', async (req, res) => {
 
     res.json({ success: true });
   } catch (err) {
-    res.status(500).json({ error: 'Kauf Fehler' });
+    res.status(500).json({ error: 'Kauf fehlgeschlagen' });
   }
 });
 

@@ -1,7 +1,7 @@
 const { db } = require('../core/database');
 
 const activeCache = new Map();
-const proCache = new Map(); // Neuer Cache für Pro/Admin Status (spart DB-Queries in leverageRoutes)
+const proCache = new Map();
 
 async function parseTelegramUser(req) {
   let tgId = null;
@@ -21,42 +21,43 @@ async function parseTelegramUser(req) {
     }
   }
 
-  // 2. Fallback auf direkten Header oder Query (für Legacy/Debugging)
+  // 2. Fallback auf direkten Header oder Query
   if (!tgId) {
     tgId = req.headers['x-telegram-id'] || req.query.telegram_id;
   }
 
   const parsedId = tgId ? Number(tgId) : null;
+  if (!parsedId) return null;
 
-  // 3. Activity Tracking & Pro-Status Validation
-  if (parsedId && db && db.supabase) {
+  // 3. Activity Tracking & Berechtigungs-Sync (Synchronisiert für v0.3.0)
+  try {
     const now = Date.now();
     const lastUpdate = activeCache.get(parsedId) || 0;
     
-    // Alle 5 Minuten last_active in DB aktualisieren
-    if (now - lastUpdate > 300000) {
-      activeCache.set(parsedId, now);
-      
-      // Update last_active und hole gleichzeitig Admin/Pro Status
-      db.supabase.from('profiles')
+    // WICHTIG: Wenn kein Cache existiert ODER die 5 Minuten um sind, müssen wir WARTEN (await)
+    if (!proCache.has(parsedId) || (now - lastUpdate > 300000)) {
+      const { data, error } = await db.supabase
+        .from('profiles')
         .update({ last_active: new Date().toISOString() })
         .eq('telegram_id', parsedId)
         .select('is_admin, is_pro, pro_until')
-        .maybeSingle()
-        .then(({ data }) => {
-          if (data) {
-            const isPro = data.is_admin || (data.is_pro && new Date(data.pro_until) > new Date());
-            proCache.set(parsedId, { isPro, isAdmin: !!data.is_admin });
-          }
-        })
-        .catch((err) => console.error("Auth: DB Sync failed", err));
+        .maybeSingle();
+
+      if (data) {
+        const isPro = data.is_admin || (data.is_pro && new Date(data.pro_until) > new Date());
+        proCache.set(parsedId, { isPro, isAdmin: !!data.is_admin });
+        activeCache.set(parsedId, now);
+      } else if (error) {
+        console.error("Auth DB Sync Error:", error.message);
+      }
     }
+  } catch (err) {
+    console.error("Critical Auth Error:", err);
   }
 
   return parsedId;
 }
 
-// Hilfsfunktion für Routes, um schnell Rechte zu prüfen
 function getUserPermissions(tgId) {
   return proCache.get(Number(tgId)) || { isPro: false, isAdmin: false };
 }

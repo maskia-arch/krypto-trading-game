@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../../core/database');
-const { parseTelegramUser } = require('../auth');
 
 function isPro(profile) {
   if (profile.is_admin) return true;
@@ -23,11 +22,8 @@ async function getProfileCollectibles(profileId) {
 }
 
 router.get('/', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     if (!isPro(profile) && profile.background_url) {
@@ -91,14 +87,11 @@ router.get('/public/:id', async (req, res) => {
 });
 
 router.post('/background', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   const { background_url } = req.body;
   if (!background_url) return res.status(400).json({ error: 'Keine Bilddaten angegeben' });
 
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
     if (!isPro(profile)) return res.status(403).json({ error: 'Pro-Status erforderlich' });
 
@@ -142,11 +135,8 @@ router.post('/background', async (req, res) => {
 });
 
 router.delete('/background', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     if (profile.background_url) {
@@ -166,14 +156,11 @@ router.delete('/background', async (req, res) => {
 });
 
 router.post('/avatar', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   const { avatar_url } = req.body;
   if (!avatar_url) return res.status(400).json({ error: 'Keine URL/Bilddaten angegeben' });
 
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     const matches = avatar_url.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
@@ -208,11 +195,8 @@ router.post('/avatar', async (req, res) => {
 });
 
 router.delete('/avatar', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     if (profile.avatar_url && profile.avatar_url.includes('/avatars/')) {
@@ -229,9 +213,6 @@ router.delete('/avatar', async (req, res) => {
 });
 
 router.post('/update-username', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   let { username } = req.body;
   if (!username) return res.status(400).json({ error: 'Kein Name angegeben' });
   
@@ -240,12 +221,12 @@ router.post('/update-username', async (req, res) => {
   if (!/^[a-zA-Z0-9]+$/.test(username)) return res.status(400).json({ error: 'Nur Buchstaben und Zahlen erlaubt' });
 
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     const proValid = isPro(profile);
 
-    await db.updateUsername(tgId, username, proValid);
+    await db.updateUsername(req.tgId, username, proValid);
     
     res.json({ success: true, username });
   } catch (err) {
@@ -254,13 +235,10 @@ router.post('/update-username', async (req, res) => {
 });
 
 router.post('/update-privacy', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   const { hide_collectibles } = req.body;
 
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     const { error } = await db.supabase
@@ -276,11 +254,8 @@ router.post('/update-privacy', async (req, res) => {
 });
 
 router.post('/request-deletion', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     await db.requestAccountDeletion(profile.id);
     res.json({ success: true });
   } catch (err) {
@@ -298,11 +273,8 @@ router.get('/prices', async (req, res) => {
 });
 
 router.get('/transactions', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     const { data, error } = await db.supabase
@@ -320,15 +292,12 @@ router.get('/transactions', async (req, res) => {
 });
 
 router.post('/collect-rent', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     const rentCollected = await db.collectRent(profile.id);
-    const updatedProfile = await db.getProfile(tgId);
+    const updatedProfile = await db.getProfile(req.tgId);
 
     res.json({ 
       success: true,
@@ -341,11 +310,8 @@ router.post('/collect-rent', async (req, res) => {
 });
 
 router.post('/claim-bonus', async (req, res) => {
-  const tgId = parseTelegramUser(req);
-  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
-
   try {
-    const profile = await db.getProfile(tgId);
+    const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     if (profile.inactivity_bonus_claimed === true || !profile.claimable_bonus || Number(profile.claimable_bonus) <= 0) {
