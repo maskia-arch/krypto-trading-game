@@ -10,7 +10,7 @@ export default function WalletView() {
 
   return (
     <div className="space-y-4 pb-6 tab-enter">
-      
+      {/* Mode Switcher */}
       <div className="flex bg-black/60 backdrop-blur-md p-1.5 rounded-2xl border border-white/5 shadow-inner">
         <button
           onClick={() => setMode('spot')}
@@ -34,6 +34,7 @@ export default function WalletView() {
         </button>
       </div>
 
+      {/* Content Rendering */}
       {mode === 'spot' ? (
         <div className="space-y-4 tab-enter">
           <ChartView />
@@ -46,7 +47,6 @@ export default function WalletView() {
           <PositionsTable />
         </div>
       )}
-
     </div>
   );
 }

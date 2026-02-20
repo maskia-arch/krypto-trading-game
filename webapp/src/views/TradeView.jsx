@@ -9,17 +9,14 @@ const COINS = {
 const FEE = 0.005;
 
 export default function TradeView() {
-  const { profile, assets, prices, buyCrypto, sellCrypto, showToast, chartSymbol } = useStore();
+  const { profile, assets, prices, buyCrypto, sellCrypto, showToast, chartSymbol, setChartSymbol } = useStore();
   
-  // Der aktuell zu handelnde Coin ist immer der, der im Chart ausgewählt wurde
   const coin = chartSymbol; 
-  
   const [action, setAction] = useState('buy');
   const [euroIn, setEuroIn] = useState('');
   const [cryptoIn, setCryptoIn] = useState('');
   const [busy, setBusy] = useState(false);
 
-  // Zurücksetzen der Inputs, wenn der Coin oder die Aktion gewechselt wird
   useEffect(() => {
     setEuroIn('');
     setCryptoIn('');
@@ -48,11 +45,7 @@ export default function TradeView() {
     try {
       const r = await buyCrypto(coin, euroAmt);
       const amount = r?.crypto_amount || r?.amount;
-      if (amount) {
-        showToast(`✅ ${Number(amount).toFixed(6)} ${coin} gekauft!`);
-      } else {
-        showToast(`✅ ${coin} erfolgreich gekauft!`);
-      }
+      showToast(`✅ ${Number(amount || 0).toFixed(6)} ${coin} gekauft!`);
       setEuroIn('');
     } catch (e) { 
       showToast(`❌ ${e.message || 'Fehler beim Kauf'}`, 'error'); 
@@ -66,11 +59,7 @@ export default function TradeView() {
     try {
       const r = await sellCrypto(coin, sellAmt);
       const eur = r?.euro_received || r?.total_eur || r?.eur;
-      if (eur) {
-        showToast(`✅ ${coin} verkauft für ${Number(eur).toFixed(2)}€`);
-      } else {
-        showToast(`✅ ${coin} erfolgreich verkauft!`);
-      }
+      showToast(`✅ ${coin} verkauft für ${Number(eur || 0).toFixed(2)}€`);
       setCryptoIn('');
     } catch (e) { 
       showToast(`❌ ${e.message || 'Fehler beim Verkauf'}`, 'error'); 
@@ -82,6 +71,30 @@ export default function TradeView() {
 
   return (
     <div className="space-y-4 pb-4 tab-enter">
+      
+      {/* Coin Selector (Identisch zum Hebel-Bereich) */}
+      <div className="flex gap-2">
+        {Object.entries(COINS).map(([sym, info]) => {
+          const active = coin === sym;
+          const p = prices[sym] || 0;
+          return (
+            <button key={sym} onClick={() => setChartSymbol(sym)}
+              className="flex-1 rounded-2xl p-3 text-center transition-all relative overflow-hidden bg-black/40 border border-white/5 active:scale-95"
+              style={{
+                borderColor: active ? info.border : 'rgba(255,255,255,0.05)',
+                background: active ? info.bg : 'rgba(0,0,0,0.4)',
+              }}>
+              <div className="text-xl leading-none mb-1.5">{info.emoji}</div>
+              <div className={`text-[10px] font-black tracking-widest ${active ? 'text-white' : 'text-white/40'}`}>
+                {sym}
+              </div>
+              <div className="text-[9px] font-mono mt-1 text-white/20">
+                {p.toLocaleString('de-DE', { maximumFractionDigits: 0 })}€
+              </div>
+            </button>
+          );
+        })}
+      </div>
 
       {/* Buy/Sell Toggle */}
       <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/5 shadow-inner">
@@ -91,7 +104,7 @@ export default function TradeView() {
               ? 'bg-neon-green/20 text-neon-green shadow-[0_2px_15px_rgba(34,214,138,0.15)] border border-neon-green/30' 
               : 'text-[var(--text-dim)] hover:text-white/80 border border-transparent'
           }`}>
-          Buy / Long
+          BUY
         </button>
         <button onClick={() => setAction('sell')}
           className={`flex-1 py-3 rounded-xl text-[11px] font-black uppercase tracking-[0.1em] transition-all duration-300 ${
@@ -99,13 +112,12 @@ export default function TradeView() {
               ? 'bg-neon-red/20 text-neon-red shadow-[0_2px_15px_rgba(244,63,94,0.15)] border border-neon-red/30' 
               : 'text-[var(--text-dim)] hover:text-white/80 border border-transparent'
           }`}>
-          Sell / Short
+          SELL
         </button>
       </div>
 
       {/* Trading Panel */}
       <div className="card p-4 border border-white/5 bg-gradient-to-br from-[#0a0c14] to-black/60 relative overflow-hidden shadow-xl">
-        {/* Subtle Background Glow based on action */}
         <div className={`absolute -top-20 -left-20 w-48 h-48 blur-[80px] rounded-full pointer-events-none opacity-20 transition-colors duration-700 ${
           action === 'buy' ? 'bg-neon-green' : 'bg-neon-red'
         }`}></div>
@@ -159,12 +171,7 @@ export default function TradeView() {
                   ? 'bg-white/5 text-white/10 border-transparent grayscale cursor-not-allowed'
                   : 'bg-neon-green/10 text-neon-green border-neon-green/20 hover:bg-neon-green/20 active:scale-95 shadow-[0_0_15px_rgba(34,214,138,0.1)]'
               }`}>
-              {busy ? (
-                <span className="flex items-center justify-center gap-2">
-                  <div className="w-3 h-3 border-2 border-neon-green/30 border-t-neon-green rounded-full animate-spin" />
-                  Wird ausgeführt...
-                </span>
-              ) : `${coin} kaufen`}
+              {busy ? 'Wird ausgeführt...' : `${coin} kaufen`}
             </button>
           </div>
         ) : (
@@ -206,14 +213,6 @@ export default function TradeView() {
                   <span className="text-[var(--text-dim)]">Gebühr (0.5%):</span>
                   <span className="text-white/60 font-mono text-[10px]">{sellFee.toFixed(2)}€</span>
                 </div>
-                {avgBuy > 0 && (
-                  <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-tight pt-1 mt-1 border-t border-white/5">
-                    <span className="text-[var(--text-dim)]">Est. PnL:</span>
-                    <span className={`font-mono text-xs ${(sellNet - sellAmt * avgBuy) >= 0 ? 'text-neon-green' : 'text-neon-red'}`}>
-                      {(sellNet - sellAmt * avgBuy) >= 0 ? '+' : ''}{(sellNet - sellAmt * avgBuy).toFixed(2)}€
-                    </span>
-                  </div>
-                )}
               </div>
             )}
 
@@ -224,18 +223,13 @@ export default function TradeView() {
                   ? 'bg-white/5 text-white/10 border-transparent grayscale cursor-not-allowed'
                   : 'bg-neon-red/10 text-neon-red border-neon-red/20 hover:bg-neon-red/20 active:scale-95 shadow-[0_0_15px_rgba(244,63,94,0.1)]'
               }`}>
-              {busy ? (
-                <span className="flex items-center justify-center gap-2">
-                  <div className="w-3 h-3 border-2 border-neon-red/30 border-t-neon-red rounded-full animate-spin" />
-                  Wird ausgeführt...
-                </span>
-              ) : `${coin} verkaufen`}
+              {busy ? 'Wird ausgeführt...' : `${coin} verkaufen`}
             </button>
           </div>
         )}
       </div>
 
-      {/* Portfolio Info (Nur anzeigen wenn man den Coin besitzt) */}
+      {/* Portfolio Info */}
       {holding > 0 && (
         <div className="card p-3 border border-white/5 bg-black/40 flex items-center justify-between">
           <div className="flex items-center gap-3">
