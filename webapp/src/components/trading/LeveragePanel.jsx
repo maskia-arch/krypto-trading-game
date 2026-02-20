@@ -40,7 +40,8 @@ export default function LeveragePanel() {
   const liqShort = currentPrice * (1 + (1 / leverage) * 0.9);
 
   const canOpen = currentOpen < maxPos;
-  const hasMargin = availableMargin >= totalCost && collatNum > 0;
+  
+  const hasMargin = collatNum <= availableMargin && totalCost <= Number(profile?.balance) && collatNum > 0;
 
   const handleOpen = async (dir) => {
     if (collatNum > availableMargin) {
@@ -66,8 +67,15 @@ export default function LeveragePanel() {
   };
 
   const setPercent = (pct) => {
-    const amount = (availableMargin * pct) / 1.005; 
-    setCollateral(amount > 0 ? amount.toFixed(2) : '');
+    let amount = availableMargin * pct;
+    
+    const feeForThis = amount * leverage * 0.005;
+    if ((amount + feeForThis) > Number(profile?.balance)) {
+      amount = (Number(profile?.balance) * pct) / (1 + leverage * 0.005);
+    }
+
+    const safeAmount = Math.floor(amount * 100) / 100;
+    setCollateral(safeAmount > 0 ? safeAmount.toFixed(2) : '');
   };
 
   const leverageOptions = [2, 3, 5, 10];
@@ -138,7 +146,7 @@ export default function LeveragePanel() {
       <div className="bg-black/60 rounded-xl p-3 border border-white/5 space-y-2">
         <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
           <span className="text-[var(--text-dim)]">Positionswert:</span>
-          <span className="text-white font-mono">{notional.toLocaleString('de-DE')}€</span>
+          <span className="text-white font-mono">{notional.toLocaleString('de-DE', {minimumFractionDigits: 2})}€</span>
         </div>
         <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
           <span className="text-[var(--text-dim)]">Liq. Preis (geschätzt):</span>

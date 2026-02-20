@@ -19,75 +19,130 @@ export default function LiveChart30m() {
   const activeCoin = coins.find(c => c.id === chartSymbol) || coins[0];
   const currentPrice = prices[chartSymbol] || 0;
 
-  const points = useMemo(() => {
-    if (!chartData || chartData.length === 0) return '';
+  const chartInfo = useMemo(() => {
+    if (!chartData || chartData.length === 0) return { points: '', fillPoints: '', min: 0, max: 0, lastX: 0, lastY: 0 };
     
     const chartPrices = chartData.map(d => Number(d.price_eur));
     const min = Math.min(...chartPrices);
     const max = Math.max(...chartPrices);
     const range = max - min || 1;
     
-    return chartPrices.map((p, i) => {
+    let lastX = 0;
+    let lastY = 0;
+
+    const pts = chartPrices.map((p, i) => {
       const x = (i / (chartPrices.length - 1)) * 100;
       const y = 100 - (((p - min) / range) * 100);
+      if (i === chartPrices.length - 1) {
+        lastX = x;
+        lastY = y;
+      }
       return `${x},${y}`;
-    }).join(' ');
+    });
+
+    return {
+      points: pts.join(' '),
+      fillPoints: `0,110 ${pts.join(' ')} 100,110`,
+      min,
+      max,
+      lastX,
+      lastY
+    };
   }, [chartData]);
 
   return (
-    <div className="card p-4 space-y-4 border border-white/5 ring-1 ring-white/5">
-      <div className="flex justify-between items-center">
-        <div className="flex gap-2 bg-black/40 p-1 rounded-lg border border-white/5">
+    <div className="card p-4 space-y-4 border border-white/5 bg-gradient-to-br from-[#0a0c14] to-black/60 relative overflow-hidden shadow-xl">
+      <div className="absolute top-0 right-0 w-32 h-32 blur-[60px] rounded-full pointer-events-none transition-colors duration-500" style={{ backgroundColor: activeCoin.color + '1A' }}></div>
+
+      <div className="flex justify-between items-start relative z-10">
+        <div className="flex gap-1 bg-black/60 p-1 rounded-xl border border-white/5 backdrop-blur-md">
           {coins.map(c => (
             <button
               key={c.id}
               onClick={() => setChartSymbol(c.id)}
-              className={`px-3 py-1.5 text-xs font-bold rounded-md transition-all ${
+              className={`px-3 py-1.5 text-[11px] font-black tracking-wider rounded-lg transition-all ${
                 chartSymbol === c.id 
-                  ? 'bg-white/10 text-white shadow-sm' 
+                  ? 'bg-white/10 text-white shadow-sm scale-105' 
                   : 'text-[var(--text-dim)] hover:text-white/80'
               }`}
+              style={chartSymbol === c.id ? { color: c.color, textShadow: `0 0 10px ${c.color}80` } : {}}
             >
               {c.id}
             </button>
           ))}
         </div>
-        <div className="text-right">
-          <p className="text-[10px] text-[var(--text-dim)] uppercase tracking-widest font-bold">30m Live</p>
-          <p className="text-sm font-mono font-bold text-white">
+        <div className="text-right flex flex-col items-end">
+          <div className="flex items-center gap-1.5">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-75" style={{ backgroundColor: activeCoin.color }}></span>
+              <span className="relative inline-flex rounded-full h-2 w-2" style={{ backgroundColor: activeCoin.color }}></span>
+            </span>
+            <p className="text-[9px] text-[var(--text-dim)] uppercase tracking-[0.2em] font-black">30m Live</p>
+          </div>
+          <p className="text-lg font-mono font-black text-white tracking-tighter mt-0.5">
             {currentPrice.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
           </p>
         </div>
       </div>
 
-      <div className="h-32 w-full relative mt-2 bg-black/20 rounded-xl overflow-hidden border border-white/5">
+      <div className="h-40 w-full relative mt-4 bg-black/40 rounded-xl overflow-hidden border border-white/5">
+        <div className="absolute inset-0 flex flex-col justify-between py-3 px-0 pointer-events-none opacity-20">
+          <div className="w-full border-t border-dashed border-white/20"></div>
+          <div className="w-full border-t border-dashed border-white/20"></div>
+          <div className="w-full border-t border-dashed border-white/20"></div>
+        </div>
+
         {(!chartData || chartData.length < 2) ? (
           <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-5 h-5 border-2 border-neon-blue border-t-transparent rounded-full animate-spin"></div>
+            <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${activeCoin.color}80`, borderTopColor: 'transparent' }}></div>
           </div>
         ) : (
-          <svg className="w-full h-full" preserveAspectRatio="none" viewBox="0 -10 100 120">
-            <defs>
-              <linearGradient id={`grad-${chartSymbol}`} x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor={activeCoin.color} stopOpacity="0.3" />
-                <stop offset="100%" stopColor={activeCoin.color} stopOpacity="0.0" />
-              </linearGradient>
-            </defs>
-            <polyline
-              fill={`url(#grad-${chartSymbol})`}
-              stroke="none"
-              points={`0,110 ${points} 100,110`}
-            />
-            <polyline
-              fill="none"
-              stroke={activeCoin.color}
-              strokeWidth="2"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-              points={points}
-              className="drop-shadow-[0_0_8px_rgba(255,255,255,0.3)]"
-            />
-          </svg>
+          <div className="w-full h-full relative">
+            <div className="absolute top-1 right-2 text-[9px] font-mono text-[var(--text-dim)]/50 font-bold">{chartInfo.max.toLocaleString('de-DE')}</div>
+            <div className="absolute bottom-1 right-2 text-[9px] font-mono text-[var(--text-dim)]/50 font-bold">{chartInfo.min.toLocaleString('de-DE')}</div>
+
+            <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 -10 100 120">
+              <defs>
+                <linearGradient id={`grad-${chartSymbol}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor={activeCoin.color} stopOpacity="0.4" />
+                  <stop offset="100%" stopColor={activeCoin.color} stopOpacity="0.0" />
+                </linearGradient>
+                <filter id={`glow-${chartSymbol}`}>
+                  <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
+                  <feMerge>
+                    <feMergeNode in="coloredBlur"/>
+                    <feMergeNode in="SourceGraphic"/>
+                  </feMerge>
+                </filter>
+              </defs>
+              
+              <polyline
+                fill={`url(#grad-${chartSymbol})`}
+                stroke="none"
+                points={chartInfo.fillPoints}
+              />
+              
+              <polyline
+                fill="none"
+                stroke={activeCoin.color}
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                points={chartInfo.points}
+                filter={`url(#glow-${chartSymbol})`}
+              />
+              
+              <circle 
+                cx={chartInfo.lastX} 
+                cy={chartInfo.lastY} 
+                r="1.5" 
+                fill="#fff" 
+                stroke={activeCoin.color} 
+                strokeWidth="0.5"
+                filter={`url(#glow-${chartSymbol})`}
+              />
+            </svg>
+          </div>
         )}
       </div>
     </div>

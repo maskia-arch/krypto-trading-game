@@ -1,63 +1,73 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 
 const COIN_META = {
-  BTC: { emoji: '₿', name: 'Bitcoin', color: '#f7931a' },
-  ETH: { emoji: 'Ξ', name: 'Ethereum', color: '#627eea' },
-  LTC: { emoji: 'Ł', name: 'Litecoin', color: '#bfbbbb' },
+  BTC: { emoji: '₿', name: 'Bitcoin', color: '#F7931A' },
+  ETH: { emoji: 'Ξ', name: 'Ethereum', color: '#627EEA' },
+  LTC: { emoji: 'Ł', name: 'Litecoin', color: '#BFBBBB' },
 };
 
 export default function PriceTicker({ symbol, price, prevPrice }) {
-  const ref = useRef(null);
-  const lastPrice = useRef(price);
+  const priceRef = useRef(price);
+  const [flashStatus, setFlashStatus] = useState(null);
 
   useEffect(() => {
-    if (!ref.current || price === undefined || price === lastPrice.current) return;
+    if (!price || price === priceRef.current) return;
     
-    const isUp = price > lastPrice.current;
+    const isUp = price > priceRef.current;
+    setFlashStatus(isUp ? 'up' : 'down');
+    priceRef.current = price;
     
-    ref.current.classList.remove('tick-up', 'tick-down', 'glow-green', 'glow-red');
-    
-    void ref.current.offsetWidth; 
-
-    if (isUp) {
-      ref.current.classList.add('tick-up', 'glow-green');
-    } else {
-      ref.current.classList.add('tick-down', 'glow-red');
-    }
-    
-    lastPrice.current = price;
-    
-    const t = setTimeout(() => {
-      if (ref.current) {
-        ref.current.classList.remove('tick-up', 'tick-down', 'glow-green', 'glow-red');
-      }
-    }, 800);
-    
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setFlashStatus(null), 800);
+    return () => clearTimeout(timer);
   }, [price]);
 
   const displayPrice = price || 0;
-  const meta = COIN_META[symbol] || { emoji: '🪙', name: symbol, color: 'var(--text-dim)' };
+  const meta = COIN_META[symbol] || { emoji: '🪙', name: symbol, color: '#ffffff' };
+  
+  const diff = price - prevPrice;
+  const isPositive = diff >= 0;
 
   return (
-    <div className="flex-shrink-0 flex items-center gap-2 px-3 py-1.5 rounded-xl transition-all duration-300 ml-2 first:ml-4 last:mr-4"
-         style={{ 
-           background: 'rgba(255,255,255,0.03)', 
-           border: '1px solid rgba(255,255,255,0.06)',
-           backdropFilter: 'blur(4px)'
-         }}>
-      
-      <span className="text-[11px] leading-none" style={{ color: meta.color }}>
+    <div 
+      className={`group flex-shrink-0 flex items-center gap-2.5 px-3 py-1.5 rounded-xl transition-all duration-500 ml-2 first:ml-4 last:mr-4 border relative overflow-hidden ${
+        flashStatus === 'up' 
+          ? 'bg-neon-green/10 border-neon-green/50 shadow-[0_0_15px_rgba(34,214,138,0.2)]' 
+          : flashStatus === 'down' 
+            ? 'bg-neon-red/10 border-neon-red/50 shadow-[0_0_15px_rgba(244,63,94,0.2)]' 
+            : 'bg-black/60 border-white/10 hover:border-white/20'
+      }`}
+      style={{ backdropFilter: 'blur(8px)' }}
+    >
+      <div 
+        className="absolute -left-2 -top-2 w-8 h-8 rounded-full blur-[10px] opacity-20 transition-opacity group-hover:opacity-40"
+        style={{ backgroundColor: meta.color }}
+      />
+
+      <span 
+        className="text-[13px] font-black relative z-10 drop-shadow-md" 
+        style={{ color: meta.color }}
+      >
         {meta.emoji}
       </span>
       
-      <div className="flex flex-col">
-        <span className="text-[8px] font-bold uppercase tracking-tighter opacity-30 leading-tight">
-          {symbol}
-        </span>
+      <div className="flex flex-col relative z-10 justify-center">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[9px] font-black uppercase tracking-[0.15em] text-[var(--text-dim)]">
+            {symbol}
+          </span>
+          {prevPrice > 0 && Math.abs(diff) > 0 && (
+            <span className={`text-[7px] ${isPositive ? 'text-neon-green' : 'text-neon-red'}`}>
+              {isPositive ? '▲' : '▼'}
+            </span>
+          )}
+        </div>
+        
         <span 
-          ref={ref} 
-          className="text-[11px] font-mono font-bold transition-colors duration-300"
+          className={`text-[12px] font-mono font-bold transition-colors duration-300 leading-none mt-0.5 ${
+            flashStatus === 'up' ? 'text-neon-green drop-shadow-[0_0_5px_rgba(34,214,138,0.8)]' :
+            flashStatus === 'down' ? 'text-neon-red drop-shadow-[0_0_5px_rgba(244,63,94,0.8)]' :
+            'text-white'
+          }`}
           style={{ letterSpacing: '-0.02em' }}
         >
           {displayPrice.toLocaleString('de-DE', { 
