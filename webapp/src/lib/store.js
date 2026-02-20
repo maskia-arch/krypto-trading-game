@@ -3,7 +3,7 @@ import { api } from './api';
 
 const useStore = create((set, get) => ({
   appName: 'ValueTradeGame',
-  version: null, // Startet leer, um hartcodierte Werte zu vermeiden
+  version: null,
   profile: null,
   assets: [],
   prices: {},
@@ -20,7 +20,7 @@ const useStore = create((set, get) => ({
   tab: 'wallet',
   toast: null,
   leveragePositions: [],
-  leveragePolicy: null,
+  leveragePolicy: null, // Enthält max_positions, margin_limit_factor, etc.
 
   setTab: (tab) => set({ tab }),
   setChartSymbol: (s) => set({ chartSymbol: s }),
@@ -31,7 +31,6 @@ const useStore = create((set, get) => ({
     setTimeout(() => set({ toast: null }), 3000);
   },
 
-  // Lädt die Version direkt aus der version.txt via Backend
   loadVersion: async () => {
     try {
       const data = await api.getVersion();
@@ -155,9 +154,25 @@ const useStore = create((set, get) => ({
     }
   },
 
+  // Hilfsfunktion für das UI: Berechnet verfügbare Margin basierend auf der Policy
+  getAvailableMargin: () => {
+    const { profile, leveragePositions, leveragePolicy } = get();
+    if (!profile || !leveragePolicy) return 0;
+
+    const usedMargin = leveragePositions.reduce((sum, p) => sum + Number(p.collateral), 0);
+    const maxMargin = Number(profile.balance) * leveragePolicy.margin_limit_factor;
+    
+    return Math.max(0, maxMargin - usedMargin);
+  },
+
   openLeveragePosition: async (symbol, direction, collateral, leverage) => {
+    // Vorab-Check im Frontend (optional, Backend validiert ohnehin)
+    const available = get().getAvailableMargin();
+    if (Number(collateral) > available) {
+      throw new Error(`Limit überschritten. Verfügbare Margin: ${available.toFixed(2)}€`);
+    }
+
     const data = await api.openLeverage(symbol, direction, collateral, leverage);
-    // Beides parallel aktualisieren für sofortiges Feedback
     await Promise.all([
       get().fetchProfile(),
       get().fetchLeveragePositions()

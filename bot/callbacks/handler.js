@@ -10,7 +10,6 @@ module.exports = async (ctx) => {
   const data = ctx.callbackQuery.data;
   const adminId = Number(process.env.ADMIN_ID);
 
-  // Basis-Navigation
   if (data === 'portfolio') {
     await ctx.answerCallbackQuery();
     return handlePortfolio(ctx);
@@ -22,6 +21,8 @@ module.exports = async (ctx) => {
 
   if (data === 'show_info') {
     await ctx.answerCallbackQuery();
+    
+    const engineVersion = VERSION.split('.').slice(0, 2).join('.');
     const kb = new InlineKeyboard().text('🔙 Zurück', 'back_to_start');
     
     return ctx.editMessageText(
@@ -29,7 +30,7 @@ module.exports = async (ctx) => {
       `🎮 <b>Spiel-Channel:</b> @ValueTradeGame\n` +
       `👨‍💻 <b>System Architect:</b> @autoacts\n` +
       `⚙️ <b>Version:</b> v${VERSION}\n\n` +
-      `<i>ValueTrade Engine v0.2 - Leverage & Pro Update aktiv.</i>`,
+      `<i>ValueTrade Engine v${engineVersion}</i>`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
   }
@@ -54,7 +55,6 @@ module.exports = async (ctx) => {
     );
   }
 
-  // Einstellungen & User-Profile
   if (data === 'set_name_start') {
     await ctx.answerCallbackQuery();
     const profile = await db.getProfile(ctx.from.id);
@@ -66,7 +66,6 @@ module.exports = async (ctx) => {
     return ctx.reply("✍️ Bitte antworte auf diese Nachricht mit deinem neuen gewünschten Usernamen (einfach Text senden, 4-16 Zeichen).");
   }
 
-  // Account-Löschung
   if (data === 'set_delete_start') {
     await ctx.answerCallbackQuery();
     const kb = new InlineKeyboard()
@@ -102,7 +101,6 @@ module.exports = async (ctx) => {
     );
   }
 
-  // Pro-System Handling
   if (data === 'buy_pro') {
     await ctx.answerCallbackQuery();
     const profile = await db.getProfile(ctx.from.id);
@@ -148,7 +146,6 @@ module.exports = async (ctx) => {
     return ctx.answerCallbackQuery('✅ Erledigt');
   }
 
-  // Admin-Kommandos für Kontolöschung
   if (data.startsWith('confirm_delete:')) {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
     const profileId = data.split(':')[1];
@@ -175,7 +172,6 @@ module.exports = async (ctx) => {
     return ctx.answerCallbackQuery('Abgelehnt');
   }
 
-  // Admin System-Tools
   if (data === 'admin_fetch') {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
     await ctx.answerCallbackQuery('Fetching prices...');

@@ -36,6 +36,97 @@ router.get('/chart/:symbol', async (req, res) => {
   }
 });
 
+router.get('/leverage/positions', async (req, res) => {
+  const tgId = parseTelegramUser(req);
+  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
+
+  try {
+    const profile = await db.getProfile(tgId);
+    if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
+
+    const positions = await db.getOpenLeveragedPositions(profile.id);
+    const isMonday = new Date().getDay() === 1;
+    const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
+
+    res.json({ 
+      positions,
+      policy: {
+        max_positions: isPro ? 3 : 1,
+        margin_limit_factor: isPro ? 0.8 : 0.5,
+        max_leverage: (isMonday || isPro) ? 10 : 5,
+        is_monday: isMonday,
+        is_pro: isPro
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Fehler beim Laden der Hebel-Daten' });
+  }
+});
+
+router.post('/leverage/open', async (req, res) => {
+  const tgId = parseTelegramUser(req);
+  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
+
+  const { symbol, direction, collateral, leverage } = req.body;
+
+  try {
+    const profile = await db.getProfile(tgId);
+    if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
+
+    const price = await db.getCurrentPrice(symbol);
+    if (!price) return res.status(500).json({ error: 'Kurs nicht verfügbar' });
+
+    const position = await db.openLeveragedPosition(
+      profile.id, 
+      symbol, 
+      direction.toUpperCase(), 
+      Number(collateral), 
+      Number(leverage), 
+      price
+    );
+
+    if (req.bot) {
+      const msg = `⚡ <b>HEBEL-TRADE GESTARTET</b>\n\n<b>${symbol} ${direction.toUpperCase()}</b>\nHebel: <b>${leverage}x</b>\nMargin: <b>${Number(collateral).toFixed(2)}€</b>\nEinstieg: <b>${price.toLocaleString('de-DE')}€</b>`;
+      req.bot.api.sendMessage(profile.telegram_id, msg, { parse_mode: 'HTML' }).catch(() => {});
+    }
+
+    res.json({ success: true, position });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/leverage/close', async (req, res) => {
+  const tgId = parseTelegramUser(req);
+  if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });
+
+  const { position_id } = req.body;
+
+  try {
+    const profile = await db.getProfile(tgId);
+    if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
+
+    const { data: pos } = await db.supabase
+      .from('leveraged_positions')
+      .select('symbol')
+      .eq('id', position_id)
+      .single();
+
+    const price = await db.getCurrentPrice(pos.symbol);
+    const result = await db.closeLeveragedPosition(position_id, price);
+
+    if (req.bot) {
+      const emoji = result.pnl >= 0 ? '💰' : '📉';
+      const msg = `${emoji} <b>HEBEL-TRADE GESCHLOSSEN</b>\n\nSymbol: <b>${pos.symbol}</b>\nKurs: <b>${price.toLocaleString('de-DE')}€</b>\nPnL: <b>${result.pnl.toFixed(2)}€</b>\nAuszahlung: <b>${result.payout.toFixed(2)}€</b>`;
+      req.bot.api.sendMessage(profile.telegram_id, msg, { parse_mode: 'HTML' }).catch(() => {});
+    }
+
+    res.json({ success: true, ...result });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.post('/', async (req, res) => {
   const tgId = parseTelegramUser(req);
   if (!tgId) return res.status(401).json({ error: 'Nicht autorisiert' });

@@ -11,22 +11,20 @@ export default function PositionsTable() {
 
   if (!leveragePositions || leveragePositions.length === 0) {
     return (
-      <div className="card p-6 border border-white/5 ring-1 ring-white/5 flex flex-col items-center justify-center text-center space-y-2">
+      <div className="card p-6 border border-white/5 flex flex-col items-center justify-center text-center space-y-2">
         <span className="text-3xl grayscale opacity-50">📭</span>
-        <p className="text-[10px] uppercase tracking-widest font-bold text-[var(--text-dim)]">Keine offenen Positionen</p>
+        <p className="text-[10px] uppercase tracking-widest font-black text-[var(--text-dim)]">Keine offenen Positionen</p>
       </div>
     );
   }
 
   const handleClose = async (id) => {
-    if (!window.confirm('Möchtest du diese Position wirklich schließen?')) return;
-    
     setLoadingId(id);
     try {
       const res = await closeLeveragePosition(id);
-      const isProfit = res.result.pnl >= 0;
-      const emoji = isProfit ? '📈' : '📉';
-      showToast(`${emoji} Position geschlossen! PnL: ${res.result.pnl > 0 ? '+' : ''}${res.result.pnl.toFixed(2)}€`);
+      const pnlValue = res?.pnl || 0;
+      const emoji = pnlValue >= 0 ? '💰' : '📉';
+      showToast(`${emoji} Position geschlossen! PnL: ${pnlValue > 0 ? '+' : ''}${pnlValue.toFixed(2)}€`);
     } catch (err) {
       showToast(`❌ ${err.message || 'Fehler beim Schließen'}`, 'error');
     }
@@ -34,12 +32,13 @@ export default function PositionsTable() {
   };
 
   return (
-    <div className="space-y-3">
-      <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-dim)] px-1">Offene Trades ({leveragePositions.length})</p>
+    <div className="space-y-3 tab-enter">
+      <p className="text-[10px] uppercase tracking-[0.15em] font-black text-[var(--text-dim)] px-1">Offene Trades ({leveragePositions.length})</p>
       
       {leveragePositions.map(pos => {
         const currentPrice = prices[pos.symbol] || Number(pos.entry_price);
         const entryPrice = Number(pos.entry_price);
+        const liqPrice = Number(pos.liquidation_price);
         const collateral = Number(pos.collateral);
         const leverage = Number(pos.leverage);
         const notional = collateral * leverage;
@@ -51,56 +50,76 @@ export default function PositionsTable() {
           pnl = ((entryPrice - currentPrice) / entryPrice) * notional;
         }
 
-        const equity = collateral + pnl;
         const pnlPercent = (pnl / collateral) * 100;
         const isProfit = pnl >= 0;
 
+        const distanceToLiq = pos.direction === 'LONG' 
+          ? ((currentPrice - liqPrice) / currentPrice) * 100
+          : ((liqPrice - currentPrice) / currentPrice) * 100;
+
         return (
-          <div key={pos.id} className="card p-3 border border-white/5 ring-1 ring-white/5 relative overflow-hidden">
+          <div key={pos.id} className="card p-3 border border-white/5 relative overflow-hidden bg-gradient-to-br from-bg-card to-black/40">
             <div className={`absolute left-0 top-0 bottom-0 w-1 ${pos.direction === 'LONG' ? 'bg-neon-green' : 'bg-neon-red'}`} />
             
             <div className="pl-2 flex justify-between items-start mb-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-white">{pos.symbol}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                  <span className="text-sm font-black text-white">{pos.symbol}</span>
+                  <span className={`text-[9px] px-1.5 py-0.5 rounded font-black uppercase tracking-tighter ${
                     pos.direction === 'LONG' ? 'bg-neon-green/10 text-neon-green' : 'bg-neon-red/10 text-neon-red'
                   }`}>
                     {pos.leverage}x {pos.direction}
                   </span>
                 </div>
-                <p className="text-[10px] text-[var(--text-dim)] font-mono mt-1">
-                  Einstieg: {entryPrice.toLocaleString('de-DE', {minimumFractionDigits: 2})}€
-                </p>
+                <div className="flex flex-col mt-1">
+                  <span className="text-[9px] text-[var(--text-dim)] uppercase font-bold">Einstieg</span>
+                  <span className="text-xs font-mono font-bold text-white/80">{entryPrice.toLocaleString('de-DE')}€</span>
+                </div>
               </div>
               
               <div className="text-right">
-                <p className={`text-sm font-mono font-bold ${isProfit ? 'text-neon-green' : 'text-neon-red'}`}>
-                  {isProfit ? '+' : ''}{pnl.toLocaleString('de-DE', {minimumFractionDigits: 2})}€
+                <p className={`text-base font-mono font-black tabular-nums ${isProfit ? 'text-neon-green glow-green' : 'text-neon-red glow-red'}`}>
+                  {isProfit ? '+' : ''}{pnl.toFixed(2)}€
                 </p>
-                <p className={`text-[10px] font-bold ${isProfit ? 'text-neon-green' : 'text-neon-red'}`}>
-                  {isProfit ? '+' : ''}{pnlPercent.toFixed(2)}%
+                <p className={`text-[10px] font-black ${isProfit ? 'text-neon-green' : 'text-neon-red'}`}>
+                  {isProfit ? '▲' : '▼'} {Math.abs(pnlPercent).toFixed(2)}%
                 </p>
               </div>
             </div>
 
-            <div className="pl-2 grid grid-cols-2 gap-2 mb-3">
-              <div className="bg-black/30 p-2 rounded-lg border border-white/5">
-                <p className="text-[9px] uppercase tracking-wider text-[var(--text-dim)]">Marge</p>
-                <p className="text-xs font-mono font-bold text-white">{collateral.toLocaleString('de-DE', {minimumFractionDigits: 2})}€</p>
+            <div className="pl-2 grid grid-cols-3 gap-2 mb-3">
+              <div className="bg-black/40 p-2 rounded-xl border border-white/5">
+                <p className="text-[8px] uppercase font-black text-[var(--text-dim)]">Marge</p>
+                <p className="text-[11px] font-mono font-bold text-white">{collateral.toFixed(2)}€</p>
               </div>
-              <div className="bg-black/30 p-2 rounded-lg border border-white/5">
-                <p className="text-[9px] uppercase tracking-wider text-[var(--text-dim)]">Aktuell</p>
-                <p className="text-xs font-mono font-bold text-neon-blue">{currentPrice.toLocaleString('de-DE', {minimumFractionDigits: 2})}€</p>
+              <div className="bg-black/40 p-2 rounded-xl border border-white/5">
+                <p className="text-[8px] uppercase font-black text-[var(--text-dim)]">Markt</p>
+                <p className="text-[11px] font-mono font-bold text-neon-blue">{currentPrice.toLocaleString('de-DE')}€</p>
+              </div>
+              <div className="bg-black/40 p-2 rounded-xl border border-white/5">
+                <p className="text-[8px] uppercase font-black text-neon-red">Liquidation</p>
+                <p className="text-[11px] font-mono font-bold text-neon-red/80">{liqPrice.toLocaleString('de-DE')}€</p>
               </div>
             </div>
+
+            {distanceToLiq < 15 && (
+              <div className="pl-2 mb-3">
+                <div className="w-full bg-white/5 h-1 rounded-full overflow-hidden">
+                  <div 
+                    className="h-full bg-neon-red animate-pulse" 
+                    style={{ width: `${Math.max(5, 100 - distanceToLiq * 5)}%` }}
+                  />
+                </div>
+                <p className="text-[8px] text-neon-red font-black uppercase mt-1 animate-pulse">Margin Call: Liquidationsgefahr!</p>
+              </div>
+            )}
 
             <button
               onClick={() => handleClose(pos.id)}
               disabled={loadingId === pos.id}
-              className="w-full py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all border bg-white/5 text-white hover:bg-neon-red/20 hover:text-neon-red hover:border-neon-red/30"
+              className="w-full py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.15em] transition-all border border-white/10 bg-white/5 text-white active:scale-[0.98] hover:bg-white/10"
             >
-              {loadingId === pos.id ? 'Schließt...' : 'Position schließen'}
+              {loadingId === pos.id ? 'Wird geschlossen...' : 'Position schließen'}
             </button>
           </div>
         );

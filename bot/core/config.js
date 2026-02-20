@@ -2,10 +2,15 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-let VERSION = '0.1';
+let VERSION = '0.2.2'; 
 try {
-  VERSION = fs.readFileSync(path.join(__dirname, '..', '..', 'version.txt'), 'utf8').trim();
-} catch (e) {}
+  const versionPath = path.resolve(__dirname, '../../version.txt');
+  if (fs.existsSync(versionPath)) {
+    VERSION = fs.readFileSync(versionPath, 'utf8').trim();
+  }
+} catch (e) {
+  console.error("Fehler beim Lesen der version.txt:", e.message);
+}
 
 const botConfig = {
   token: process.env.BOT_TOKEN,
@@ -14,7 +19,7 @@ const botConfig = {
 
 const ADMIN_ID = Number(process.env.ADMIN_ID);
 const WEBAPP_URL = process.env.WEBAPP_URL || 'https://your-webapp.vercel.app';
-const BOT_USERNAME = process.env.BOT_USERNAME || 'YourBot';
+const BOT_USERNAME = process.env.BOT_USERNAME || 'ValueTradeGameBot';
 const APP_SHORTNAME = process.env.APP_SHORTNAME || 'app';
 
 const APP_LINK = `https://t.me/${BOT_USERNAME}/${APP_SHORTNAME}`;

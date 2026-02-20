@@ -2,63 +2,66 @@ import React, { useState } from 'react';
 import useStore from '../../lib/store';
 
 export default function LeveragePanel() {
-  const { profile, chartSymbol, prices, openLeveragePosition, showToast, leveragePolicy, leveragePositions } = useStore();
+  const { 
+    profile, chartSymbol, prices, openLeveragePosition, 
+    showToast, leveragePolicy, leveragePositions, getAvailableMargin 
+  } = useStore();
   
   const [collateral, setCollateral] = useState('');
-  const [leverage, setLeverage] = useState(1);
+  const [leverage, setLeverage] = useState(2);
   const [loadingDir, setLoadingDir] = useState(null);
 
-  const bal = Number(profile?.balance || 0);
   const currentPrice = prices[chartSymbol] || 0;
   
-  const maxLev = leveragePolicy?.maxLeverage || 5;
-  const maxPos = leveragePolicy?.maxPositions || 1;
+  const maxLev = leveragePolicy?.max_leverage || 5;
+  const maxPos = leveragePolicy?.max_positions || 1;
   const currentOpen = leveragePositions?.length || 0;
+  const availableMargin = getAvailableMargin();
 
   const collatNum = Number(collateral) || 0;
   const notional = collatNum * leverage;
   const fee = notional * 0.005;
   const totalCost = collatNum + fee;
 
-  const liqLong = currentPrice * (1 - 1 / leverage);
-  const liqShort = currentPrice * (1 + 1 / leverage);
+  const liqLong = currentPrice * (1 - (1 / leverage) * 0.9);
+  const liqShort = currentPrice * (1 + (1 / leverage) * 0.9);
 
   const canOpen = currentOpen < maxPos;
-  const hasBalance = bal >= totalCost && collatNum > 0;
+  const hasMargin = availableMargin >= totalCost && collatNum > 0;
 
   const handleOpen = async (direction) => {
-    if (!hasBalance) return showToast('Nicht genug Guthaben (inkl. Gebühren)', 'error');
-    if (!canOpen) return showToast(`Maximal ${maxPos} Positionen erlaubt`, 'error');
-    if (leverage > maxLev) return showToast(`Maximaler Hebel ist ${maxLev}x`, 'error');
+    if (collatNum > availableMargin) return showToast(`Margin-Limit überschritten! Verfügbar: ${availableMargin.toFixed(2)}€`, 'error');
+    if (totalCost > Number(profile?.balance)) return showToast('Nicht genug Cash für Gebühren', 'error');
+    if (!canOpen) return showToast(`Limit erreicht: Max ${maxPos} Position(en)`, 'error');
 
     setLoadingDir(direction);
     try {
       await openLeveragePosition(chartSymbol, direction, collatNum, leverage);
-      showToast(`✅ ${leverage}x ${direction} auf ${chartSymbol} geöffnet!`);
+      showToast(`⚡ ${leverage}x ${direction} auf ${chartSymbol} geöffnet!`);
       setCollateral('');
     } catch (err) {
-      showToast(`❌ ${err.message || 'Fehler beim Öffnen'}`, 'error');
+      showToast(`❌ ${err.message || 'Fehler'}`, 'error');
     }
     setLoadingDir(null);
   };
 
   const setPercent = (pct) => {
-    const amount = (bal * pct) / 1.005; 
+    const amount = (availableMargin * pct) / 1.005; 
     setCollateral(amount > 0 ? amount.toFixed(2) : '');
   };
 
-  const availableMultipliers = [1, 2, 3, 5, 10].filter(m => m <= maxLev || m === 10);
+  const leverageOptions = [2, 3, 5, 10];
 
   return (
-    <div className="card p-4 border border-white/5 ring-1 ring-white/5 space-y-4">
+    <div className="card p-4 border border-white/5 space-y-4 bg-gradient-to-b from-bg-card to-black/40">
       
       <div>
         <div className="flex justify-between items-end mb-2">
-          <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-dim)]">Sicherheitsmarge (EUR)</p>
-          <p className="text-xs font-mono font-bold text-neon-green">{bal.toLocaleString('de-DE')}€</p>
+          <p className="text-[10px] uppercase tracking-wider font-black text-[var(--text-dim)]">Einsatz (Verfügbare Margin)</p>
+          <p className="text-xs font-mono font-bold text-neon-blue">{availableMargin.toLocaleString('de-DE')}€</p>
         </div>
         
-        <div className="bg-black/40 rounded-xl flex items-center px-3 py-2 border border-white/5 focus-within:border-neon-blue/50 transition-colors">
+        <div className="bg-black/60 rounded-xl flex items-center px-3 py-3 border border-white/5 focus-within:border-neon-blue/50 transition-all">
           <input
             type="number"
             value={collateral}
@@ -70,11 +73,11 @@ export default function LeveragePanel() {
         </div>
         
         <div className="flex gap-1.5 mt-2">
-          {[0.1, 0.25, 0.5, 1].map(pct => (
+          {[0.25, 0.5, 0.75, 1].map(pct => (
             <button
               key={pct}
               onClick={() => setPercent(pct)}
-              className="flex-1 py-1.5 rounded-lg text-[10px] font-bold bg-white/5 text-[var(--text-dim)] hover:bg-white/10 hover:text-white transition-all border border-white/5"
+              className="flex-1 py-2 rounded-lg text-[10px] font-black bg-white/5 text-[var(--text-dim)] hover:bg-white/10 hover:text-white transition-all border border-white/5"
             >
               {pct * 100}%
             </button>
@@ -84,12 +87,12 @@ export default function LeveragePanel() {
 
       <div>
         <div className="flex justify-between items-end mb-2">
-          <p className="text-[10px] uppercase tracking-wider font-bold text-[var(--text-dim)]">Hebel wählen</p>
-          <p className="text-xs font-mono font-bold text-neon-blue">{leverage}x</p>
+          <p className="text-[10px] uppercase tracking-wider font-black text-[var(--text-dim)]">Hebel wählen</p>
+          <p className={`text-xs font-mono font-bold ${leverage > 5 ? 'text-neon-purple animate-pulse' : 'text-neon-blue'}`}>{leverage}x</p>
         </div>
         
         <div className="flex gap-1.5">
-          {availableMultipliers.map(mult => {
+          {leverageOptions.map(mult => {
             const isLocked = mult > maxLev;
             const isSelected = leverage === mult;
             return (
@@ -97,73 +100,66 @@ export default function LeveragePanel() {
                 key={mult}
                 disabled={isLocked}
                 onClick={() => setLeverage(mult)}
-                className={`flex-1 py-2 rounded-lg text-xs font-bold transition-all border relative ${
+                className={`flex-1 py-2.5 rounded-lg text-xs font-black transition-all border relative ${
                   isSelected 
-                    ? 'bg-neon-blue/20 text-neon-blue border-neon-blue/40 shadow-[0_0_10px_rgba(59,130,246,0.2)]' 
+                    ? 'bg-neon-blue/20 text-neon-blue border-neon-blue/40 shadow-[0_0_15px_rgba(59,130,246,0.2)]' 
                     : isLocked 
-                      ? 'bg-white/5 text-white/20 border-transparent opacity-50 grayscale' 
+                      ? 'bg-white/5 text-white/10 border-transparent grayscale' 
                       : 'bg-black/40 text-[var(--text-dim)] border-white/5 hover:border-white/20'
                 }`}
               >
                 {mult}x
-                {isLocked && <span className="absolute -top-1.5 -right-1.5 text-[10px]">🔒</span>}
+                {isLocked && <span className="absolute -top-1 -right-1 text-[10px]">🔒</span>}
               </button>
             );
           })}
         </div>
       </div>
 
-      <div className="bg-black/40 rounded-xl p-3 border border-white/5 space-y-2">
-        <div className="flex justify-between text-xs">
-          <span className="text-[var(--text-dim)]">Positionsgröße:</span>
-          <span className="font-mono font-bold text-white">{notional.toLocaleString('de-DE', {minimumFractionDigits: 2})}€</span>
+      <div className="bg-black/60 rounded-xl p-3 border border-white/5 space-y-2">
+        <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
+          <span className="text-[var(--text-dim)]">Positionswert:</span>
+          <span className="text-white font-mono">{notional.toLocaleString('de-DE')}€</span>
         </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-[var(--text-dim)]">Gebühr (0.5%):</span>
-          <span className="font-mono font-bold text-neon-gold">{fee.toLocaleString('de-DE', {minimumFractionDigits: 2})}€</span>
-        </div>
-        <div className="flex justify-between text-xs pt-2 border-t border-white/5">
-          <span className="text-[var(--text-dim)]">Liq. Preis (Long):</span>
-          <span className="font-mono font-bold text-neon-red">{liqLong.toLocaleString('de-DE', {minimumFractionDigits: 2})}€</span>
-        </div>
-        <div className="flex justify-between text-xs">
-          <span className="text-[var(--text-dim)]">Liq. Preis (Short):</span>
-          <span className="font-mono font-bold text-neon-red">{liqShort.toLocaleString('de-DE', {minimumFractionDigits: 2})}€</span>
+        <div className="flex justify-between text-[10px] uppercase font-bold tracking-tight">
+          <span className="text-[var(--text-dim)]">Liq. Preis (geschätzt):</span>
+          <span className="text-neon-red font-mono">
+            {direction === 'LONG' ? liqLong.toLocaleString('de-DE') : liqShort.toLocaleString('de-DE')}€
+          </span>
         </div>
       </div>
 
-      <div className="flex gap-2 pt-2">
+      <div className="flex gap-2">
         <button
-          onClick={() => handleOpen('LONG')}
-          disabled={!canOpen || !hasBalance || loadingDir !== null}
-          className={`flex-1 py-3 rounded-xl text-sm font-bold uppercase tracking-wider transition-all border ${
-            canOpen && hasBalance && loadingDir === null
-              ? 'bg-neon-green/20 text-neon-green border-neon-green/30 hover:bg-neon-green/30 hover:shadow-[0_0_15px_rgba(16,185,129,0.3)]'
-              : 'bg-white/5 text-[var(--text-dim)] border-transparent opacity-50 cursor-not-allowed'
+          onClick={() => { setDirection('LONG'); handleOpen('LONG'); }}
+          disabled={!canOpen || !hasMargin || loadingDir !== null}
+          className={`flex-1 py-4 rounded-xl text-xs font-black uppercase tracking-[0.1em] transition-all border ${
+            canOpen && hasMargin 
+              ? 'bg-neon-green/10 text-neon-green border-neon-green/20 hover:bg-neon-green/20 active:scale-95'
+              : 'bg-white/5 text-white/10 border-transparent grayscale cursor-not-allowed'
           }`}
         >
-          {loadingDir === 'LONG' ? 'Öffnet...' : '📈 LONG'}
+          {loadingDir === 'LONG' ? 'Sende...' : 'Buy / Long'}
         </button>
         
         <button
-          onClick={() => handleOpen('SHORT')}
-          disabled={!canOpen || !hasBalance || loadingDir !== null}
-          className={`flex-1 py-3 rounded-xl text-sm font-bold uppercase tracking-wider transition-all border ${
-            canOpen && hasBalance && loadingDir === null
-              ? 'bg-neon-red/20 text-neon-red border-neon-red/30 hover:bg-neon-red/30 hover:shadow-[0_0_15px_rgba(239,68,68,0.3)]'
-              : 'bg-white/5 text-[var(--text-dim)] border-transparent opacity-50 cursor-not-allowed'
+          onClick={() => { setDirection('SHORT'); handleOpen('SHORT'); }}
+          disabled={!canOpen || !hasMargin || loadingDir !== null}
+          className={`flex-1 py-4 rounded-xl text-xs font-black uppercase tracking-[0.1em] transition-all border ${
+            canOpen && hasMargin 
+              ? 'bg-neon-red/10 text-neon-red border-neon-red/20 hover:bg-neon-red/20 active:scale-95'
+              : 'bg-white/5 text-white/10 border-transparent grayscale cursor-not-allowed'
           }`}
         >
-          {loadingDir === 'SHORT' ? 'Öffnet...' : '📉 SHORT'}
+          {loadingDir === 'SHORT' ? 'Sende...' : 'Sell / Short'}
         </button>
       </div>
 
       {!canOpen && (
-        <p className="text-center text-[10px] text-neon-red font-bold uppercase tracking-wide">
-          Limit erreicht: Maximal {maxPos} offene Hebel-Position(en) erlaubt.
+        <p className="text-center text-[9px] text-neon-red font-black uppercase tracking-widest animate-pulse">
+          Limit: Max {maxPos} Position(en) erlaubt
         </p>
       )}
-
     </div>
   );
 }
