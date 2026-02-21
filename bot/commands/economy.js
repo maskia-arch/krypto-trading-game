@@ -2,6 +2,8 @@ const { InlineKeyboard } = require('grammy');
 const { db } = require('../core/database');
 const { esc } = require('../core/utils');
 const { WEBAPP_URL } = require('../core/config');
+// Import der dynamischen Version aus der start.js
+const { getVersion } = require('./start');
 
 async function handleLeaderboard(ctx) {
   try {
@@ -99,35 +101,37 @@ async function handlePro(ctx) {
     const profile = await db.getProfile(ctx.from.id);
     if (!profile) return ctx.reply('Starte zuerst mit /start');
     
+    const version = getVersion(); // Dynamische Version laden
     const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
     
     if (profile.is_admin) {
-      return ctx.reply(`👑 <b>Admin-Status aktiv!</b>\n\nDu hast unbegrenzten Zugriff auf alle v0.3.0 Features.\n\n` +
+      return ctx.reply(`👑 <b>Admin-Status aktiv!</b>\n\nDu hast unbegrenzten Zugriff auf alle v${version} Features.\n\n` +
       `🛡️ Stop-Loss & Take-Profit\n` +
       `📈 Trailing-Stops (Auto-Profit)\n` +
       `🎯 Limit-Orders\n` +
-      `⚡ Bis zu 3 parallele Trades`, { parse_mode: 'HTML' });
+      `⚡ Hebel bis 10x & 3 parallele Trades`, { parse_mode: 'HTML' });
     }
     
     if (isPro) {
       const until = new Date(profile.pro_until).toLocaleDateString('de-DE', { timeZone: 'Europe/Berlin' });
-      return ctx.reply(`✅ <b>Pro-Mitgliedschaft aktiv!</b>\n\nDu genießt alle Vorteile bis zum <b>${until}</b>.\n\nDeine Features sind in der WebApp im Hebel-Panel freigeschaltet!`, { parse_mode: 'HTML' });
+      return ctx.reply(`✅ <b>Pro-Mitgliedschaft aktiv!</b>\n\nVorteile freigeschaltet bis zum <b>${until}</b>.\n\nInkl. 10x Hebel, Automation & monatlicher Namensänderung.`, { parse_mode: 'HTML' });
     }
     
     const kb = new InlineKeyboard()
-      .text('💎 Pro jetzt freischalten (5€)', 'buy_pro')
+      .text('💎 Pro Bestellen', 'buy_pro')
       .row()
       .text('❌ Abbrechen', 'close');
 
+    // Gekürzte Fassung der Vorteile für v0.3.1
     return ctx.reply(
-      `⭐ <b>UPGRADE AUF VALUE-PRO (v0.3.0)</b>\n\n` +
+      `⭐ <b>UPGRADE AUF VALUE-PRO (v${version})</b>\n\n` +
       `Werde zum Profi-Trader und schalte exklusive Werkzeuge frei:\n\n` +
-      `⚡ <b>Hebel-Boost:</b> Trade mit bis zu 10x Hebel!\n` +
-      `🛡️ <b>Automatisierung:</b> Stop-Loss & Take-Profit nutzen.\n` +
-      `📈 <b>Trailing-Stop:</b> Lass Gewinne automatisch absichern.\n` +
-      `🎯 <b>Limit-Orders:</b> Kaufe den Dip auch wenn du schläfst.\n` +
-      `📦 <b>Mehr Trades:</b> Bis zu 3 Positionen gleichzeitig offen.\n\n` +
-      `<i>Sichere dir den entscheidenden Vorteil in der Season-Rangliste!</i>`,
+      `⚡ <b>Hebel-Boost:</b> Trade mit bis zu 10x Hebel\n` +
+      `🛡️ <b>Automation:</b> Stop-Loss, Take-Profit & Trailing-Stopp\n` +
+      `🎯 <b>Limit-Orders:</b> Kaufe automatisch im Dip\n` +
+      `📦 <b>Kapazität:</b> Bis zu 3 Positionen gleichzeitig\n` +
+      `🎨 <b>Kosmetik:</b> Profilhintergrund & Namensänderung alle 30 Tage\n\n` +
+      `<i>Sichere dir den entscheidenden Vorteil in der Rangliste!</i>`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
   } catch (err) {

@@ -326,5 +326,66 @@ db.cleanupExpiredBackgrounds = async function() {
     }
   }
 };
+// --- NEUE PRO-BESTELL-LOGIK (v0.3.1) ---
+
+/**
+ * Erstellt eine neue Pro-Anfrage mit Tarifauswahl
+ */
+db.createProRequest = async function(profileId, months, price) {
+  const { data, error } = await this.supabase
+    .from('pro_requests')
+    .insert({
+      profile_id: profileId,
+      duration_months: months,
+      price_paid: price,
+      status: 'pending',
+      created_at: new Date().toISOString()
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+};
+
+/**
+ * Erhöht die Strikes eines Users bei Ablehnung
+ */
+db.addProStrike = async function(profileId) {
+  const { data: profile } = await this.supabase
+    .from('profiles')
+    .select('pro_strikes')
+    .eq('id', profileId)
+    .single();
+
+  const newStrikes = (profile?.pro_strikes || 0) + 1;
+  
+  await this.supabase
+    .from('profiles')
+    .update({ pro_strikes: newStrikes })
+    .eq('id', profileId);
+
+  return newStrikes;
+};
+
+/**
+ * Aktiviert Pro für einen spezifischen Zeitraum
+ */
+db.activateProForUser = async function(profileId, months) {
+  const proUntil = new Date();
+  proUntil.setMonth(proUntil.getMonth() + months);
+
+  const { data, error } = await this.supabase
+    .from('profiles')
+    .update({ 
+      is_pro: true, 
+      pro_until: proUntil.toISOString(),
+      pro_strikes: 0 // Bei erfolgreichem Kauf werden Strikes zurückgesetzt
+    })
+    .eq('id', profileId);
+
+  if (error) throw error;
+  return proUntil;
+};
 
 module.exports = { db };
