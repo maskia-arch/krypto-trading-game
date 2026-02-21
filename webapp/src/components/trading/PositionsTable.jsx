@@ -46,7 +46,6 @@ export default function PositionsTable() {
       </div>
       
       {leveragePositions.map(pos => {
-        // SICHERHEITS-PANZER: Fallbacks für alle numerischen Werte
         const currentPrice = Number(prices?.[pos.symbol]) || Number(pos.entry_price) || 0;
         const entryPrice = Number(pos.entry_price) || 0;
         const liqPrice = Number(pos.liquidation_price) || 0;
@@ -54,6 +53,7 @@ export default function PositionsTable() {
         const leverage = Number(pos.leverage) || 1;
         const notional = collateral * leverage;
 
+        // PnL Berechnung
         let pnl = 0;
         if (pos.direction === 'LONG') {
           pnl = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * notional : 0;
@@ -61,20 +61,21 @@ export default function PositionsTable() {
           pnl = entryPrice > 0 ? ((entryPrice - currentPrice) / entryPrice) * notional : 0;
         }
 
-        // Schutz vor NaN
+        // Gebühren-Vorschau (0.5% auf das Gesamtvolumen beim Schließen)
+        const closingFee = notional * 0.005;
+        const netPnL = pnl - closingFee;
+
         const pnlPercent = collateral > 0 ? (pnl / collateral) * 100 : 0;
         const isProfit = pnl >= 0;
         const isLong = pos.direction === 'LONG';
 
-        // Verbesserte, absturzsichere Distanz-Berechnung
-        let distanceToLiq = 100; // Default-Wert, wenn noch keine Preise geladen sind
+        let distanceToLiq = 100;
         if (currentPrice > 0 && liqPrice > 0) {
            distanceToLiq = isLong 
             ? ((currentPrice - liqPrice) / currentPrice) * 100
             : ((liqPrice - currentPrice) / currentPrice) * 100;
         }
         
-        // Verhindert extreme Ausreißer in der ProgressBar (die sonst das CSS sprengen)
         const safeDistance = Math.max(0, Math.min(100, distanceToLiq || 100));
 
         return (
@@ -112,7 +113,15 @@ export default function PositionsTable() {
               </div>
             </div>
 
-            {/* Anzeige für SL / TP Marken */}
+            {/* Status Leiste für effektive PnL nach Gebühr */}
+            <div className="pl-3 mb-3 relative z-10 flex justify-between items-center bg-white/5 rounded-lg px-2 py-1.5 border border-white/5">
+                <span className="text-[7px] font-black uppercase text-white/40 tracking-widest">Netto (nach Gebühr)</span>
+                <span className={`text-[10px] font-mono font-bold ${netPnL >= 0 ? 'text-neon-green' : 'text-neon-red'}`}>
+                    {netPnL.toFixed(2)}€
+                </span>
+            </div>
+
+            {/* SL / TP Marken */}
             {(pos.stop_loss || pos.take_profit) && (
               <div className="pl-3 flex gap-3 mb-3 relative z-10 border-t border-white/5 pt-2">
                 {pos.stop_loss && (
@@ -145,7 +154,7 @@ export default function PositionsTable() {
               </div>
             </div>
 
-            {/* Sicherer Aufruf von distanceToLiq */}
+            {/* Liquidation Warnung */}
             {safeDistance < 15 && safeDistance > 0 && currentPrice > 0 && (
               <div className="pl-3 mb-4 relative z-10">
                 <div className="flex justify-between text-[8px] font-black uppercase mb-1">
@@ -164,17 +173,19 @@ export default function PositionsTable() {
               <button
                 onClick={() => handleClose(pos.id, true)}
                 disabled={!!busyId}
-                className="flex-1 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest border border-white/10 bg-white/5 text-white/80 active:scale-[0.98] disabled:opacity-50 transition-all hover:bg-white/10"
+                className="flex-1 flex flex-col items-center py-2 rounded-xl border border-white/10 bg-white/5 text-white active:scale-[0.98] disabled:opacity-50 transition-all hover:bg-white/10"
               >
-                {busyId === pos.id ? '...' : 'Partial (50%)'}
+                <span className="text-[9px] font-black uppercase tracking-widest">{busyId === pos.id ? '...' : 'Partial'}</span>
+                <span className="text-[7px] text-white/40 font-mono">Fee: {(closingFee/2).toFixed(2)}€</span>
               </button>
               
               <button
                 onClick={() => handleClose(pos.id, false)}
                 disabled={!!busyId}
-                className="flex-[2] py-3 rounded-xl text-[9px] font-black uppercase tracking-widest border border-white/10 bg-white/10 text-white active:scale-[0.98] disabled:opacity-50 transition-all hover:bg-white/20 hover:border-white/30"
+                className="flex-[2] flex flex-col items-center py-2 rounded-xl border border-white/10 bg-white/10 text-white active:scale-[0.98] disabled:opacity-50 transition-all hover:bg-white/20 hover:border-white/30"
               >
-                {busyId === pos.id ? '...' : 'Position schließen'}
+                <span className="text-[9px] font-black uppercase tracking-widest">{busyId === pos.id ? '...' : 'Position schließen'}</span>
+                <span className="text-[7px] text-white/40 font-mono">Fee: {closingFee.toFixed(2)}€</span>
               </button>
             </div>
           </div>

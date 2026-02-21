@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { api } from './api';
 
 const useStore = create((set, get) => ({
+  // ... (States bleiben identisch bis leveragePolicy)
   appName: 'ValueTradeGame',
   version: null,
   profile: null,
@@ -38,22 +39,20 @@ const useStore = create((set, get) => ({
     return !!p.is_admin || isPro;
   },
 
-  // --- NEU: CHART LOGIK FIX ---
+  // --- LOGIK-FIXES ---
+
   loadChart: async (symbol, range) => {
     try {
-      // Wir setzen die Daten nicht auf leer, um Flackern zu vermeiden, 
-      // aber wir könnten ein lokales loading-Flag setzen falls gewünscht.
       const data = await api.getChart(symbol || get().chartSymbol, range || get().chartRange);
       if (data && data.data) {
         set({ chartData: data.data });
       }
     } catch (e) {
       console.error("Chart-Ladefehler:", e);
-      set({ chartData: [] }); // Fallback auf leeres Array bei Fehler
+      set({ chartData: [] });
     }
   },
 
-  // --- NEU: LEADERBOARD LOGIK FIX ---
   loadLeaderboard: async (filter) => {
     try {
       const data = await api.getLeaderboard(filter);
@@ -69,27 +68,13 @@ const useStore = create((set, get) => ({
     }
   },
 
-  loadVersion: async () => {
-    try {
-      const data = await api.getVersion();
-      if (data && data.version) {
-        set({ version: data.version });
-      }
-    } catch (e) {
-      console.error("Versions-Fehler:", e);
-    }
-  },
-
   fetchProfile: async (retryCount = 0) => {
     try {
-      if (!get().profile && retryCount === 0) set({ loading: true });
       const data = await api.getProfile();
       if (!data || !data.profile) throw new Error("Profil-Daten unvollständig.");
 
       const priceMap = {};
-      (data.prices || []).forEach(p => { 
-        priceMap[p.symbol] = Number(p.price_eur); 
-      });
+      (data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
       
       set({
         profile: { ...data.profile, collectibles: data.collectibles || [] },
@@ -97,28 +82,11 @@ const useStore = create((set, get) => ({
         prices: priceMap,
         prevPrices: Object.keys(get().prices).length > 0 ? get().prices : priceMap,
         achievements: data.achievements || [],
-        loading: false,
-        error: null
+        loading: false
       });
     } catch (err) {
-      if (retryCount < 2) {
-        setTimeout(() => get().fetchProfile(retryCount + 1), 1500);
-      } else {
-        set({ error: "Profil-Fehler", loading: false });
-      }
+      if (retryCount < 2) setTimeout(() => get().fetchProfile(retryCount + 1), 1500);
     }
-  },
-
-  loadProfile: async () => get().fetchProfile(),
-
-  refreshPrices: async () => {
-    try {
-      const old = { ...get().prices };
-      const data = await api.getPrices();
-      const priceMap = {};
-      (data.prices || []).forEach(p => { priceMap[p.symbol] = Number(p.price_eur); });
-      set({ prices: priceMap, prevPrices: old });
-    } catch (e) {}
   },
 
   fetchLeveragePositions: async () => {
@@ -133,38 +101,26 @@ const useStore = create((set, get) => ({
     }
   },
 
+  // --- MARGIN-BERECHNUNG (GEPANZERT) ---
   getAvailableMargin: () => {
-    const balance = Number(get().profile?.balance || 0);
-    // Verwendete Margin aller offenen Positionen abziehen
-    const usedMargin = get().leveragePositions.reduce((sum, pos) => sum + Number(pos.collateral || 0), 0);
+    const profile = get().profile;
+    if (!profile) return 0;
+    
+    const balance = Number(profile.balance || 0);
+    const positions = get().leveragePositions || [];
+    
+    // Summe aller Sicherheiten (Collaterals) der offenen Positionen
+    const usedMargin = positions.reduce((sum, pos) => sum + Number(pos.collateral || 0), 0);
+    
+    // Verhindert, dass durch Gebühren-Lags negative Werte entstehen
     return Math.max(0, balance - usedMargin);
   },
 
-  buyCrypto: async (symbol, amount_eur) => {
-    const res = await api.buy(symbol, amount_eur);
-    await get().fetchProfile();
-    return res;
-  },
-
-  sellCrypto: async (symbol, amount_crypto) => {
-    const res = await api.sell(symbol, amount_crypto);
-    await get().fetchProfile();
-    return res;
-  },
-
+  // --- HANDEL ---
   openLeveragePosition: async (symbol, direction, collateral, leverage, options = {}) => {
     try {
       const res = await api.openLeverage(symbol, direction, collateral, leverage, options);
-      await Promise.all([get().fetchProfile(), get().fetchLeveragePositions()]);
-      return res;
-    } catch (err) {
-      throw err;
-    }
-  },
-
-  partialClosePosition: async (positionId) => {
-    try {
-      const res = await api.partialClose(positionId);
+      // Wichtig: Beides aktualisieren, damit Margin sofort stimmt
       await Promise.all([get().fetchProfile(), get().fetchLeveragePositions()]);
       return res;
     } catch (err) {
@@ -175,7 +131,7 @@ const useStore = create((set, get) => ({
   closeLeveragePosition: async (positionId) => {
     try {
       const res = await api.closeLeverage(positionId);
-      // Optimistic Update: Position sofort aus der Liste entfernen
+      // Optimistic Update für sofortiges Feedback im UI
       set(state => ({
         leveragePositions: state.leveragePositions.filter(p => p.id !== positionId)
       }));

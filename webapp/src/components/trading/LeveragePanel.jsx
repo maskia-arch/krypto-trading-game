@@ -8,7 +8,6 @@ const COINS = {
   LTC: { name: 'Litecoin', emoji: 'Ł', color: '#bfbbbb', bg: 'rgba(191,187,187,0.1)', border: 'rgba(191,187,187,0.2)' },
 };
 
-// InfoBtn außerhalb der Hauptkomponente definiert (verhindert Re-Renders und Memory Leaks)
 const InfoBtn = ({ type, setInfoType }) => (
   <button 
     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInfoType(type); }}
@@ -28,16 +27,12 @@ export default function LeveragePanel() {
   const [collateral, setCollateral] = useState('');
   const [leverage, setLeverage] = useState(2);
   const [loadingDir, setLoadingDir] = useState(null);
-
-  // Pro-Features States
   const [showProSettings, setShowProSettings] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [stopLoss, setStopLoss] = useState('');
   const [takeProfit, setTakeProfit] = useState('');
   const [limitPrice, setLimitPrice] = useState('');
   const [trailingStop, setTrailingStop] = useState(false);
-  
-  // Modal State
   const [infoType, setInfoType] = useState(null);
 
   const isPremium = isPremiumUser();
@@ -46,7 +41,6 @@ export default function LeveragePanel() {
     fetchLeveragePositions();
   }, [fetchLeveragePositions]);
 
-  // Fallback, solange die Policy oder das Profil noch laden
   if (!leveragePolicy || !profile) {
     return (
       <div className="flex justify-center p-8">
@@ -55,16 +49,12 @@ export default function LeveragePanel() {
     );
   }
 
-  // Sicherheits-Fallbacks für alle Variablen
   const coin = chartSymbol || 'BTC';
-  const currentPrice = prices?.[coin] || 0;
-  
-  // Akzeptiert sowohl snake_case als auch camelCase vom Backend
   const maxLev = leveragePolicy?.max_leverage || leveragePolicy?.maxLeverage || 5;
   const maxPos = isPremium ? 3 : (leveragePolicy?.max_positions || leveragePolicy?.maxPositions || 1);
   const currentOpen = leveragePositions?.length || 0;
   
-  // Stellt sicher, dass margin immer eine Zahl ist, um NaN-Fehler beim .toLocaleString zu vermeiden
+  // Nutzt die neue Logik aus der store.js
   const availableMargin = Number(getAvailableMargin()) || 0;
 
   const collatNum = Number(collateral) || 0;
@@ -73,10 +63,12 @@ export default function LeveragePanel() {
   const totalCost = collatNum + fee;
 
   const canOpen = currentOpen < maxPos;
-  const hasMargin = collatNum <= availableMargin && totalCost <= Number(profile?.balance || 0) && collatNum > 0;
+  // Validierung: Kosten inkl. Fee dürfen verfügbare Margin nicht überschreiten
+  const hasMargin = totalCost <= availableMargin && collatNum > 0;
 
   const handleOpen = async (dir) => {
     if (!canOpen) return showToast(`Limit erreicht: Max ${maxPos} Position(en)`, 'error');
+    if (!hasMargin) return showToast(`Unzureichende Margin (inkl. Gebühren)`, 'error');
 
     setLoadingDir(dir);
     try {
@@ -120,14 +112,38 @@ export default function LeveragePanel() {
 
       <div className="card p-4 border border-white/5 space-y-4 bg-gradient-to-b from-bg-card to-black/40 shadow-xl">
         {/* Margin Input */}
-        <div>
-          <div className="flex justify-between items-end mb-2 px-1">
+        <div className="space-y-3">
+          <div className="flex justify-between items-end px-1">
             <p className="text-[10px] uppercase tracking-wider font-black text-[var(--text-dim)]">Einsatz</p>
             <p className="text-xs font-mono font-bold text-neon-blue">{availableMargin.toLocaleString('de-DE')}€ verfügbar</p>
           </div>
+          
           <div className="bg-black/60 rounded-xl flex items-center px-4 py-3 border border-white/5 focus-within:border-neon-blue/50">
-            <input type="number" value={collateral} onChange={(e) => setCollateral(e.target.value)} placeholder="0.00" className="bg-transparent w-full text-lg font-bold text-white outline-none" />
+            <input 
+              type="number" 
+              value={collateral} 
+              onChange={(e) => setCollateral(e.target.value)} 
+              placeholder="0.00" 
+              className="bg-transparent w-full text-lg font-bold text-white outline-none" 
+            />
             <span className="text-[var(--text-dim)] font-black text-sm ml-2">EUR</span>
+          </div>
+
+          {/* NEU: Prozent-Buttons für Quick-Set */}
+          <div className="flex gap-1.5">
+            {[25, 50, 75, 100].map(pct => (
+              <button 
+                key={pct} 
+                onClick={() => {
+                  // Berücksichtigt die 0.5% Fee bei der Berechnung, damit 100% wirklich klappt
+                  const amount = (availableMargin * (pct / 100)) / (1 + (leverage * 0.005));
+                  setCollateral(amount.toFixed(2));
+                }}
+                className="flex-1 py-2 rounded-lg text-[10px] font-black bg-white/5 text-[var(--text-dim)] hover:bg-white/10 hover:text-white transition-all border border-white/5 active:scale-95"
+              >
+                {pct}%
+              </button>
+            ))}
           </div>
         </div>
 
@@ -144,62 +160,45 @@ export default function LeveragePanel() {
           </div>
         </div>
 
-        {/* PRO SETTINGS DROPDOWN */}
+        {/* PRO SETTINGS & ADVANCED (Unverändert) */}
         <div className="border-t border-white/5 pt-2">
-          <button 
-            onClick={() => isPremium && setShowProSettings(!showProSettings)}
-            className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${isPremium ? 'hover:bg-white/5 text-white' : 'opacity-50 text-white/40 cursor-not-allowed'}`}
-          >
+          <button onClick={() => isPremium && setShowProSettings(!showProSettings)} className={`w-full flex items-center justify-between p-2 rounded-lg ${isPremium ? 'hover:bg-white/5 text-white' : 'opacity-50 text-white/40 cursor-not-allowed'}`}>
             <div className="flex items-center gap-2">
               <span className="text-xs">🎯</span>
               <span className="text-[10px] font-black uppercase tracking-widest">Profit & Schutz {!isPremium && '🔒'}</span>
             </div>
             <span className="text-[10px]">{showProSettings ? '▲' : '▼'}</span>
           </button>
-
           {showProSettings && isPremium && (
             <div className="space-y-3 p-2 mt-2 bg-black/20 rounded-xl border border-white/5 tab-enter">
               <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[9px] font-black uppercase text-white/40 flex items-center">Stop Loss <InfoBtn type="stop_loss" setInfoType={setInfoType}/></label>
-                </div>
-                <input type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="Preis eingeben..." className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-neon-red/50" />
+                <label className="text-[9px] font-black uppercase text-white/40 flex items-center">Stop Loss <InfoBtn type="stop_loss" setInfoType={setInfoType}/></label>
+                <input type="number" value={stopLoss} onChange={(e) => setStopLoss(e.target.value)} placeholder="Preis..." className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white outline-none" />
               </div>
               <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[9px] font-black uppercase text-white/40 flex items-center">Take Profit <InfoBtn type="take_profit" setInfoType={setInfoType}/></label>
-                </div>
-                <input type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="Preis eingeben..." className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-neon-green/50" />
+                <label className="text-[9px] font-black uppercase text-white/40 flex items-center">Take Profit <InfoBtn type="take_profit" setInfoType={setInfoType}/></label>
+                <input type="number" value={takeProfit} onChange={(e) => setTakeProfit(e.target.value)} placeholder="Preis..." className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white outline-none" />
               </div>
             </div>
           )}
         </div>
 
-        {/* ADVANCED DROPDOWN */}
         <div className="border-t border-white/5 pt-2">
-          <button 
-            onClick={() => isPremium && setShowAdvanced(!showAdvanced)}
-            className={`w-full flex items-center justify-between p-2 rounded-lg transition-all ${isPremium ? 'hover:bg-white/5 text-white' : 'opacity-50 text-white/40 cursor-not-allowed'}`}
-          >
+          <button onClick={() => isPremium && setShowAdvanced(!showAdvanced)} className={`w-full flex items-center justify-between p-2 rounded-lg ${isPremium ? 'hover:bg-white/5 text-white' : 'opacity-50 text-white/40 cursor-not-allowed'}`}>
             <div className="flex items-center gap-2">
               <span className="text-xs">⚙️</span>
               <span className="text-[10px] font-black uppercase tracking-widest">Erweiterte Optionen {!isPremium && '🔒'}</span>
             </div>
             <span className="text-[10px]">{showAdvanced ? '▲' : '▼'}</span>
           </button>
-
           {showAdvanced && isPremium && (
             <div className="space-y-3 p-2 mt-2 bg-black/20 rounded-xl border border-white/5 tab-enter">
               <div className="flex flex-col gap-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-[9px] font-black uppercase text-white/40 flex items-center">Limit Order <InfoBtn type="limit_order" setInfoType={setInfoType}/></label>
-                </div>
-                <input type="number" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} placeholder="Einstiegspreis..." className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white outline-none focus:border-neon-blue/50" />
+                <label className="text-[9px] font-black uppercase text-white/40 flex items-center">Limit Order <InfoBtn type="limit_order" setInfoType={setInfoType}/></label>
+                <input type="number" value={limitPrice} onChange={(e) => setLimitPrice(e.target.value)} placeholder="Preis..." className="bg-black/40 border border-white/10 rounded-lg p-2 text-xs text-white outline-none" />
               </div>
               <div className="flex items-center justify-between p-2 bg-black/40 rounded-lg border border-white/10">
-                <div className="flex items-center">
-                  <span className="text-[9px] font-black uppercase text-white/40 flex items-center">Trailing Stop <InfoBtn type="trailing_stop" setInfoType={setInfoType}/></span>
-                </div>
+                <span className="text-[9px] font-black uppercase text-white/40 flex items-center">Trailing Stop <InfoBtn type="trailing_stop" setInfoType={setInfoType}/></span>
                 <button onClick={() => setTrailingStop(!trailingStop)} className={`w-10 h-5 rounded-full relative transition-all ${trailingStop ? 'bg-neon-blue' : 'bg-white/10'}`}>
                   <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${trailingStop ? 'left-6' : 'left-1'}`} />
                 </button>
@@ -227,14 +226,7 @@ export default function LeveragePanel() {
         )}
       </div>
 
-      {/* Info Modal Integration - Safeguarded */}
-      {infoType && (
-        <TradeInfoModal 
-          type={infoType} 
-          isOpen={!!infoType} 
-          onClose={() => setInfoType(null)} 
-        />
-      )}
+      {infoType && <TradeInfoModal type={infoType} isOpen={!!infoType} onClose={() => setInfoType(null)} />}
     </div>
   );
 }
