@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import useStore from './lib/store';
 import { api } from './lib/api';
 
@@ -27,14 +27,19 @@ const COIN_META = {
 };
 
 export default function App() {
-  const { 
-    tab, setTab, fetchProfile, refreshPrices, loadVersion, 
+  const {
+    tab, setTab, fetchProfile, refreshPrices, loadVersion,
     loadChart, chartSymbol, chartRange,
-    prices, prevPrices, showToast, loading, error, version, profile 
+    prices, prevPrices, showToast, loading, error, version, profile
   } = useStore();
-  
+
   const [authChecking, setAuthChecking] = useState(true);
   const lastKnownVersion = localStorage.getItem('vt_last_version') || '...';
+  const profileRef = useRef(profile);
+
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
 
   useEffect(() => {
     if (version) {
@@ -44,8 +49,6 @@ export default function App() {
 
   useEffect(() => {
     const initApp = async () => {
-      // Sicherheits-Timeout: Wenn nach 8 Sekunden nichts geladen ist, 
-      // beenden wir den Ladebildschirm trotzdem, um die UI anzuzeigen.
       const fallbackTimer = setTimeout(() => {
         setAuthChecking(false);
       }, 8000);
@@ -58,8 +61,7 @@ export default function App() {
           tg.setBackgroundColor('#06080f');
           tg.setHeaderColor('#06080f');
         }
-        
-        // Führt alle Initialisierungen parallel aus
+
         await Promise.allSettled([
           loadVersion(),
           fetchProfile(),
@@ -75,16 +77,16 @@ export default function App() {
 
     initApp();
 
-    const priceInterval = setInterval(refreshPrices, 60000); // Preis-Update alle 60s
+    const priceInterval = setInterval(refreshPrices, 60000);
     const profileInterval = setInterval(() => {
-      if (profile) fetchProfile(); // Profil-Update nur bei existierendem Profil
+      if (profileRef.current) fetchProfile();
     }, 25000);
 
     return () => {
       clearInterval(priceInterval);
       clearInterval(profileInterval);
     };
-  }, [fetchProfile, refreshPrices, loadVersion, loadChart, chartSymbol, chartRange, profile]);
+  }, [fetchProfile, refreshPrices, loadVersion, loadChart, chartSymbol, chartRange]);
 
   useEffect(() => {
     const checkBonus = async () => {
@@ -104,11 +106,10 @@ export default function App() {
 
   useEffect(() => {
     if (tab === 'trade' || tab === 'chart') {
-      setTab('wallet'); // Erzwingt Wallet-Tab bei ungültigen Zuständen
+      setTab('wallet');
     }
   }, [tab, setTab]);
 
-  // Ladebildschirm-Logik mit Fallback-Schutz
   if (authChecking || (loading && !profile && !error)) {
     return (
       <div className="flex h-screen flex-col items-center justify-center text-white bg-[#06080f] space-y-4">
@@ -126,7 +127,6 @@ export default function App() {
     );
   }
 
-  // Fehler-Screen nur bei echtem Fehler ohne Profil-Daten
   if (error && !profile) {
     return (
       <div className="flex h-screen items-center justify-center text-white px-8 text-center bg-[#06080f]">
@@ -138,7 +138,7 @@ export default function App() {
               {error}
             </p>
           </div>
-          <button 
+          <button
             onClick={() => window.location.reload()}
             className="w-full py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest"
           >
@@ -155,11 +155,11 @@ export default function App() {
         <Header />
         <div className="flex overflow-x-auto no-scrollbar py-2 border-t border-white/[0.03]">
           {Object.keys(COIN_META).map(sym => (
-            <PriceTicker 
-              key={sym} 
-              symbol={sym} 
-              price={prices[sym] || 0} 
-              prevPrice={prevPrices[sym] || 0} 
+            <PriceTicker
+              key={sym}
+              symbol={sym}
+              price={prices[sym] || 0}
+              prevPrice={prevPrices[sym] || 0}
             />
           ))}
         </div>

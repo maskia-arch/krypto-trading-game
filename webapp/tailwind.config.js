@@ -19,6 +19,9 @@ export default {
           purple: '#a78bfa',
         },
       },
+      animation: {
+        'pulse-slow': 'pulse 3s ease-in-out infinite',
+      },
     },
   },
   plugins: [],
