@@ -9,18 +9,16 @@ import useStore from '../lib/store';
 export default function WalletView() {
   const [mode, setMode] = useState('spot');
   
-  // SICHERHEIT: Wir ziehen nur die benötigte Funktion und prüfen, ob sie existiert
   const fetchLeveragePositions = useStore((state) => state.fetchLeveragePositions);
   const leveragePolicy = useStore((state) => state.leveragePolicy);
 
   useEffect(() => {
-    // Nur ausführen, wenn die Funktion im Store auch wirklich existiert
     if (typeof fetchLeveragePositions === 'function') {
       fetchLeveragePositions().catch(err => console.error("Initial Fetch Error:", err));
 
       const interval = setInterval(() => {
-        fetchLeveragePositions().catch(() => {}); // Fehler im Intervall ignorieren
-      }, 8000); // Intervall leicht erhöht auf 8s für bessere Performance
+        fetchLeveragePositions().catch(() => {});
+      }, 8000);
 
       return () => clearInterval(interval);
     }
@@ -28,7 +26,6 @@ export default function WalletView() {
 
   return (
     <div className="space-y-4 pb-6 tab-enter">
-      {/* Mode Switcher */}
       <div className="flex bg-black/60 backdrop-blur-md p-1.5 rounded-2xl border border-white/5 shadow-inner">
         <button
           onClick={() => setMode('spot')}
@@ -52,7 +49,6 @@ export default function WalletView() {
         </button>
       </div>
 
-      {/* Content Rendering */}
       {mode === 'spot' ? (
         <div className="space-y-4 tab-enter">
           <ChartView />
@@ -60,8 +56,6 @@ export default function WalletView() {
         </div>
       ) : (
         <div className="flex flex-col tab-enter">
-          {/* FALLBACK: Falls die Hebel-Daten noch laden, zeige einen Lade-Indikator 
-              statt die Seite abstürzen zu lassen */}
           {!leveragePolicy ? (
             <div className="flex flex-col items-center justify-center py-20 opacity-50 gap-3">
               <div className="w-8 h-8 border-2 border-neon-blue/20 border-t-neon-blue rounded-full animate-spin"></div>
@@ -69,17 +63,14 @@ export default function WalletView() {
             </div>
           ) : (
             <>
-              {/* 1. Chart */}
               <LiveChart30m />
               
-              {/* 2. LeveragePanel */}
-              <div className="mt-4 order-1">
-                <LeveragePanel />
+              <div className="mt-4">
+                <PositionsTable />
               </div>
               
-              {/* 3. PositionsTable */}
-              <div className="mt-6 order-2">
-                <PositionsTable /> 
+              <div className="mt-4">
+                <LeveragePanel />
               </div>
             </>
           )}
