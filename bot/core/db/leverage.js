@@ -69,7 +69,6 @@ module.exports = (db) => ({
   },
 
   async closeLeveragedPosition(positionId, currentPrice, isLiquidation = false) {
-    // Position holen – OHNE Status-Filter, um sicher zu finden
     const { data: pos, error: fetchErr } = await db.supabase
       .from('leveraged_positions')
       .select('*')
@@ -102,7 +101,6 @@ module.exports = (db) => ({
     let payout = (collateral + pnl) - fee;
     if (payout < 0) payout = 0;
 
-    // Update ohne zusätzlichen Status-Filter – nur per ID
     const { error: updErr, count } = await db.supabase
       .from('leveraged_positions')
       .update({
@@ -117,12 +115,12 @@ module.exports = (db) => ({
       .select('count');
 
     if (updErr) {
-      console.error('Update Error in closeLeveragedPosition:', updErr);
+      console.error('Update Error in close:', updErr.message);
       throw updErr;
     }
 
     if (count !== 1) {
-      throw new Error(`Update hat ${count} Zeilen betroffen (erwartet: 1)`);
+      throw new Error(`Update hat ${count} Zeilen betroffen – Position nicht gefunden oder Status geändert`);
     }
 
     const { data: profile } = await db.supabase
@@ -151,7 +149,6 @@ module.exports = (db) => ({
       .from('leveraged_positions')
       .select('*')
       .eq('id', positionId)
-      .eq('profile_id', profileId)
       .single();
 
     if (fetchErr || !pos) throw new Error('Position nicht gefunden');
@@ -183,7 +180,7 @@ module.exports = (db) => ({
       .select('count');
 
     if (updErr) throw updErr;
-    if (count !== 1) throw new Error('Partial Update fehlgeschlagen – Zeile nicht gefunden');
+    if (count !== 1) throw new Error('Partial Update fehlgeschlagen');
 
     const { data: profile } = await db.supabase
       .from('profiles')
