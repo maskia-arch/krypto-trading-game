@@ -122,7 +122,7 @@ const useStore = create((set, get) => ({
         leveragePolicy: posData.policy || get().leveragePolicy
       });
     } catch (e) {
-      console.error(e);
+      console.error('Fehler beim Laden der Leverage-Positionen:', e);
     }
   },
 
@@ -175,18 +175,59 @@ const useStore = create((set, get) => ({
   },
 
   closeLeveragePosition: async (positionId) => {
-    const res = await api.closeLeverage(positionId);
-    set(state => ({
-      leveragePositions: state.leveragePositions.filter(p => p.id !== positionId)
-    }));
-    await Promise.all([get().fetchProfile(), get().fetchLeveragePositions()]);
-    return res;
+    const currentPositions = get().leveragePositions;
+    const position = currentPositions.find(p => p.id === positionId);
+
+    if (!position) {
+      throw new Error('Position nicht gefunden');
+    }
+
+    // Optimistic Update: Sofort entfernen
+    set({
+      leveragePositions: currentPositions.filter(p => p.id !== positionId)
+    });
+
+    try {
+      const res = await api.closeLeverage(positionId);
+
+      // Erfolg: Neu laden (Sync mit DB)
+      await Promise.all([get().fetchProfile(), get().fetchLeveragePositions()]);
+      return res;
+    } catch (err) {
+      // Fehler: Rollback – Position zurückholen
+      set({ leveragePositions: currentPositions });
+      console.error('Close fehlgeschlagen, Rollback ausgeführt:', err);
+      throw err;
+    }
   },
 
   partialClosePosition: async (positionId) => {
-    const res = await api.partialClose(positionId);
-    await Promise.all([get().fetchProfile(), get().fetchLeveragePositions()]);
-    return res;
+    const currentPositions = get().leveragePositions;
+    const position = currentPositions.find(p => p.id === positionId);
+
+    if (!position) {
+      throw new Error('Position nicht gefunden');
+    }
+
+    // Optimistic: Collateral reduzieren (da Partial Close)
+    set({
+      leveragePositions: currentPositions.map(p =>
+        p.id === positionId ? { ...p, collateral: p.collateral * 0.5 } : p
+      )
+    });
+
+    try {
+      const res = await api.partialClose(positionId);
+
+      // Erfolg: Neu laden
+      await Promise.all([get().fetchProfile(), get().fetchLeveragePositions()]);
+      return res;
+    } catch (err) {
+      // Fehler: Rollback
+      set({ leveragePositions: currentPositions });
+      console.error('Partial Close fehlgeschlagen, Rollback:', err);
+      throw err;
+    }
   }
 }));
 

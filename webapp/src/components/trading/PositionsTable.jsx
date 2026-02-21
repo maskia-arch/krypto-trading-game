@@ -2,7 +2,15 @@ import React, { useState } from 'react';
 import useStore from '../../lib/store';
 
 export default function PositionsTable() {
-  const { leveragePositions, prices, closeLeveragePosition, partialClosePosition, showToast } = useStore();
+  const { 
+    leveragePositions, 
+    prices, 
+    closeLeveragePosition, 
+    partialClosePosition, 
+    showToast,
+    fetchLeveragePositions   // ← NEU: das muss im Store existieren – falls nicht, sag Bescheid!
+  } = useStore();
+  
   const [busyId, setBusyId] = useState(null);
 
   if (!Array.isArray(leveragePositions) || leveragePositions.length === 0) {
@@ -20,13 +28,20 @@ export default function PositionsTable() {
   const handleClose = async (id, partial = false) => {
     if (busyId) return;
     setBusyId(id);
+
     try {
-      const res = partial ? await partialClosePosition(id) : await closeLeveragePosition(id);
+      const res = partial 
+        ? await partialClosePosition(id) 
+        : await closeLeveragePosition(id);
+
+      // WICHTIG: Liste sofort neu laden → das behebt den Glitch
+      await fetchLeveragePositions();   // ← das ist der entscheidende Fix
+
       const pnlValue = res?.pnl || res?.result?.pnl || 0;
       const emoji = pnlValue >= 0 ? '💰' : '📉';
       const typeText = partial ? 'Teil-Position (50%)' : 'Position';
       
-      showToast(`${emoji} ${typeText} geschlossen! PnL: ${pnlValue > 0 ? '+' : ''}${pnlValue.toFixed(2)}€`);
+      showToast(`${emoji} ${typeText} geschlossen! PnL: \( {pnlValue > 0 ? '+' : ''} \){pnlValue.toFixed(2)}€`);
     } catch (err) {
       showToast(`❌ ${err.message || 'Fehler beim Schließen'}`, 'error');
     } finally {
@@ -53,7 +68,6 @@ export default function PositionsTable() {
         const leverage = Number(pos.leverage) || 1;
         const notional = collateral * leverage;
 
-        // PnL Berechnung
         let pnl = 0;
         if (pos.direction === 'LONG') {
           pnl = entryPrice > 0 ? ((currentPrice - entryPrice) / entryPrice) * notional : 0;
@@ -61,7 +75,6 @@ export default function PositionsTable() {
           pnl = entryPrice > 0 ? ((entryPrice - currentPrice) / entryPrice) * notional : 0;
         }
 
-        // Gebühren-Vorschau (0.5% auf das Gesamtvolumen beim Schließen)
         const closingFee = notional * 0.005;
         const netPnL = pnl - closingFee;
 
@@ -71,7 +84,7 @@ export default function PositionsTable() {
 
         let distanceToLiq = 100;
         if (currentPrice > 0 && liqPrice > 0) {
-           distanceToLiq = isLong 
+          distanceToLiq = isLong 
             ? ((currentPrice - liqPrice) / currentPrice) * 100
             : ((liqPrice - currentPrice) / currentPrice) * 100;
         }
@@ -113,7 +126,6 @@ export default function PositionsTable() {
               </div>
             </div>
 
-            {/* Status Leiste für effektive PnL nach Gebühr */}
             <div className="pl-3 mb-3 relative z-10 flex justify-between items-center bg-white/5 rounded-lg px-2 py-1.5 border border-white/5">
                 <span className="text-[7px] font-black uppercase text-white/40 tracking-widest">Netto (nach Gebühr)</span>
                 <span className={`text-[10px] font-mono font-bold ${netPnL >= 0 ? 'text-neon-green' : 'text-neon-red'}`}>
@@ -121,7 +133,6 @@ export default function PositionsTable() {
                 </span>
             </div>
 
-            {/* SL / TP Marken */}
             {(pos.stop_loss || pos.take_profit) && (
               <div className="pl-3 flex gap-3 mb-3 relative z-10 border-t border-white/5 pt-2">
                 {pos.stop_loss && (
@@ -154,7 +165,6 @@ export default function PositionsTable() {
               </div>
             </div>
 
-            {/* Liquidation Warnung */}
             {safeDistance < 15 && safeDistance > 0 && currentPrice > 0 && (
               <div className="pl-3 mb-4 relative z-10">
                 <div className="flex justify-between text-[8px] font-black uppercase mb-1">
