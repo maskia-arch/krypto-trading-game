@@ -54,7 +54,6 @@ export default function LeveragePanel() {
   const maxPos = isPremium ? 3 : (leveragePolicy?.max_positions || leveragePolicy?.maxPositions || 1);
   const currentOpen = leveragePositions?.length || 0;
   
-  // Nutzt die neue Logik aus der store.js
   const availableMargin = Number(getAvailableMargin()) || 0;
 
   const collatNum = Number(collateral) || 0;
@@ -63,7 +62,6 @@ export default function LeveragePanel() {
   const totalCost = collatNum + fee;
 
   const canOpen = currentOpen < maxPos;
-  // Validierung: Kosten inkl. Fee dürfen verfügbare Margin nicht überschreiten
   const hasMargin = totalCost <= availableMargin && collatNum > 0;
 
   const handleOpen = async (dir) => {
@@ -95,7 +93,6 @@ export default function LeveragePanel() {
   return (
     <div className="space-y-4 tab-enter">
       
-      {/* Coin Selector */}
       <div className="flex gap-2">
         {Object.entries(COINS).map(([sym, info]) => {
           const active = coin === sym;
@@ -111,7 +108,6 @@ export default function LeveragePanel() {
       </div>
 
       <div className="card p-4 border border-white/5 space-y-4 bg-gradient-to-b from-bg-card to-black/40 shadow-xl">
-        {/* Margin Input */}
         <div className="space-y-3">
           <div className="flex justify-between items-end px-1">
             <p className="text-[10px] uppercase tracking-wider font-black text-[var(--text-dim)]">Einsatz</p>
@@ -129,15 +125,13 @@ export default function LeveragePanel() {
             <span className="text-[var(--text-dim)] font-black text-sm ml-2">EUR</span>
           </div>
 
-          {/* NEU: Prozent-Buttons für Quick-Set */}
           <div className="flex gap-1.5">
             {[25, 50, 75, 100].map(pct => (
               <button 
                 key={pct} 
                 onClick={() => {
-                  // Berücksichtigt die 0.5% Fee bei der Berechnung, damit 100% wirklich klappt
-                  const amount = (availableMargin * (pct / 100)) / (1 + (leverage * 0.005));
-                  setCollateral(amount.toFixed(2));
+                  const raw = (availableMargin * (pct / 100)) / (1 + (leverage * 0.005));
+                  setCollateral((Math.floor(raw * 100) / 100).toFixed(2));
                 }}
                 className="flex-1 py-2 rounded-lg text-[10px] font-black bg-white/5 text-[var(--text-dim)] hover:bg-white/10 hover:text-white transition-all border border-white/5 active:scale-95"
               >
@@ -147,7 +141,6 @@ export default function LeveragePanel() {
           </div>
         </div>
 
-        {/* Leverage Select */}
         <div>
           <p className="text-[10px] uppercase tracking-wider font-black text-[var(--text-dim)] mb-2 px-1">Hebel</p>
           <div className="flex gap-1.5">
@@ -160,7 +153,6 @@ export default function LeveragePanel() {
           </div>
         </div>
 
-        {/* PRO SETTINGS & ADVANCED (Unverändert) */}
         <div className="border-t border-white/5 pt-2">
           <button onClick={() => isPremium && setShowProSettings(!showProSettings)} className={`w-full flex items-center justify-between p-2 rounded-lg ${isPremium ? 'hover:bg-white/5 text-white' : 'opacity-50 text-white/40 cursor-not-allowed'}`}>
             <div className="flex items-center gap-2">
@@ -207,7 +199,6 @@ export default function LeveragePanel() {
           )}
         </div>
 
-        {/* Execution Buttons */}
         <div className="flex gap-2 border-t border-white/5 pt-4">
           <button onClick={() => handleOpen('LONG')} disabled={!canOpen || !hasMargin || loadingDir !== null}
             className={`flex-1 py-4 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all ${canOpen && hasMargin ? 'bg-neon-green/10 text-neon-green border-neon-green/20 hover:bg-neon-green/20 shadow-lg shadow-neon-green/5' : 'bg-white/5 text-white/10 grayscale cursor-not-allowed'}`}>

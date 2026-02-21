@@ -30,7 +30,7 @@ export default function App() {
   const {
     tab, setTab, fetchProfile, refreshPrices, loadVersion,
     loadChart, chartSymbol, chartRange,
-    prices, prevPrices, showToast, loading, error, version, profile
+    prices, prevPrices, showToast, loading, error, version, profile, toast
   } = useStore();
 
   const [authChecking, setAuthChecking] = useState(true);
@@ -179,6 +179,16 @@ export default function App() {
       <div className="flex-none">
         <Navbar tabs={TABS} currentTab={tab} onTabChange={setTab} />
       </div>
+
+      {toast && (
+        <div className={`fixed top-4 left-4 right-4 z-[200] p-3 rounded-xl text-xs font-bold text-center backdrop-blur-xl border transition-all ${
+          toast.type === 'error'
+            ? 'bg-neon-red/20 border-neon-red/30 text-neon-red shadow-[0_0_20px_rgba(244,63,94,0.2)]'
+            : 'bg-neon-green/20 border-neon-green/30 text-neon-green shadow-[0_0_20px_rgba(34,214,138,0.2)]'
+        }`}>
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }
