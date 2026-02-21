@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import useStore from '../../lib/store';
 
 export default function PositionsTable() {
@@ -8,10 +8,8 @@ export default function PositionsTable() {
     closeLeveragePosition, 
     partialClosePosition, 
     showToast,
-    fetchLeveragePositions   // ← NEU: das muss im Store existieren – falls nicht, sag Bescheid!
+    closingIds
   } = useStore();
-  
-  const [busyId, setBusyId] = useState(null);
 
   if (!Array.isArray(leveragePositions) || leveragePositions.length === 0) {
     return (
@@ -26,26 +24,20 @@ export default function PositionsTable() {
   }
 
   const handleClose = async (id, partial = false) => {
-    if (busyId) return;
-    setBusyId(id);
+    if (closingIds.has(id)) return;
 
     try {
       const res = partial 
         ? await partialClosePosition(id) 
         : await closeLeveragePosition(id);
 
-      // WICHTIG: Liste sofort neu laden → das behebt den Glitch
-      await fetchLeveragePositions();   // ← das ist der entscheidende Fix
-
       const pnlValue = res?.pnl || res?.result?.pnl || 0;
       const emoji = pnlValue >= 0 ? '💰' : '📉';
       const typeText = partial ? 'Teil-Position (50%)' : 'Position';
       
-      showToast(`${emoji} ${typeText} geschlossen! PnL: \( {pnlValue > 0 ? '+' : ''} \){pnlValue.toFixed(2)}€`);
+      showToast(`${emoji} ${typeText} geschlossen! PnL: ${pnlValue > 0 ? '+' : ''}${pnlValue.toFixed(2)}€`);
     } catch (err) {
       showToast(`❌ ${err.message || 'Fehler beim Schließen'}`, 'error');
-    } finally {
-      setBusyId(null);
     }
   };
 
@@ -61,6 +53,7 @@ export default function PositionsTable() {
       </div>
       
       {leveragePositions.map(pos => {
+        const isBusy = closingIds.has(pos.id);
         const currentPrice = Number(prices?.[pos.symbol]) || Number(pos.entry_price) || 0;
         const entryPrice = Number(pos.entry_price) || 0;
         const liqPrice = Number(pos.liquidation_price) || 0;
@@ -92,7 +85,7 @@ export default function PositionsTable() {
         const safeDistance = Math.max(0, Math.min(100, distanceToLiq || 100));
 
         return (
-          <div key={pos.id} className="card p-3 border border-white/5 relative overflow-hidden bg-gradient-to-br from-[#0a0c14] to-black/80 backdrop-blur-xl shadow-lg transition-all duration-300">
+          <div key={pos.id} className={`card p-3 border border-white/5 relative overflow-hidden bg-gradient-to-br from-[#0a0c14] to-black/80 backdrop-blur-xl shadow-lg transition-all duration-300 ${isBusy ? 'opacity-50 pointer-events-none' : ''}`}>
             
             <div className={`absolute -top-10 -right-10 w-32 h-32 blur-[60px] opacity-20 pointer-events-none transition-colors duration-700 ${isLong ? 'bg-neon-green' : 'bg-neon-red'}`} />
             <div className={`absolute left-0 top-0 bottom-0 w-1 ${isLong ? 'bg-neon-green shadow-[0_0_10px_rgba(34,214,138,0.5)]' : 'bg-neon-red shadow-[0_0_10px_rgba(244,63,94,0.5)]'}`} />
@@ -106,6 +99,9 @@ export default function PositionsTable() {
                   }`}>
                     {leverage}x {pos.direction}
                   </span>
+                  {pos.order_id && (
+                    <span className="text-[7px] font-mono text-white/20 tracking-wider">{pos.order_id}</span>
+                  )}
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[8px] text-[var(--text-dim)] uppercase font-black tracking-widest">Einstieg</span>
@@ -182,19 +178,19 @@ export default function PositionsTable() {
             <div className="flex gap-2 relative z-10">
               <button
                 onClick={() => handleClose(pos.id, true)}
-                disabled={!!busyId}
+                disabled={isBusy}
                 className="flex-1 flex flex-col items-center py-2 rounded-xl border border-white/10 bg-white/5 text-white active:scale-[0.98] disabled:opacity-50 transition-all hover:bg-white/10"
               >
-                <span className="text-[9px] font-black uppercase tracking-widest">{busyId === pos.id ? '...' : 'Partial'}</span>
+                <span className="text-[9px] font-black uppercase tracking-widest">{isBusy ? '...' : 'Partial'}</span>
                 <span className="text-[7px] text-white/40 font-mono">Fee: {(closingFee/2).toFixed(2)}€</span>
               </button>
               
               <button
                 onClick={() => handleClose(pos.id, false)}
-                disabled={!!busyId}
+                disabled={isBusy}
                 className="flex-[2] flex flex-col items-center py-2 rounded-xl border border-white/10 bg-white/10 text-white active:scale-[0.98] disabled:opacity-50 transition-all hover:bg-white/20 hover:border-white/30"
               >
-                <span className="text-[9px] font-black uppercase tracking-widest">{busyId === pos.id ? '...' : 'Position schließen'}</span>
+                <span className="text-[9px] font-black uppercase tracking-widest">{isBusy ? '...' : 'Position schließen'}</span>
                 <span className="text-[7px] text-white/40 font-mono">Fee: {closingFee.toFixed(2)}€</span>
               </button>
             </div>

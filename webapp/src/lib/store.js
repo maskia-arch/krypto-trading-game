@@ -22,6 +22,8 @@ const useStore = create((set, get) => ({
   leveragePositions: [],
   leveragePolicy: null,
   leverageHistory: [],
+  closingIds: new Set(),
+  isClosing: false,
 
   setTab: (tab) => set({ tab }),
   setChartSymbol: (s) => set({ chartSymbol: s }),
@@ -115,10 +117,15 @@ const useStore = create((set, get) => ({
   },
 
   fetchLeveragePositions: async () => {
+    if (get().isClosing) return;
+
     try {
       const posData = await api.getLeveragePositions();
+      const freshPositions = Array.isArray(posData.positions) ? posData.positions : [];
+      const closingIds = get().closingIds;
+
       set({
-        leveragePositions: Array.isArray(posData.positions) ? posData.positions : [],
+        leveragePositions: freshPositions.filter(p => !closingIds.has(p.id)),
         leveragePolicy: posData.policy || get().leveragePolicy
       });
     } catch (e) {
@@ -175,58 +182,62 @@ const useStore = create((set, get) => ({
   },
 
   closeLeveragePosition: async (positionId) => {
-    const currentPositions = get().leveragePositions;
-    const position = currentPositions.find(p => p.id === positionId);
-
-    if (!position) {
-      throw new Error('Position nicht gefunden');
+    const closingIds = get().closingIds;
+    if (closingIds.has(positionId)) {
+      throw new Error('Position wird bereits geschlossen');
     }
 
-    // Optimistic Update: Sofort entfernen
+    const newClosingIds = new Set(closingIds);
+    newClosingIds.add(positionId);
     set({
-      leveragePositions: currentPositions.filter(p => p.id !== positionId)
+      isClosing: true,
+      closingIds: newClosingIds,
+      leveragePositions: get().leveragePositions.filter(p => p.id !== positionId)
     });
 
     try {
       const res = await api.closeLeverage(positionId);
-
-      // Erfolg: Neu laden (Sync mit DB)
       await Promise.all([get().fetchProfile(), get().fetchLeveragePositions()]);
       return res;
     } catch (err) {
-      // Fehler: Rollback – Position zurückholen
-      set({ leveragePositions: currentPositions });
-      console.error('Close fehlgeschlagen, Rollback ausgeführt:', err);
+      console.error('Close fehlgeschlagen:', err);
       throw err;
+    } finally {
+      const updated = new Set(get().closingIds);
+      updated.delete(positionId);
+      set({ closingIds: updated, isClosing: updated.size > 0 });
+
+      if (updated.size === 0) {
+        await get().fetchLeveragePositions();
+      }
     }
   },
 
   partialClosePosition: async (positionId) => {
-    const currentPositions = get().leveragePositions;
-    const position = currentPositions.find(p => p.id === positionId);
-
-    if (!position) {
-      throw new Error('Position nicht gefunden');
+    const closingIds = get().closingIds;
+    if (closingIds.has(positionId)) {
+      throw new Error('Position wird bereits bearbeitet');
     }
 
-    // Optimistic: Collateral reduzieren (da Partial Close)
-    set({
-      leveragePositions: currentPositions.map(p =>
-        p.id === positionId ? { ...p, collateral: p.collateral * 0.5 } : p
-      )
-    });
+    const newClosingIds = new Set(closingIds);
+    newClosingIds.add(positionId);
+    set({ isClosing: true, closingIds: newClosingIds });
 
     try {
       const res = await api.partialClose(positionId);
-
-      // Erfolg: Neu laden
       await Promise.all([get().fetchProfile(), get().fetchLeveragePositions()]);
       return res;
     } catch (err) {
-      // Fehler: Rollback
-      set({ leveragePositions: currentPositions });
-      console.error('Partial Close fehlgeschlagen, Rollback:', err);
+      console.error('Partial Close fehlgeschlagen:', err);
       throw err;
+    } finally {
+      const updated = new Set(get().closingIds);
+      updated.delete(positionId);
+      set({ closingIds: updated, isClosing: updated.size > 0 });
+
+      if (updated.size === 0) {
+        await get().fetchLeveragePositions();
+      }
     }
   }
 }));

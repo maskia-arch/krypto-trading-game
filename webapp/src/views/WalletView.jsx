@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import TradeView from './TradeView';
 import ChartView from './ChartView';
 import LiveChart30m from '../components/trading/LiveChart30m';
@@ -11,12 +11,19 @@ export default function WalletView() {
   
   const fetchLeveragePositions = useStore((state) => state.fetchLeveragePositions);
   const leveragePolicy = useStore((state) => state.leveragePolicy);
+  const isClosing = useStore((state) => state.isClosing);
+  const isClosingRef = useRef(isClosing);
+
+  useEffect(() => {
+    isClosingRef.current = isClosing;
+  }, [isClosing]);
 
   useEffect(() => {
     if (typeof fetchLeveragePositions === 'function') {
       fetchLeveragePositions().catch(err => console.error("Initial Fetch Error:", err));
 
       const interval = setInterval(() => {
+        if (isClosingRef.current) return;
         fetchLeveragePositions().catch(() => {});
       }, 8000);
 

@@ -1,8 +1,8 @@
 -- ============================================================
--- VALUETRADEGAME - Supabase Schema v0.2
+-- VALUETRADEGAME - Supabase Schema v0.3
 -- ============================================================
 
--- 1) PROFILES (Erweitert um Pro-Hintergrund & Boni)
+-- 1) PROFILES
 CREATE TABLE profiles (
   id                        UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   telegram_id               BIGINT UNIQUE NOT NULL,
@@ -21,9 +21,11 @@ CREATE TABLE profiles (
   pro_until                 TIMESTAMPTZ,
   is_admin                  BOOLEAN DEFAULT FALSE,
   hide_collectibles         BOOLEAN DEFAULT FALSE,
+  username_changes          INT DEFAULT 0,
   avatar_url                TEXT,
-  background_url            TEXT DEFAULT NULL,            -- NEU: Pro-Hintergrund
-  background_disabled_at    TIMESTAMPTZ DEFAULT NULL,     -- NEU: Cleanup Tracker
+  background_url            TEXT DEFAULT NULL,
+  background_disabled_at    TIMESTAMPTZ DEFAULT NULL,
+  referred_by               BIGINT,
   created_at                TIMESTAMPTZ DEFAULT NOW(),
   updated_at                TIMESTAMPTZ DEFAULT NOW()
 );
@@ -60,7 +62,7 @@ CREATE TABLE current_prices (
 CREATE TABLE transactions (
   id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   profile_id  UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  type        TEXT NOT NULL, -- 'buy','sell','fee','rent','bailout','leverage_open','leverage_close','leverage_liquidated','achievement_reward'
+  type        TEXT NOT NULL,
   symbol      TEXT,
   amount      NUMERIC(18,8),
   price_eur   NUMERIC(18,2),
@@ -70,25 +72,32 @@ CREATE TABLE transactions (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 6) LEVERAGED_POSITIONS (Refactored für v0.2)
+-- 6) LEVERAGED_POSITIONS (v0.3 – mit Order-ID & Pro-Features)
 CREATE TABLE leveraged_positions (
   id                UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  order_id          TEXT UNIQUE NOT NULL,
   profile_id        UUID REFERENCES profiles(id) ON DELETE CASCADE,
   symbol            TEXT NOT NULL,
   direction         TEXT CHECK (direction IN ('LONG', 'SHORT')),
   leverage          INTEGER NOT NULL,
   collateral        NUMERIC(18,2) NOT NULL,
   entry_price       NUMERIC(18,2) NOT NULL,
-  exit_price        NUMERIC(18,2),
+  close_price       NUMERIC(18,2),
   liquidation_price NUMERIC(18,2) NOT NULL,
   pnl               NUMERIC(18,2) DEFAULT 0,
   equity_at_close   NUMERIC(18,2),
   status            TEXT DEFAULT 'OPEN' CHECK (status IN ('OPEN', 'CLOSED', 'LIQUIDATED')),
   liquidation_reason TEXT,
-  opened_at         TIMESTAMPTZ DEFAULT NOW(),
-  closed_at         TIMESTAMPTZ
+  stop_loss         NUMERIC(18,2),
+  take_profit       NUMERIC(18,2),
+  limit_price       NUMERIC(18,2),
+  trailing_stop     BOOLEAN DEFAULT FALSE,
+  is_limit_order    BOOLEAN DEFAULT FALSE,
+  entry_time        TIMESTAMPTZ DEFAULT NOW(),
+  close_time        TIMESTAMPTZ
 );
 CREATE INDEX idx_lev_pos_profile ON leveraged_positions(profile_id, status);
+CREATE INDEX idx_lev_pos_open ON leveraged_positions(status) WHERE status = 'OPEN';
 
 -- 7) REAL_ESTATE
 CREATE TABLE real_estate_types (
@@ -133,10 +142,11 @@ INSERT INTO collectible_types (name, price_eur, emoji, min_volume) VALUES
   ('Privatjet',     300000, '✈️', 200000);
 
 CREATE TABLE user_collectibles (
-  id            UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  profile_id    UUID REFERENCES profiles(id) ON DELETE CASCADE,
-  type_id       INT REFERENCES collectible_types(id),
-  purchased_at  TIMESTAMPTZ DEFAULT NOW()
+  id              UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  profile_id      UUID REFERENCES profiles(id) ON DELETE CASCADE,
+  type_id         INT REFERENCES collectible_types(id),
+  purchase_price  NUMERIC(18,2),
+  purchased_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- 9) ACHIEVEMENTS
@@ -147,7 +157,25 @@ CREATE TABLE user_achievements (
   PRIMARY KEY (profile_id, achievement_id)
 );
 
--- 10) DELETION_REQUESTS (Sicherheit)
+-- 10) SEASONS
+CREATE TABLE seasons (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  start_date  TIMESTAMPTZ NOT NULL,
+  end_date    TIMESTAMPTZ NOT NULL,
+  status      TEXT DEFAULT 'active' CHECK (status IN ('active', 'ended')),
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 11) FEE_POOL
+CREATE TABLE fee_pool (
+  id          SERIAL PRIMARY KEY,
+  season_id   INT REFERENCES seasons(id),
+  amount      NUMERIC(18,2) DEFAULT 0,
+  updated_at  TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 12) DELETION_REQUESTS
 CREATE TABLE deletion_requests (
   id          UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   profile_id  UUID REFERENCES profiles(id) ON DELETE CASCADE,
@@ -159,7 +187,6 @@ CREATE TABLE deletion_requests (
 -- HELPER & VIEWS
 -- ============================================================
 
--- Auto-Update Timestamp
 CREATE OR REPLACE FUNCTION update_timestamp()
 RETURNS TRIGGER AS $$
 BEGIN NEW.updated_at = NOW(); RETURN NEW; END;
@@ -167,7 +194,6 @@ $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_profiles_updated BEFORE UPDATE ON profiles FOR EACH ROW EXECUTE FUNCTION update_timestamp();
 
--- Erweitertes Leaderboard
 CREATE OR REPLACE VIEW leaderboard AS
 SELECT
   p.id,
@@ -177,6 +203,7 @@ SELECT
   p.balance,
   p.total_volume,
   p.is_pro,
+  p.avatar_url,
   COALESCE(SUM(a.amount * cp.price_eur), 0) AS portfolio_value,
   p.balance + COALESCE(SUM(a.amount * cp.price_eur), 0) AS net_worth
 FROM profiles p
@@ -185,5 +212,39 @@ LEFT JOIN current_prices cp ON cp.symbol = a.symbol
 GROUP BY p.id
 ORDER BY net_worth DESC;
 
--- Pro-Hintergrund Cleanup Index
 CREATE INDEX idx_pro_bg_cleanup ON profiles (background_disabled_at) WHERE background_disabled_at IS NOT NULL;
+Falls du die DB nicht neu aufsetzen willst, hier die Migration für bestehende Daten:
+-- Migration v0.2 → v0.3 (nur ausführen wenn DB bereits existiert)
+ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS order_id TEXT UNIQUE;
+ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS stop_loss NUMERIC(18,2);
+ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS take_profit NUMERIC(18,2);
+ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS limit_price NUMERIC(18,2);
+ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS trailing_stop BOOLEAN DEFAULT FALSE;
+ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS is_limit_order BOOLEAN DEFAULT FALSE;
+ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS entry_time TIMESTAMPTZ DEFAULT NOW();
+ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS close_time TIMESTAMPTZ;
+ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS close_price NUMERIC(18,2);
+
+-- Bestehende Positionen mit Order-IDs nachfüllen
+UPDATE leveraged_positions SET order_id = CONCAT(
+  CASE WHEN direction = 'LONG' THEN 'L-' ELSE 'S-' END,
+  UPPER(LEFT(REPLACE(id::TEXT, '-', ''), 8))
+) WHERE order_id IS NULL;
+
+-- Danach NOT NULL setzen
+ALTER TABLE leveraged_positions ALTER COLUMN order_id SET NOT NULL;
+
+-- Spalten-Rename falls opened_at/closed_at existieren
+ALTER TABLE leveraged_positions RENAME COLUMN opened_at TO entry_time;
+ALTER TABLE leveraged_positions RENAME COLUMN closed_at TO close_time;
+ALTER TABLE leveraged_positions RENAME COLUMN exit_price TO close_price;
+
+-- Neuer Index für atomare Closes
+CREATE INDEX IF NOT EXISTS idx_lev_pos_open ON leveraged_positions(status) WHERE status = 'OPEN';
+
+-- Profiles erweitern
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username_changes INT DEFAULT 0;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS referred_by BIGINT;
+
+-- Collectibles erweitern
+ALTER TABLE user_collectibles ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(18,2);

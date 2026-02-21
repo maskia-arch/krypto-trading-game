@@ -15,6 +15,13 @@ module.exports = (db) => ({
     return this.getLeveragePositions(profileId);
   },
 
+  async generateOrderId(direction) {
+    const prefix = direction === 'LONG' ? 'L' : 'S';
+    const ts = Date.now().toString(36).toUpperCase();
+    const rand = Math.random().toString(36).substring(2, 5).toUpperCase();
+    return `${prefix}-${ts}-${rand}`;
+  },
+
   async openLeveragedPosition(profileId, symbol, direction, collateral, leverage, entryPrice, options = {}) {
     const fee = (collateral * leverage) * 0.005;
     const totalCost = collateral + fee;
@@ -32,10 +39,13 @@ module.exports = (db) => ({
       ? entryPrice * (1 - (1 / leverage) * 0.9)
       : entryPrice * (1 + (1 / leverage) * 0.9);
 
+    const orderId = await this.generateOrderId(direction);
+
     const { data: pos, error: posErr } = await db.supabase
       .from('leveraged_positions')
       .insert({
         profile_id: profileId,
+        order_id: orderId,
         symbol: symbol.toUpperCase(),
         direction,
         leverage,
@@ -62,7 +72,7 @@ module.exports = (db) => ({
       type: 'LEVERAGE_OPEN',
       total_eur: -totalCost,
       symbol: symbol.toUpperCase(),
-      details: `${leverage}x ${direction} @ ${entryPrice.toFixed(2)}€`
+      details: `[${orderId}] ${leverage}x ${direction} @ ${entryPrice.toFixed(2)}€`
     });
 
     return pos;
@@ -73,12 +83,11 @@ module.exports = (db) => ({
       .from('leveraged_positions')
       .select('*')
       .eq('id', positionId)
+      .eq('status', 'OPEN')
       .single();
 
-    if (fetchErr || !pos) throw new Error('Position nicht gefunden');
-
-    if (pos.status !== 'OPEN') {
-      throw new Error('Position bereits geschlossen oder liquidiert');
+    if (fetchErr || !pos) {
+      throw new Error('Position nicht gefunden oder bereits geschlossen');
     }
 
     const entryPrice = Number(pos.entry_price);
@@ -101,7 +110,7 @@ module.exports = (db) => ({
     let payout = (collateral + pnl) - fee;
     if (payout < 0) payout = 0;
 
-    const { error: updErr, count } = await db.supabase
+    const { data: updated, error: updErr } = await db.supabase
       .from('leveraged_positions')
       .update({
         status: isLiquidation ? 'LIQUIDATED' : 'CLOSED',
@@ -112,15 +121,16 @@ module.exports = (db) => ({
         liquidation_reason: isLiquidation ? 'AUTO_LIQUIDATION' : null
       })
       .eq('id', positionId)
-      .select('count');
+      .eq('status', 'OPEN')
+      .select();
 
     if (updErr) {
       console.error('Update Error in close:', updErr.message);
       throw updErr;
     }
 
-    if (count !== 1) {
-      throw new Error(`Update hat ${count} Zeilen betroffen – Position nicht gefunden oder Status geändert`);
+    if (!updated || updated.length !== 1) {
+      throw new Error('Position wurde bereits von einem anderen Request geschlossen');
     }
 
     const { data: profile } = await db.supabase
@@ -136,9 +146,7 @@ module.exports = (db) => ({
       type: isLiquidation ? 'LIQUIDATION' : 'LEVERAGE_CLOSE',
       total_eur: isLiquidation ? 0 : payout,
       symbol: pos.symbol,
-      details: isLiquidation
-        ? `Totalverlust bei ${currentPrice.toFixed(2)}€`
-        : `PnL: ${pnl.toFixed(2)}€ (Fee: ${fee.toFixed(2)}€)`
+      details: `[${pos.order_id || pos.id}] PnL: ${pnl.toFixed(2)}€ (Fee: ${fee.toFixed(2)}€)`
     });
 
     return { pnl, payout, status: isLiquidation ? 'LIQUIDATED' : 'CLOSED' };
@@ -149,12 +157,15 @@ module.exports = (db) => ({
       .from('leveraged_positions')
       .select('*')
       .eq('id', positionId)
+      .eq('status', 'OPEN')
       .single();
 
-    if (fetchErr || !pos) throw new Error('Position nicht gefunden');
+    if (fetchErr || !pos) {
+      throw new Error('Position nicht gefunden oder bereits geschlossen');
+    }
 
-    if (pos.status !== 'OPEN') {
-      throw new Error('Position bereits geschlossen oder liquidiert');
+    if (pos.profile_id !== profileId) {
+      throw new Error('Zugriff verweigert');
     }
 
     const currentPrice = await db.getCurrentPrice(pos.symbol);
@@ -170,17 +181,19 @@ module.exports = (db) => ({
 
     const fee = closingNotional * 0.005;
     const payout = Math.max(0, (closingCollateral + pnl) - fee);
-
     const newCollateral = Number(pos.collateral) - closingCollateral;
 
-    const { error: updErr, count } = await db.supabase
+    const { data: updated, error: updErr } = await db.supabase
       .from('leveraged_positions')
       .update({ collateral: newCollateral })
       .eq('id', positionId)
-      .select('count');
+      .eq('status', 'OPEN')
+      .select();
 
     if (updErr) throw updErr;
-    if (count !== 1) throw new Error('Partial Update fehlgeschlagen');
+    if (!updated || updated.length !== 1) {
+      throw new Error('Partial Close fehlgeschlagen – Position bereits geändert');
+    }
 
     const { data: profile } = await db.supabase
       .from('profiles')
@@ -195,7 +208,7 @@ module.exports = (db) => ({
       type: 'LEVERAGE_CLOSE',
       total_eur: payout,
       symbol: pos.symbol,
-      details: `Partial Close ${percentage * 100}% | PnL: ${pnl.toFixed(2)}€`
+      details: `[${pos.order_id || pos.id}] Partial ${percentage * 100}% | PnL: ${pnl.toFixed(2)}€`
     });
 
     return { pnl, payout, new_collateral: newCollateral };
@@ -227,8 +240,12 @@ module.exports = (db) => ({
       }
 
       if (shouldLiquidate) {
-        await this.closeLeveragedPosition(pos.id, currentPrice, true);
-        liquidated.push(pos.id);
+        try {
+          await this.closeLeveragedPosition(pos.id, currentPrice, true);
+          liquidated.push(pos.id);
+        } catch (e) {
+          console.error(`Liquidation für ${pos.id} fehlgeschlagen:`, e.message);
+        }
       }
     }
 
