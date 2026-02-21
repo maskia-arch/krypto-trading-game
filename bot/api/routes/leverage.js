@@ -4,14 +4,12 @@ const { db } = require('../../core/database');
 
 router.get('/positions', async (req, res) => {
   try {
-    // Profil laden für Kontostand und Detailinfos
     const profile = await db.getProfile(req.tgId);
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     const positions = await db.getOpenLeveragedPositions(profile.id);
     const history = await db.getLeverageHistory ? await db.getLeverageHistory(profile.id) : [];
     
-    // Pro-Status direkt aus den Middleware-Permissions beziehen
     const isPro = req.permissions.isPro;
     const isMonday = new Date().getDay() === 1;
     const maxLeverage = (isPro || isMonday) ? 10 : 5;
@@ -20,7 +18,7 @@ router.get('/positions', async (req, res) => {
     res.json({ 
       positions,
       history,
-      policy: { maxLeverage, maxPositions, isPro, isMonday }
+      policy: { maxLeverage, maxPositions, maxMarginPercent: 0.5, isPro, isMonday }
     });
   } catch (err) {
     res.status(500).json({ error: 'Fehler beim Laden der Positionen' });
@@ -38,7 +36,6 @@ router.post('/open', async (req, res) => {
     const profile = await db.getProfile(req.tgId);
     const isPro = req.permissions.isPro;
     
-    // Validierung der Pro-Features basierend auf Middleware-Permissions
     if (!isPro && (stop_loss || take_profit || limit_price || trailing_stop)) {
       return res.status(403).json({ error: 'Diese Funktionen sind nur für Pro-Mitglieder verfügbar.' });
     }

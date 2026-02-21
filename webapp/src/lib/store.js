@@ -148,9 +148,12 @@ const useStore = create((set, get) => ({
     const profile = get().profile;
     if (!profile) return 0;
     const balance = Number(profile.balance || 0);
+    const policy = get().leveragePolicy;
+    const maxMarginPct = Number(policy?.max_margin_percent ?? policy?.maxMarginPercent ?? 0.5);
+    const maxMargin = balance * maxMarginPct;
     const positions = get().leveragePositions || [];
     const usedMargin = positions.reduce((sum, pos) => sum + Number(pos.collateral || 0), 0);
-    return Math.max(0, balance - usedMargin);
+    return Math.max(0, maxMargin - usedMargin);
   },
 
   buyCrypto: async (symbol, amount_eur) => {
