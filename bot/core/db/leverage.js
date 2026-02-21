@@ -73,10 +73,13 @@ module.exports = (db) => ({
       .from('leveraged_positions')
       .select('*')
       .eq('id', positionId)
-      .eq('status', 'OPEN')
-      .single();
+      .single();  // ← Status-Prüfung nur im Fetch, nicht im Update
 
-    if (fetchErr || !pos) throw new Error('Position nicht gefunden oder bereits geschlossen');
+    if (fetchErr || !pos) throw new Error('Position nicht gefunden');
+
+    if (pos.status !== 'OPEN') {
+      throw new Error('Position bereits geschlossen oder liquidiert');
+    }
 
     const entryPrice = Number(pos.entry_price);
     const collateral = Number(pos.collateral);
@@ -98,7 +101,7 @@ module.exports = (db) => ({
     let payout = (collateral + pnl) - fee;
     if (payout < 0) payout = 0;
 
-    const { error: updErr } = await db.supabase
+    const { error: updErr, count } = await db.supabase
       .from('leveraged_positions')
       .update({
         status: isLiquidation ? 'LIQUIDATED' : 'CLOSED',
@@ -109,9 +112,12 @@ module.exports = (db) => ({
         liquidation_reason: isLiquidation ? 'AUTO_LIQUIDATION' : null
       })
       .eq('id', positionId)
-      .eq('status', 'OPEN');
+      .select('count');
 
     if (updErr) throw updErr;
+    if (count !== 1) {
+      throw new Error(`Update fehlgeschlagen – ${count} Zeilen betroffen (erwartet: 1)`);
+    }
 
     const { data: profile } = await db.supabase
       .from('profiles')
@@ -140,10 +146,13 @@ module.exports = (db) => ({
       .select('*')
       .eq('id', positionId)
       .eq('profile_id', profileId)
-      .eq('status', 'OPEN')
       .single();
 
-    if (fetchErr || !pos) throw new Error('Position nicht gefunden oder bereits geschlossen');
+    if (fetchErr || !pos) throw new Error('Position nicht gefunden');
+
+    if (pos.status !== 'OPEN') {
+      throw new Error('Position bereits geschlossen oder liquidiert');
+    }
 
     const currentPrice = await db.getCurrentPrice(pos.symbol);
     const closingCollateral = Number(pos.collateral) * percentage;
@@ -161,13 +170,14 @@ module.exports = (db) => ({
 
     const newCollateral = Number(pos.collateral) - closingCollateral;
 
-    const { error: updErr } = await db.supabase
+    const { error: updErr, count } = await db.supabase
       .from('leveraged_positions')
       .update({ collateral: newCollateral })
       .eq('id', positionId)
-      .eq('status', 'OPEN');
+      .select('count');
 
     if (updErr) throw updErr;
+    if (count !== 1) throw new Error('Partial Update fehlgeschlagen – Zeile nicht gefunden');
 
     const { data: profile } = await db.supabase
       .from('profiles')
