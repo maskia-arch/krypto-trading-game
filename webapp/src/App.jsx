@@ -44,6 +44,12 @@ export default function App() {
 
   useEffect(() => {
     const initApp = async () => {
+      // Sicherheits-Timeout: Wenn nach 8 Sekunden nichts geladen ist, 
+      // beenden wir den Ladebildschirm trotzdem, um die UI anzuzeigen.
+      const fallbackTimer = setTimeout(() => {
+        setAuthChecking(false);
+      }, 8000);
+
       try {
         const tg = window.Telegram?.WebApp;
         if (tg) {
@@ -53,25 +59,25 @@ export default function App() {
           tg.setHeaderColor('#06080f');
         }
         
-        // Parallel laden für maximale Geschwindigkeit
-        await Promise.all([
+        // Führt alle Initialisierungen parallel aus
+        await Promise.allSettled([
           loadVersion(),
           fetchProfile(),
-          loadChart(chartSymbol, chartRange) // Sofort ersten Chart-Ladevorgang starten
+          loadChart(chartSymbol, chartRange)
         ]);
       } catch (err) {
         console.error("Initialization error:", err);
       } finally {
+        clearTimeout(fallbackTimer);
         setAuthChecking(false);
       }
     };
 
     initApp();
 
-    const priceInterval = setInterval(refreshPrices, 60000);
+    const priceInterval = setInterval(refreshPrices, 60000); // Preis-Update alle 60s
     const profileInterval = setInterval(() => {
-      // Regelmäßiges Update nur bei vorhandenem Profil
-      if (profile) fetchProfile();
+      if (profile) fetchProfile(); // Profil-Update nur bei existierendem Profil
     }, 25000);
 
     return () => {
@@ -96,14 +102,13 @@ export default function App() {
     checkBonus();
   }, [profile, fetchProfile, showToast]);
 
-  // Tab-Erzwingung bei ungültigen Zuständen
   useEffect(() => {
     if (tab === 'trade' || tab === 'chart') {
-      setTab('wallet');
+      setTab('wallet'); // Erzwingt Wallet-Tab bei ungültigen Zuständen
     }
   }, [tab, setTab]);
 
-  // Ladebildschirm-Panzerung
+  // Ladebildschirm-Logik mit Fallback-Schutz
   if (authChecking || (loading && !profile && !error)) {
     return (
       <div className="flex h-screen flex-col items-center justify-center text-white bg-[#06080f] space-y-4">
@@ -114,14 +119,14 @@ export default function App() {
         <div className="text-center">
           <h1 className="text-xl font-bold tracking-widest animate-pulse">ValueTrade</h1>
           <p className="text-[10px] font-mono text-[var(--text-dim)] mt-1 uppercase tracking-tighter">
-            Synchronisiere mit Engine v{version || lastKnownVersion}...
+            Verbinde mit Engine v{version || lastKnownVersion}...
           </p>
         </div>
       </div>
     );
   }
 
-  // Fehler-Screen bei fehlgeschlagener Authentifizierung
+  // Fehler-Screen nur bei echtem Fehler ohne Profil-Daten
   if (error && !profile) {
     return (
       <div className="flex h-screen items-center justify-center text-white px-8 text-center bg-[#06080f]">
@@ -135,7 +140,7 @@ export default function App() {
           </div>
           <button 
             onClick={() => window.location.reload()}
-            className="w-full py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest active:scale-95 transition-all"
+            className="w-full py-3 bg-white/5 border border-white/10 rounded-2xl text-xs font-black uppercase tracking-widest"
           >
             🔄 System Neustart
           </button>
