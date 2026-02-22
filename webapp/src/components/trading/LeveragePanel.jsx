@@ -17,7 +17,7 @@ const InfoBtn = ({ type, setInfoType }) => (
   </button>
 );
 
-export default function LeveragePanel() {
+export default function LeveragePanel({ hideCoinSelector = false }) {
   const { 
     profile, chartSymbol, setChartSymbol, prices, openLeveragePosition, 
     showToast, leveragePolicy, leveragePositions, getAvailableMargin,
@@ -93,19 +93,22 @@ export default function LeveragePanel() {
   return (
     <div className="space-y-4 tab-enter">
       
-      <div className="flex gap-2">
-        {Object.entries(COINS).map(([sym, info]) => {
-          const active = coin === sym;
-          return (
-            <button key={sym} onClick={() => setChartSymbol(sym)}
-              className="flex-1 rounded-2xl p-3 text-center transition-all bg-black/40 border border-white/5"
-              style={{ borderColor: active ? info.border : 'rgba(255,255,255,0.05)', background: active ? info.bg : 'rgba(0,0,0,0.4)' }}>
-              <div className="text-xl mb-1">{info.emoji}</div>
-              <div className={`text-[10px] font-black tracking-widest ${active ? 'text-white' : 'text-white/40'}`}>{sym}</div>
-            </button>
-          );
-        })}
-      </div>
+      {/* Coin Selector - nur anzeigen wenn nicht extern gesteuert */}
+      {!hideCoinSelector && (
+        <div className="flex gap-2">
+          {Object.entries(COINS).map(([sym, info]) => {
+            const active = coin === sym;
+            return (
+              <button key={sym} onClick={() => setChartSymbol(sym)}
+                className="flex-1 rounded-2xl p-3 text-center transition-all bg-black/40 border border-white/5"
+                style={{ borderColor: active ? info.border : 'rgba(255,255,255,0.05)', background: active ? info.bg : 'rgba(0,0,0,0.4)' }}>
+                <div className="text-xl mb-1">{info.emoji}</div>
+                <div className={`text-[10px] font-black tracking-widest ${active ? 'text-white' : 'text-white/40'}`}>{sym}</div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       <div className="card p-4 border border-white/5 space-y-4 bg-gradient-to-b from-bg-card to-black/40 shadow-xl">
         <div className="space-y-3">

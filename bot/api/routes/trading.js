@@ -49,7 +49,6 @@ router.post('/leverage/open', async (req, res) => {
 
     const isPro = req.permissions.isPro;
     
-    // Pro-Optionen nur setzen, wenn User berechtigt ist
     const options = {
       stop_loss: isPro ? stop_loss : null,
       take_profit: isPro ? take_profit : null,
@@ -161,8 +160,76 @@ router.post('/', async (req, res) => {
       if (req.bot) {
         req.bot.api.sendMessage(profile.telegram_id, `🟢 <b>SPOT-KAUF</b>\n\n${cryptoAmount.toFixed(4)} ${symbol} gekauft für ${euroAmount.toLocaleString('de-DE')}€`, { parse_mode: 'HTML' }).catch(() => {});
       }
-    } 
-    // ... (Verkauf-Logik analog mit req.tgId)
+    } else if (action === 'sell') {
+      // ===== VERKAUFS-LOGIK =====
+      const cryptoAmount = Number(amount_crypto);
+      if (!cryptoAmount || cryptoAmount <= 0) {
+        return res.status(400).json({ error: 'Ungültige Verkaufsmenge' });
+      }
+
+      // Asset des Users laden
+      const { data: asset } = await db.supabase
+        .from('assets')
+        .select('*')
+        .eq('profile_id', profile.id)
+        .eq('symbol', symbol)
+        .single();
+
+      if (!asset || Number(asset.amount) < cryptoAmount - 0.000001) {
+        return res.status(400).json({ error: 'Nicht genügend Coins zum Verkaufen' });
+      }
+
+      const grossEur = cryptoAmount * price;
+      const fee = parseFloat((grossEur * (FEE_RATE || 0.005)).toFixed(2));
+      const netEur = parseFloat((grossEur - fee).toFixed(2));
+      const newBalance = parseFloat((Number(profile.balance) + netEur).toFixed(2));
+      const newAmount = Number(asset.amount) - cryptoAmount;
+
+      // Balance aktualisieren
+      await db.updateBalance(profile.id, newBalance);
+
+      // Asset aktualisieren oder löschen wenn 0
+      if (newAmount <= 0.000001) {
+        await db.supabase
+          .from('assets')
+          .delete()
+          .eq('profile_id', profile.id)
+          .eq('symbol', symbol);
+      } else {
+        await db.supabase
+          .from('assets')
+          .update({ amount: newAmount })
+          .eq('profile_id', profile.id)
+          .eq('symbol', symbol);
+      }
+
+      // Volumen tracken
+      await db.addVolume(profile.id, grossEur);
+
+      // Fee Pool
+      if (db.addToFeePool) await db.addToFeePool(fee);
+
+      // Transaktion loggen
+      await db.logTransaction(profile.id, 'sell', symbol, cryptoAmount, price, fee, grossEur);
+
+      tradeResult = { 
+        success: true, 
+        action: 'sell', 
+        crypto_amount: cryptoAmount, 
+        euro_received: netEur,
+        total_eur: netEur,
+        fee,
+        balance: newBalance 
+      };
+
+      if (req.bot) {
+        req.bot.api.sendMessage(
+          profile.telegram_id, 
+          `🔴 <b>SPOT-VERKAUF</b>\n\n${cryptoAmount.toFixed(4)} ${symbol} verkauft für ${netEur.toLocaleString('de-DE')}€\nGebühr: ${fee.toFixed(2)}€`, 
+          { parse_mode: 'HTML' }
+        ).catch(() => {});
+      }
+    }
     
     // Achievement Check
     if (tradeResult && db.checkAndGrantAchievements) {
@@ -173,6 +240,7 @@ router.post('/', async (req, res) => {
     res.json(tradeResult || { success: true });
 
   } catch (err) {
+    console.error('Trade Error:', err);
     res.status(500).json({ error: 'Transaktion fehlgeschlagen' });
   }
 });

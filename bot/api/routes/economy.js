@@ -8,6 +8,7 @@ router.get('/chart/:symbol', async (req, res) => {
 
   try {
     const rangeMap = {
+      '10m': 10,
       '30m': 30,
       '1m': 60,
       '3h': 180,
@@ -17,7 +18,6 @@ router.get('/chart/:symbol', async (req, res) => {
 
     const minutes = rangeMap[range] || 180;
     
-    // FIX: Saubere UTC-Zeitberechnung ohne "+150" Zeitzonen-Hack
     const startTime = new Date(Date.now() - (minutes * 60 * 1000)).toISOString();
 
     const { data, error } = await db.supabase
@@ -63,12 +63,10 @@ router.get('/leaderboard', async (req, res) => {
     const result = await db.getLeaderboard(dbFilter);
     const realTimePool = await db.getFeePool();
 
-    // PANZERUNG: Falls keine Season existiert, erzeuge einen Fallback, 
-    // damit das Frontend (RankView) nicht mit einem Null-Pointer abstürzt!
     const safeSeason = result.season || {
       id: 1,
       name: "Season 1",
-      end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // +30 Tage
+      end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString()
     };
 
     res.json({ 
@@ -78,7 +76,6 @@ router.get('/leaderboard', async (req, res) => {
     });
   } catch (err) {
     console.error('API Leaderboard Error:', err);
-    // Notfall-Rettung: Schicke leere Daten statt 500er Fehler, damit die UI nicht crasht
     res.json({
       leaders: [],
       season: { end_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() },
