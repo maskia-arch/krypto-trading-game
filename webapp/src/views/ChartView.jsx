@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
-  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine,
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine, CartesianGrid
 } from 'recharts';
 import useStore from '../lib/store';
 
@@ -17,6 +17,13 @@ const COIN_THEME = {
   LTC: { stroke: '#bfbbbb', gradStart: 'rgba(191,187,187,0.3)', gradEnd: 'rgba(191,187,187,0)' },
 };
 
+// Intelligenter Preis-Formatter aus LiveChart30m adaptiert
+const fmtPrice = (v) => {
+  if (v >= 10000) return v.toLocaleString('de-DE', { maximumFractionDigits: 0 });
+  if (v >= 100) return v.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+  return v.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+};
+
 const CustomTooltip = ({ active, payload, theme }) => {
   if (!active || !payload?.length) return null;
   return (
@@ -24,7 +31,7 @@ const CustomTooltip = ({ active, payload, theme }) => {
          style={{ background: 'rgba(10,12,20,0.9)' }}>
       <p className="text-[10px] font-bold text-[var(--text-dim)] uppercase tracking-wider">{payload[0].payload.fullTime}</p>
       <p className="font-mono font-black text-sm drop-shadow-md" style={{ color: theme.stroke }}>
-        {Number(payload[0].value).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
+        {fmtPrice(Number(payload[0].value))}€
       </p>
     </div>
   );
@@ -53,7 +60,6 @@ export default function ChartView() {
   const oneHourAgo = now - (60 * 60 * 1000);
 
   // --- SICHERHEITS-PANZERUNG ---
-  // Stellt sicher, dass chartData immer ein Array ist, auch wenn das Backend 'null' sendet
   const safeChartData = Array.isArray(chartData) ? chartData : [];
 
   let mappedData = safeChartData.map(d => {
@@ -84,10 +90,10 @@ export default function ChartView() {
   const livePrice = prices?.[chartSymbol] || last || 0;
 
   return (
-    <div className="space-y-3 tab-enter">
+    <div className="space-y-3 tab-enter w-full">
       
       {/* Header-Modul: Preis & Range-Picker */}
-      <div className="card p-4 border border-white/5 bg-gradient-to-br from-[#0a0c14] to-black/60 relative overflow-hidden">
+      <div className="card p-4 border border-white/5 bg-gradient-to-br from-[#0a0c14] to-black/60 relative overflow-hidden shadow-xl">
         <div className="absolute top-0 right-0 w-32 h-32 blur-[60px] rounded-full pointer-events-none opacity-20 transition-colors duration-500" style={{ backgroundColor: theme.stroke }}></div>
         
         <div className="flex items-end justify-between relative z-10 mb-4">
@@ -101,7 +107,7 @@ export default function ChartView() {
                 ValueTrade Live · {chartSymbol}
               </span>
             </div>
-            <p className="text-2xl font-mono font-black tracking-tighter drop-shadow-lg" style={{ color: theme.stroke }}>
+            <p className="text-2xl font-mono font-black tracking-tighter drop-shadow-lg text-white" style={{ textShadow: `0 0 20px ${theme.stroke}40` }}>
               {livePrice.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
             </p>
           </div>
@@ -134,23 +140,17 @@ export default function ChartView() {
       </div>
 
       {/* Chart-Bereich */}
-      <div className="card overflow-hidden bg-black/40 border border-white/5 relative" style={{ padding: '12px 4px 4px 0' }}>
+      <div className="card overflow-hidden bg-black/40 border border-white/5 relative p-4">
         
-        {/* Subtle Background Grid Lines */}
-        <div className="absolute inset-0 flex flex-col justify-between py-6 px-0 pointer-events-none opacity-10">
-          <div className="w-full border-t border-dashed border-white/30"></div>
-          <div className="w-full border-t border-dashed border-white/30"></div>
-          <div className="w-full border-t border-dashed border-white/30"></div>
-        </div>
-
         {loading && mappedData.length === 0 ? (
           <div className="flex items-center justify-center h-60">
             <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${theme.stroke}40`, borderTopColor: 'transparent' }}></div>
           </div>
         ) : mappedData.length > 0 ? (
-          <div style={{ position: 'relative' }}>
-            <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={mappedData} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
+          <div className="w-full relative" style={{ height: '240px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              {/* Margin Right und Left angepasst für maximalen Platz */}
+              <AreaChart data={mappedData} margin={{ top: 10, right: 0, bottom: 0, left: -20 }}>
                 <defs>
                   <linearGradient id={`grad-${chartSymbol}`} x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor={theme.gradStart} />
@@ -164,25 +164,36 @@ export default function ChartView() {
                     </feMerge>
                   </filter>
                 </defs>
+
+                {/* Sauberes Grid integriert */}
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.06)" />
+
                 <XAxis
                   dataKey="time"
-                  stroke="transparent"
-                  tick={{ fontSize: 9, fill: '#4b5c72', fontFamily: 'JetBrains Mono', fontWeight: 'bold' }}
+                  stroke="rgba(255,255,255,0.1)"
+                  tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.4)', fontFamily: 'JetBrains Mono', fontWeight: 'bold' }}
                   axisLine={false}
                   tickLine={false}
-                  minTickGap={30}
+                  tickMargin={12}
+                  minTickGap={40} // Verhindert überlappende Zeiten
                 />
+                
+                {/* Y-Achse nach Rechts verschoben wie im Trading-Standard */}
                 <YAxis
+                  orientation="right"
                   domain={[minP - pad, maxP + pad]}
                   stroke="transparent"
-                  tick={{ fontSize: 9, fill: '#4b5c72', fontFamily: 'JetBrains Mono', fontWeight: 'bold' }}
-                  tickFormatter={v => `${v.toFixed(0)}`}
-                  width={44}
+                  tick={{ fontSize: 9, fill: 'rgba(255,255,255,0.4)', fontFamily: 'JetBrains Mono', fontWeight: 'bold' }}
+                  tickFormatter={fmtPrice}
+                  width={55}
                   axisLine={false}
                   tickLine={false}
+                  tickMargin={8}
                 />
-                <ReferenceLine y={first} stroke="rgba(255,255,255,0.08)" strokeDasharray="3 3" />
-                <Tooltip content={<CustomTooltip theme={theme} />} cursor={{ stroke: 'rgba(255,255,255,0.1)' }} />
+                
+                <ReferenceLine y={first} stroke="rgba(255,255,255,0.1)" strokeDasharray="2 4" strokeWidth={1} />
+                <Tooltip content={<CustomTooltip theme={theme} />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '3 3' }} />
+                
                 <Area
                   type="monotone"
                   dataKey="price"
@@ -205,15 +216,15 @@ export default function ChartView() {
         )}
       </div>
 
-      {/* Stats-Grid (Tief, Hoch, Vola) */}
+      {/* Stats-Grid (Tief, Hoch, Spanne) - Angleichung an LiveChart30m Wording */}
       {mappedData.length > 0 && (
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: 'Tief', value: `${minP.toLocaleString('de-DE', { maximumFractionDigits: 2 })}€`, color: 'text-neon-red' },
-            { label: 'Hoch', value: `${maxP.toLocaleString('de-DE', { maximumFractionDigits: 2 })}€`, color: 'text-neon-green' },
-            { label: 'Volatilität', value: `${Math.abs(change).toFixed(2)}%`, color: 'text-neon-blue' },
+            { label: 'Tief', value: `${fmtPrice(minP)}€`, color: 'text-neon-red' },
+            { label: 'Hoch', value: `${fmtPrice(maxP)}€`, color: 'text-neon-green' },
+            { label: 'Spanne', value: `${fmtPrice(maxP - minP)}€`, color: 'text-neon-blue' },
           ].map(s => (
-            <div key={s.label} className="card p-2 border border-white/5 bg-black/20 text-center hover:bg-white/5 transition-colors">
+            <div key={s.label} className="card p-2 border border-white/5 bg-black/30 text-center hover:bg-white/5 transition-colors rounded-lg">
               <p className="text-[8px] uppercase tracking-[0.15em] font-black text-[var(--text-dim)]">{s.label}</p>
               <p className={`text-[11px] font-mono font-black mt-1 ${s.color} drop-shadow-sm`}>{s.value}</p>
             </div>

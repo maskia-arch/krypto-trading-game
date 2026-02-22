@@ -1,5 +1,41 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, CartesianGrid, ReferenceLine, Tooltip } from 'recharts';
 import useStore from '../../lib/store';
+
+// Intelligenter Preis-Formatter
+const fmtPrice = (v) => {
+  if (v >= 10000) return v.toLocaleString('de-DE', { maximumFractionDigits: 0 });
+  if (v >= 100) return v.toLocaleString('de-DE', { maximumFractionDigits: 1 });
+  return v.toLocaleString('de-DE', { maximumFractionDigits: 2 });
+};
+
+// Custom Tooltip für schnelle Insights beim Hovern
+const CustomTooltip = ({ active, payload, color }) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className="rounded-lg px-2 py-1 text-xs shadow-xl backdrop-blur-md border border-white/10"
+         style={{ background: 'rgba(10,12,20,0.9)' }}>
+      <p className="text-[9px] font-bold text-[var(--text-dim)]">{payload[0].payload.time}</p>
+      <p className="font-mono font-black text-xs drop-shadow-md" style={{ color }}>
+        {fmtPrice(Number(payload[0].value))}€
+      </p>
+    </div>
+  );
+};
+
+// Custom Dot: Lässt den letzten Punkt des Graphen pulsieren
+const PulsatingDot = (props) => {
+  const { cx, cy, index, dataLength, color } = props;
+  if (index === dataLength - 1) {
+    return (
+      <g>
+        <circle cx={cx} cy={cy} r={8} fill={color} className="animate-ping" opacity={0.4} />
+        <circle cx={cx} cy={cy} r={3} fill="#fff" stroke={color} strokeWidth={1.5} />
+      </g>
+    );
+  }
+  return null;
+};
 
 export default function LiveChart30m() {
   const { chartSymbol, chartData, loadChart, prices } = useStore();
@@ -22,82 +58,39 @@ export default function LiveChart30m() {
   const activeCoin = coins.find(c => c.id === chartSymbol) || coins[0];
   const currentPrice = prices?.[chartSymbol] || 0;
 
+  // Daten für Recharts aufbereiten
   const chartInfo = useMemo(() => {
     const safeChartData = Array.isArray(chartData) ? chartData : [];
-
-    if (safeChartData.length < 2) {
-      return { points: '', fillPoints: '', min: 0, max: 0, lastX: 0, lastY: 0, timestamps: [], priceLabels: [], change: 0, isUp: true, firstPrice: 0, lastPrice: 0 };
-    }
-    
     const validData = safeChartData.filter(d => !isNaN(Number(d.price_eur)) && d.recorded_at);
-    if (validData.length < 2) {
-       return { points: '', fillPoints: '', min: 0, max: 0, lastX: 0, lastY: 0, timestamps: [], priceLabels: [], change: 0, isUp: true, firstPrice: 0, lastPrice: 0 };
-    }
-
-    const chartPrices = validData.map(d => Number(d.price_eur));
-    const min = Math.min(...chartPrices);
-    const max = Math.max(...chartPrices);
-    const range = (max - min) || 1;
     
-    let lastX = 0;
-    let lastY = 0;
+    if (validData.length < 2) return { mappedData: [], min: 0, max: 0, change: 0, isUp: true, firstPrice: 0 };
 
-    const pts = chartPrices.map((p, i) => {
-      const x = (i / (chartPrices.length - 1)) * 100;
-      const y = 100 - (((p - min) / range) * 100);
-      if (i === chartPrices.length - 1) {
-        lastX = x;
-        lastY = y;
-      }
-      return `${x},${y}`;
+    const mappedData = validData.map(d => {
+      const date = new Date(d.recorded_at);
+      return {
+        time: date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }),
+        price: Number(d.price_eur),
+      };
     });
 
-    // Zeitstempel für X-Achse berechnen (5 Stück gleichmäßig verteilt)
-    const numLabels = 5;
-    const timestamps = [];
-    for (let i = 0; i < numLabels; i++) {
-      const idx = Math.round((i / (numLabels - 1)) * (validData.length - 1));
-      const d = new Date(validData[idx].recorded_at);
-      timestamps.push({
-        x: (idx / (validData.length - 1)) * 100,
-        label: d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })
-      });
-    }
-
-    // Preislabels für Y-Achse (3 Stück: min, mid, max)
-    const mid = (min + max) / 2;
-    const priceLabels = [
-      { y: 100 - (((max - min) / range) * 100), value: max },
-      { y: 100 - (((mid - min) / range) * 100), value: mid },
-      { y: 100 - (((min - min) / range) * 100), value: min },
-    ];
-
-    const firstPrice = chartPrices[0];
-    const lastPrice = chartPrices[chartPrices.length - 1];
+    const pricesArr = mappedData.map(d => d.price);
+    const min = Math.min(...pricesArr);
+    const max = Math.max(...pricesArr);
+    const firstPrice = pricesArr[0];
+    const lastPrice = pricesArr[pricesArr.length - 1];
     const change = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
 
     return {
-      points: pts.join(' '),
-      fillPoints: `0,110 ${pts.join(' ')} 100,110`,
+      mappedData,
       min,
       max,
-      lastX,
-      lastY,
-      timestamps,
-      priceLabels,
       change,
       isUp: change >= 0,
-      firstPrice,
-      lastPrice
+      firstPrice
     };
   }, [chartData]);
 
-  // Preis-Formatter
-  const fmtPrice = (v) => {
-    if (v >= 10000) return v.toLocaleString('de-DE', { maximumFractionDigits: 0 });
-    if (v >= 100) return v.toLocaleString('de-DE', { maximumFractionDigits: 1 });
-    return v.toLocaleString('de-DE', { maximumFractionDigits: 2 });
-  };
+  const pad = (chartInfo.max - chartInfo.min) * 0.05 || 1;
 
   return (
     <div className="card p-4 space-y-3 border border-white/5 bg-gradient-to-br from-[#0a0c14] to-black/60 relative overflow-hidden shadow-xl">
@@ -138,7 +131,7 @@ export default function LiveChart30m() {
             {currentPrice.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€
           </p>
           {/* Prozent-Änderung */}
-          {chartInfo.points && (
+          {chartInfo.mappedData.length > 0 && (
             <div className={`flex items-center gap-1 mt-1 px-2 py-0.5 rounded-md text-[10px] font-mono font-black ${
               chartInfo.isUp 
                 ? 'bg-neon-green/10 text-neon-green border border-neon-green/20' 
@@ -152,42 +145,20 @@ export default function LiveChart30m() {
       </div>
 
       {/* Chart-Bereich */}
-      <div className="w-full relative bg-black/40 rounded-xl overflow-hidden border border-white/5" style={{ paddingTop: '4px' }}>
-        
-        {/* Horizontale Gitter-Linien */}
-        <div className="absolute inset-0 flex flex-col justify-between py-4 pointer-events-none" style={{ top: '4px', bottom: '24px' }}>
-          <div className="w-full border-t border-dashed border-white/[0.06]"></div>
-          <div className="w-full border-t border-dashed border-white/[0.06]"></div>
-          <div className="w-full border-t border-dashed border-white/[0.06]"></div>
-          <div className="w-full border-t border-dashed border-white/[0.06]"></div>
-        </div>
-
-        {(!Array.isArray(chartData) || chartData.length < 2) ? (
-          <div className="flex items-center justify-center flex-col gap-2" style={{ height: '180px' }}>
+      <div className="w-full relative bg-black/40 rounded-xl overflow-hidden border border-white/5 p-2 pt-4">
+        {chartInfo.mappedData.length < 2 ? (
+          <div className="flex items-center justify-center flex-col gap-2" style={{ height: '160px' }}>
             <div className="w-6 h-6 border-2 border-t-transparent rounded-full animate-spin" style={{ borderColor: `${activeCoin.color}80`, borderTopColor: 'transparent' }}></div>
             <p className="text-[9px] font-black uppercase tracking-widest text-[var(--text-dim)]">Lade Chartdaten...</p>
           </div>
         ) : (
-          <div className="w-full relative">
-            {/* Y-Achse Preis-Labels (rechts) */}
-            <div className="absolute right-0 top-0 bottom-0 flex flex-col justify-between py-1 pointer-events-none z-20" style={{ bottom: '24px', width: '52px' }}>
-              {chartInfo.priceLabels.map((pl, i) => (
-                <div key={i} className="text-right pr-2">
-                  <span className="text-[8px] font-mono font-bold text-white/25 bg-black/60 px-1 py-0.5 rounded">
-                    {fmtPrice(pl.value)}€
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* SVG Chart */}
-            <div style={{ height: '160px', paddingRight: '50px' }}>
-              <svg className="w-full h-full overflow-visible" preserveAspectRatio="none" viewBox="0 -10 100 120">
+          <div className="w-full relative" style={{ height: '160px' }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartInfo.mappedData} margin={{ top: 5, right: 0, bottom: 0, left: -25 }}>
                 <defs>
                   <linearGradient id={`grad30-${chartSymbol}`} x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={activeCoin.color} stopOpacity="0.35" />
-                    <stop offset="60%" stopColor={activeCoin.color} stopOpacity="0.08" />
-                    <stop offset="100%" stopColor={activeCoin.color} stopOpacity="0.0" />
+                    <stop offset="0%" stopColor={activeCoin.color} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={activeCoin.color} stopOpacity={0.0} />
                   </linearGradient>
                   <filter id={`glow30-${chartSymbol}`}>
                     <feGaussianBlur stdDeviation="1.5" result="coloredBlur"/>
@@ -197,89 +168,65 @@ export default function LiveChart30m() {
                     </feMerge>
                   </filter>
                 </defs>
-                
-                {/* Einstiegslinie (Referenz zum ersten Preis) */}
-                {chartInfo.firstPrice > 0 && (
-                  <line
-                    x1="0"
-                    y1={100 - (((chartInfo.firstPrice - chartInfo.min) / ((chartInfo.max - chartInfo.min) || 1)) * 100)}
-                    x2="100"
-                    y2={100 - (((chartInfo.firstPrice - chartInfo.min) / ((chartInfo.max - chartInfo.min) || 1)) * 100)}
-                    stroke="rgba(255,255,255,0.08)"
-                    strokeDasharray="2 3"
-                    strokeWidth="0.3"
-                  />
-                )}
 
-                {/* Fill-Gradient */}
-                <polyline
-                  fill={`url(#grad30-${chartSymbol})`}
-                  stroke="none"
-                  points={chartInfo.fillPoints}
+                <CartesianGrid strokeDasharray="2 4" vertical={false} stroke="rgba(255,255,255,0.06)" />
+
+                <XAxis 
+                  dataKey="time" 
+                  stroke="transparent" 
+                  tick={{ fontSize: 8, fill: 'rgba(255,255,255,0.3)', fontFamily: 'JetBrains Mono', fontWeight: 'bold' }}
+                  tickLine={false}
+                  axisLine={false}
+                  minTickGap={30}
+                  tickMargin={8}
                 />
                 
-                {/* Chart-Linie */}
-                <polyline
-                  fill="none"
+                <YAxis 
+                  orientation="right"
+                  domain={[chartInfo.min - pad, chartInfo.max + pad]} 
+                  stroke="transparent"
+                  tick={{ fontSize: 8, fill: 'rgba(255,255,255,0.3)', fontFamily: 'JetBrains Mono', fontWeight: 'bold' }}
+                  tickFormatter={fmtPrice}
+                  tickLine={false}
+                  axisLine={false}
+                  width={50}
+                />
+
+                <Tooltip content={<CustomTooltip color={activeCoin.color} />} cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 1, strokeDasharray: '3 3' }} />
+
+                {/* Referenzlinie für den Eröffnungspreis */}
+                <ReferenceLine y={chartInfo.firstPrice} stroke="rgba(255,255,255,0.1)" strokeDasharray="2 4" strokeWidth={1} />
+
+                <Area
+                  type="monotone"
+                  dataKey="price"
                   stroke={activeCoin.color}
-                  strokeWidth="1.5"
-                  strokeLinejoin="round"
-                  strokeLinecap="round"
-                  points={chartInfo.points}
-                  filter={`url(#glow30-${chartSymbol})`}
+                  strokeWidth={1.5}
+                  fill={`url(#grad30-${chartSymbol})`}
+                  animationDuration={300}
+                  isAnimationActive={false} // Verhindert Flackern bei Live-Updates
+                  style={{ filter: `url(#glow30-${chartSymbol})` }}
+                  dot={<PulsatingDot dataLength={chartInfo.mappedData.length} color={activeCoin.color} />}
+                  activeDot={false}
                 />
-                
-                {/* Endpunkt-Dot mit Puls */}
-                <circle 
-                  cx={chartInfo.lastX} 
-                  cy={chartInfo.lastY} 
-                  r="3" 
-                  fill={activeCoin.color}
-                  opacity="0.15"
-                >
-                  <animate attributeName="r" values="3;6;3" dur="2s" repeatCount="indefinite" />
-                  <animate attributeName="opacity" values="0.15;0.05;0.15" dur="2s" repeatCount="indefinite" />
-                </circle>
-                <circle 
-                  cx={chartInfo.lastX} 
-                  cy={chartInfo.lastY} 
-                  r="1.8" 
-                  fill="#fff" 
-                  stroke={activeCoin.color} 
-                  strokeWidth="0.6"
-                  filter={`url(#glow30-${chartSymbol})`}
-                />
-              </svg>
-            </div>
-
-            {/* X-Achse Zeitstempel (unten) */}
-            <div className="relative w-full border-t border-white/[0.05]" style={{ height: '22px', paddingRight: '50px' }}>
-              {chartInfo.timestamps.map((ts, i) => (
-                <span
-                  key={i}
-                  className="absolute text-[8px] font-mono font-bold text-white/25 -translate-x-1/2 pt-1"
-                  style={{ left: `${ts.x}%` }}
-                >
-                  {ts.label}
-                </span>
-              ))}
-            </div>
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         )}
       </div>
 
       {/* Stats-Leiste unter dem Chart */}
-      {chartInfo.points && (
+      {chartInfo.mappedData.length > 0 && (
         <div className="flex gap-2 relative z-10">
-          <div className="flex-1 bg-black/30 rounded-lg p-2 text-center border border-white/[0.03]">
+          <div className="flex-1 bg-black/30 rounded-lg p-2 text-center border border-white/[0.03] hover:bg-white/5 transition-colors">
             <p className="text-[7px] uppercase tracking-[0.15em] font-black text-[var(--text-dim)]">Tief</p>
             <p className="text-[10px] font-mono font-black text-neon-red mt-0.5">{fmtPrice(chartInfo.min)}€</p>
           </div>
-          <div className="flex-1 bg-black/30 rounded-lg p-2 text-center border border-white/[0.03]">
+          <div className="flex-1 bg-black/30 rounded-lg p-2 text-center border border-white/[0.03] hover:bg-white/5 transition-colors">
             <p className="text-[7px] uppercase tracking-[0.15em] font-black text-[var(--text-dim)]">Hoch</p>
             <p className="text-[10px] font-mono font-black text-neon-green mt-0.5">{fmtPrice(chartInfo.max)}€</p>
           </div>
-          <div className="flex-1 bg-black/30 rounded-lg p-2 text-center border border-white/[0.03]">
+          <div className="flex-1 bg-black/30 rounded-lg p-2 text-center border border-white/[0.03] hover:bg-white/5 transition-colors">
             <p className="text-[7px] uppercase tracking-[0.15em] font-black text-[var(--text-dim)]">Spanne</p>
             <p className="text-[10px] font-mono font-black text-neon-blue mt-0.5">{fmtPrice(chartInfo.max - chartInfo.min)}€</p>
           </div>
