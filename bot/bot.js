@@ -39,7 +39,7 @@ bot.command('settings', async (ctx) => {
 
   let statusText = 'Standard';
   if (profile.is_admin) {
-    statusText = 'Admin (Pro-Features aktiv)';
+    statusText = 'Admin (alle Features aktiv)';
   } else if (profile.is_pro && new Date(profile.pro_until) > new Date()) {
     statusText = 'Pro-Mitglied';
   }
@@ -64,24 +64,31 @@ bot.command('settings', async (ctx) => {
 bot.command('admin', adminCommands.dashboard);
 bot.command('user', adminCommands.userInfo);
 bot.command('setbalance', adminCommands.setBalance);
+bot.command('setpro', adminCommands.setPro);
 bot.command('broadcast', adminCommands.broadcast);
 
+// v0.3.2: Story Bonus — jetzt als bonus_received getrackt
 bot.on('message:story', async (ctx) => {
   try {
     const userId = ctx.from.id;
     const { data: profile } = await db.supabase
       .from('profiles')
-      .select('id, story_bonus_claimed, balance')
+      .select('id, story_bonus_claimed, balance, bonus_received')
       .eq('telegram_id', userId)
       .single();
 
     if (profile && !profile.story_bonus_claimed) {
       const bonusAmount = 1000.00;
       const newBalance = (Number(profile.balance) || 0) + bonusAmount;
+      const newBonusReceived = (Number(profile.bonus_received) || 0) + bonusAmount;
       
       await db.supabase
         .from('profiles')
-        .update({ balance: newBalance, story_bonus_claimed: true })
+        .update({ 
+          balance: newBalance, 
+          story_bonus_claimed: true,
+          bonus_received: newBonusReceived  // v0.3.2: Als geschenktes Geld tracken
+        })
         .eq('id', profile.id);
 
       await db.supabase.from('transactions').insert({

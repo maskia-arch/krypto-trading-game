@@ -15,6 +15,16 @@ module.exports = (db) => ({
     return this.getLeveragePositions(profileId);
   },
 
+  // v0.3.2: Alle offenen Positionen (für Scheduler, Liquidation, Auto-Close)
+  async getAllOpenLeveragedPositions() {
+    const { data, error } = await db.supabase
+      .from('leveraged_positions')
+      .select('*')
+      .eq('status', 'OPEN');
+    if (error) throw error;
+    return data || [];
+  },
+
   async generateOrderId(direction) {
     const prefix = direction === 'LONG' ? 'L' : 'S';
     const ts = Date.now().toString(36).toUpperCase();

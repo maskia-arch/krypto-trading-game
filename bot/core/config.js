@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
 
-let VERSION = '0.3.0'; 
+let VERSION = '0.3.2'; 
 try {
   const versionPath = path.resolve(__dirname, '../../version.txt');
   if (fs.existsSync(versionPath)) {
@@ -39,17 +39,32 @@ const COINS = {
 
 const FEE_RATE = 0.005;
 
+// v0.3.2: x10 permanent für alle, x20/x50 Zocker für Pro (und Montag für Free)
 const TRADING_LIMITS = {
   FREE: {
     MAX_POSITIONS: 1,
     MARGIN_LIMIT_FACTOR: 0.50,
-    MAX_LEVERAGE: 5
+    MAX_LEVERAGE: 10,           // x10 jetzt dauerhaft für alle
+    ZOCKER_LEVERAGES: []        // Free: keine Zocker-Hebel (außer Montag)
+  },
+  FREE_MONDAY: {
+    MAX_POSITIONS: 1,
+    MARGIN_LIMIT_FACTOR: 0.50,
+    MAX_LEVERAGE: 50,           // Montag: Zocker für alle
+    ZOCKER_LEVERAGES: [20, 50]
   },
   PRO: {
     MAX_POSITIONS: 3,
     MARGIN_LIMIT_FACTOR: 0.90,
-    MAX_LEVERAGE: 10
+    MAX_LEVERAGE: 50,           // Pro: immer Zocker
+    ZOCKER_LEVERAGES: [20, 50]
   }
+};
+
+// Alle erlaubten Hebel-Stufen
+const LEVERAGE_TIERS = {
+  STANDARD: [2, 3, 5, 10],
+  ZOCKER: [20, 50]
 };
 
 module.exports = {
@@ -62,5 +77,6 @@ module.exports = {
   supabaseConfig,
   COINS,
   FEE_RATE,
-  TRADING_LIMITS
+  TRADING_LIMITS,
+  LEVERAGE_TIERS
 };

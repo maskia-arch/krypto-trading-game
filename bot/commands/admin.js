@@ -14,6 +14,11 @@ async function dashboard(ctx) {
       .select('*', { count: 'exact', head: true })
       .eq('status', 'pending');
 
+    const { count: openPositions } = await db.supabase
+      .from('leveraged_positions')
+      .select('*', { count: 'exact', head: true })
+      .eq('status', 'OPEN');
+
     const kb = new InlineKeyboard()
       .text('👥 Alle User', 'admin_users')
       .text('💰 Fee Pool', 'admin_pool')
@@ -30,11 +35,13 @@ async function dashboard(ctx) {
       `🔧 <b>ADMIN DASHBOARD</b> (v${VERSION})\n\n` +
       `👥 User: ${stats.userCount}\n` +
       `📝 Transaktionen: ${stats.txCount}\n` +
-      `💰 Fee Pool: ${pool.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€\n\n` +
+      `💰 Fee Pool: ${pool.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€\n` +
+      `⚡ Offene Trades: ${openPositions || 0}\n\n` +
       `Letzte Aktualisierung: ${new Date().toLocaleString('de-DE')}`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
   } catch (err) {
+    console.error('Admin Dashboard Error:', err);
     ctx.reply('❌ Fehler beim Laden der Admin-Stats.');
   }
 }
@@ -65,6 +72,8 @@ async function userInfo(ctx) {
       ? new Date(profile.last_active).toLocaleString('de-DE') 
       : 'Nie';
 
+    const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
+
     return ctx.reply(
       `👤 <b>User Info</b>\n\n` +
       `Name: ${esc(profile.first_name)}\n` +
@@ -72,7 +81,8 @@ async function userInfo(ctx) {
       `ID: <code>${profile.telegram_id}</code>\n` +
       `Balance: ${Number(profile.balance).toLocaleString('de-DE')}€\n` +
       `Umsatz: ${Number(profile.total_volume).toLocaleString('de-DE')}€\n` +
-      `Pro: ${profile.is_pro ? '✅' : '❌'}${profile.is_admin ? ' (ADMIN)' : ''}\n` +
+      `Bonus erhalten: ${Number(profile.bonus_received || 0).toLocaleString('de-DE')}€\n` +
+      `Status: ${profile.is_admin ? '👑 ADMIN' : isPro ? '⭐ Pro' : '👤 Free'}\n` +
       `Letzte Aktivität: ${lastActive}\n\n` +
       `📦 Assets:\n${assetsText}\n\n` +
       `⚡ Offene Trades:\n${posText}`,

@@ -122,6 +122,79 @@ async function checkLeverageLiquidations(bot) {
   }
 }
 
+// v0.3.2: Auto-Close x20/x50 Positionen für Free User (Ende Hebel-Montag)
+async function autoCloseZockerForFreeUsers(bot) {
+  try {
+    const openPositions = await db.getAllOpenLeveragedPositions();
+    if (!openPositions || openPositions.length === 0) return;
+
+    const currentPrices = await db.getAllPrices();
+    const priceMap = {};
+    currentPrices.forEach(p => priceMap[p.symbol] = Number(p.price_eur));
+
+    for (const pos of openPositions) {
+      const lev = Number(pos.leverage);
+      if (lev < 20) continue; // Nur x20 und x50
+
+      // Prüfen ob User Pro ist
+      const { data: profile } = await db.supabase
+        .from('profiles')
+        .select('telegram_id, is_pro, pro_until, is_admin')
+        .eq('id', pos.profile_id)
+        .single();
+
+      if (!profile) continue;
+      
+      const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
+      if (isPro) continue; // Pro User behalten ihre Positionen
+
+      const currentPrice = priceMap[pos.symbol];
+      if (!currentPrice) continue;
+
+      try {
+        const result = await db.closeLeveragedPosition(pos.id, currentPrice, false);
+        
+        if (profile.telegram_id) {
+          const emoji = result.pnl >= 0 ? '💰' : '📉';
+          await bot.api.sendMessage(
+            profile.telegram_id,
+            `${emoji} <b>ZOCKER-POSITION AUTO-GESCHLOSSEN</b>\n\n` +
+            `Der Hebel-Montag ist vorbei! Deine <b>${lev}x ${pos.direction} ${pos.symbol}</b> Position wurde automatisch abgerechnet.\n\n` +
+            `PnL: <b>${result.pnl >= 0 ? '+' : ''}${result.pnl.toFixed(2)}€</b>\n` +
+            `Auszahlung: <b>${result.payout.toFixed(2)}€</b>\n\n` +
+            `<i>💎 Tipp: Mit Pro behältst du x20 & x50 dauerhaft!</i>`,
+            { parse_mode: 'HTML' }
+          );
+        }
+      } catch (e) {
+        console.error(`Auto-Close für Position ${pos.id} fehlgeschlagen:`, e.message);
+      }
+    }
+  } catch (err) {
+    console.error('Zocker Auto-Close Fehler:', err);
+  }
+}
+
+// Helper: Broadcast an alle User (mit opt-out check)
+async function broadcastToAll(bot, message) {
+  try {
+    const { data: users } = await db.supabase.from('profiles').select('telegram_id, notifications_enabled');
+    if (!users) return 0;
+    let sent = 0;
+    for (const user of users) {
+      if (user.notifications_enabled === false) continue;
+      try {
+        await bot.api.sendMessage(user.telegram_id, message, { parse_mode: 'HTML' });
+        sent++;
+      } catch (e) {}
+    }
+    return sent;
+  } catch (e) {
+    console.error('Broadcast Fehler:', e);
+    return 0;
+  }
+}
+
 function setupCronJobs(bot) {
   const runFrequentTasks = async () => {
     try {
@@ -158,29 +231,101 @@ function setupCronJobs(bot) {
     }
   });
 
+  // ===== HEBEL-MONTAG EVENT =====
+
+  // Montag 08:00 — Start-Nachricht
   cron.schedule('0 8 * * 1', async () => {
     try {
-      const { data: users, error } = await db.supabase.from('profiles').select('telegram_id, notifications_enabled');
-      if (error || !users) return;
+      const msg = 
+        `🎰🔥 <b>HEBEL-MONTAG — ZOCKER-MODUS AKTIV!</b> 🔥🎰\n\n` +
+        `Nur heute für ALLE Spieler freigeschaltet:\n\n` +
+        `⚡ <b>x20 Hebel</b> — Für mutige Trader\n` +
+        `🚀 <b>x50 Hebel</b> — Für echte Zocker\n\n` +
+        `High Risk, High Reward! Der Zocker-Modus ist bis Mitternacht verfügbar.\n\n` +
+        `<i>⚠️ Achtung: Offene x20/x50 Positionen werden für Free User um Mitternacht automatisch abgerechnet!</i>\n\n` +
+        `💎 <b>Pro-Tipp:</b> Pro-Mitglieder haben den Zocker-Modus dauerhaft.`;
 
-      const messages = [
-        "🔥 <b>Hebel-Montag ist da!</b>\n\nNur heute: Der <b>10x Hebel</b> ist für ALLE Spieler freigeschaltet! Nutze die Chance auf maximale Profite (oder Totalverlust). Viel Erfolg!",
-        "🚀 <b>Es ist wieder Hebel-Montag!</b>\n\nDas Limit wurde für 24 Stunden aufgehoben. Du kannst ab sofort mit <b>10x Hebel</b> traden. Zeig dem Markt, wer der Boss ist!",
-        "⚠️ <b>High Risk, High Reward!</b>\n\nDer Hebel-Montag ist aktiv. Wir haben den Max-Hebel für alle auf 10x erhöht. Trade clever und setz nicht dein ganzes Hemd aufs Spiel!"
-      ];
+      await broadcastToAll(bot, msg);
+    } catch (err) {
+      console.error('Montag Start Fehler:', err);
+    }
+  });
 
-      const randomMsg = messages[Math.floor(Math.random() * messages.length)];
+  // Montag 21:00 — Warnung (3h vor Ablauf)
+  cron.schedule('0 21 * * 1', async () => {
+    try {
+      // Nur Free User mit offenen x20/x50 warnen
+      const openPositions = await db.getAllOpenLeveragedPositions();
+      if (!openPositions) return;
 
-      for (const user of users) {
-        if (user.notifications_enabled === false) continue;
+      const zockerPositions = openPositions.filter(p => Number(p.leverage) >= 20);
+      
+      for (const pos of zockerPositions) {
+        const { data: profile } = await db.supabase
+          .from('profiles')
+          .select('telegram_id, is_pro, pro_until, is_admin, notifications_enabled')
+          .eq('id', pos.profile_id)
+          .single();
+
+        if (!profile || profile.notifications_enabled === false) continue;
+        
+        const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
+        if (isPro) continue; // Pro User nicht warnen
+
         try {
-          await bot.api.sendMessage(user.telegram_id, randomMsg, { parse_mode: 'HTML' });
+          await bot.api.sendMessage(
+            profile.telegram_id,
+            `⚠️ <b>ACHTUNG — ZOCKER-MODUS ENDET IN 3 STUNDEN!</b>\n\n` +
+            `Du hast noch eine offene <b>${pos.leverage}x ${pos.direction} ${pos.symbol}</b> Position.\n\n` +
+            `🕐 Um <b>Mitternacht</b> werden alle x20/x50 Positionen für Free User automatisch geschlossen.\n\n` +
+            `💡 <b>Empfehlung:</b> Verkaufe zum bestmöglichen Preis, bevor die Position automatisch abgerechnet wird!\n\n` +
+            `💎 <i>Mit Pro behältst du den Zocker-Modus dauerhaft.</i>`,
+            { parse_mode: 'HTML' }
+          );
         } catch (e) {}
       }
     } catch (err) {
-      console.error(err);
+      console.error('Montag Warnung Fehler:', err);
     }
   });
+
+  // Dienstag 00:01 — Auto-Close + Ende-Nachricht
+  cron.schedule('1 0 * * 2', async () => {
+    try {
+      // 1. Auto-Close x20/x50 für Free User
+      await autoCloseZockerForFreeUsers(bot);
+
+      // 2. Tagesvolumen berechnen (Transaktionen vom Montag)
+      const mondayStart = new Date();
+      mondayStart.setDate(mondayStart.getDate() - 1);
+      mondayStart.setHours(0, 0, 0, 0);
+      const mondayEnd = new Date();
+      mondayEnd.setHours(0, 0, 0, 0);
+
+      const { data: txs } = await db.supabase
+        .from('transactions')
+        .select('total_eur')
+        .gte('created_at', mondayStart.toISOString())
+        .lt('created_at', mondayEnd.toISOString());
+
+      const volume = (txs || []).reduce((sum, tx) => sum + Math.abs(Number(tx.total_eur || 0)), 0);
+      const volumeStr = volume.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      // 3. Ende-Nachricht
+      const msg = 
+        `🏁 <b>HEBEL-MONTAG BEENDET!</b>\n\n` +
+        `Der Zocker-Modus ist nun für Free User deaktiviert.\n\n` +
+        `📊 <b>Tagesvolumen:</b> ${volumeStr}€\n\n` +
+        `Danke für deine Teilnahme! Wir sehen uns nächsten Montag wieder. 🎰\n\n` +
+        `💎 <i>Pro-Mitglieder traden weiterhin mit x20 & x50!</i>`;
+
+      await broadcastToAll(bot, msg);
+    } catch (err) {
+      console.error('Montag Ende Fehler:', err);
+    }
+  });
+
+  // ===== REGELMÄSSIGE BENACHRICHTIGUNGEN =====
 
   cron.schedule('0 0,12 * * *', async () => {
     try {
@@ -227,6 +372,7 @@ function setupCronJobs(bot) {
     }
   });
 
+  // Inaktivitäts-Cleanup
   cron.schedule('0 2 * * *', async () => {
     try {
       const { data: users } = await db.supabase.from('profiles').select('*');

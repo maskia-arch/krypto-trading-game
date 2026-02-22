@@ -32,10 +32,17 @@ module.exports = (db) => ({
 
     if (totalRent > 0) {
       const { data: p } = await db.supabase.from('profiles')
-        .select('balance').eq('id', profileId).single();
+        .select('balance, bonus_received').eq('id', profileId).single();
+      
+      // v0.3.2: Miete wird als "geschenktes Geld" getrackt (bonus_received)
+      // damit es das Ranking nicht beeinflusst
       await db.supabase.from('profiles')
-        .update({ balance: Number(p.balance) + totalRent })
+        .update({ 
+          balance: Number(p.balance) + totalRent,
+          bonus_received: Number(p.bonus_received || 0) + totalRent
+        })
         .eq('id', profileId);
+      
       await db.logTransaction(profileId, 'rent', null, null, null, 0, totalRent);
     }
     return totalRent;

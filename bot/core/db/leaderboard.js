@@ -13,11 +13,13 @@ module.exports = (db) => ({
       };
     }
 
-    const [profilesRes, assetsRes, pricesRes, levRes, season, pool] = await Promise.all([
+    const [profilesRes, assetsRes, pricesRes, levRes, txCountRes, season, pool] = await Promise.all([
       db.supabase.from('profiles').select('id, telegram_id, username, first_name, balance, avatar_url, is_pro, pro_until, total_volume, season_start_worth, day_start_worth, bonus_received, is_admin'),
       db.supabase.from('assets').select('profile_id, symbol, amount'),
       db.supabase.from('current_prices').select('symbol, price_eur'),
       db.supabase.from('leveraged_positions').select('profile_id, symbol, direction, collateral, leverage, entry_price').eq('status', 'OPEN'),
+      // v0.3.2: Transaktion-Count pro User für Aktivitätsfilter
+      db.supabase.rpc('get_user_tx_counts').catch(() => ({ data: null })),
       this.getActiveSeason(),
       db.getFeePool()
     ]);
@@ -26,6 +28,12 @@ module.exports = (db) => ({
     const assets = assetsRes.data || [];
     const prices = pricesRes.data || [];
     const levPositions = levRes.data || [];
+
+    // Aktivitäts-Map: nur User mit mindestens 1 Trade-Transaktion
+    const txCounts = {};
+    if (txCountRes && txCountRes.data) {
+      txCountRes.data.forEach(r => { txCounts[r.profile_id] = r.tx_count; });
+    }
 
     const priceMap = {};
     prices.forEach(p => priceMap[p.symbol] = Number(p.price_eur));
@@ -42,69 +50,80 @@ module.exports = (db) => ({
       userLev[p.profile_id].push(p);
     });
 
-    let leaders = profiles.map(p => {
-      let cryptoValue = 0;
-      if (userAssets[p.id]) {
-        userAssets[p.id].forEach(asset => {
-          const currentPrice = priceMap[asset.symbol] || 0;
-          cryptoValue += Number(asset.amount) * currentPrice;
-        });
-      }
+    let leaders = profiles
+      // v0.3.2: Spieler ohne Kontobewegungen ausschließen
+      .filter(p => {
+        // Wenn RPC verfügbar: nur User mit Transaktionen
+        if (txCountRes && txCountRes.data) {
+          return (txCounts[p.id] || 0) > 0;
+        }
+        // Fallback: User mit Volumen > 0 ODER Assets ODER offene Positionen
+        return Number(p.total_volume || 0) > 0 || userAssets[p.id] || userLev[p.id];
+      })
+      .map(p => {
+        let cryptoValue = 0;
+        if (userAssets[p.id]) {
+          userAssets[p.id].forEach(asset => {
+            const currentPrice = priceMap[asset.symbol] || 0;
+            cryptoValue += Number(asset.amount) * currentPrice;
+          });
+        }
 
-      let leverageValue = 0;
-      if (userLev[p.id]) {
-        userLev[p.id].forEach(pos => {
-          const currentPrice = priceMap[pos.symbol];
-          if (currentPrice) {
-            const notional = Number(pos.collateral) * Number(pos.leverage);
-            let pnl = 0;
-            if (pos.direction === 'LONG') {
-               pnl = ((currentPrice - Number(pos.entry_price)) / Number(pos.entry_price)) * notional;
+        let leverageValue = 0;
+        if (userLev[p.id]) {
+          userLev[p.id].forEach(pos => {
+            const currentPrice = priceMap[pos.symbol];
+            if (currentPrice) {
+              const notional = Number(pos.collateral) * Number(pos.leverage);
+              let pnl = 0;
+              if (pos.direction === 'LONG') {
+                 pnl = ((currentPrice - Number(pos.entry_price)) / Number(pos.entry_price)) * notional;
+              } else {
+                 pnl = ((Number(pos.entry_price) - currentPrice) / Number(pos.entry_price)) * notional;
+              }
+              let equity = Number(pos.collateral) + pnl;
+              leverageValue += Math.max(0, equity);
             } else {
-               pnl = ((Number(pos.entry_price) - currentPrice) / Number(pos.entry_price)) * notional;
+              leverageValue += Number(pos.collateral);
             }
-            let equity = Number(pos.collateral) + pnl;
-            leverageValue += Math.max(0, equity);
-          } else {
-            leverageValue += Number(pos.collateral);
-          }
-        });
-      }
-      
-      const currentNetWorth = Number(p.balance || 0) + cryptoValue + leverageValue;
-      const geschenkt = Number(p.bonus_received || 0);
-      const START_KAPITAL = 10000;
-      
-      let diffEuro = 0;
-      let startBasis = START_KAPITAL;
+          });
+        }
+        
+        const currentNetWorth = Number(p.balance || 0) + cryptoValue + leverageValue;
+        // v0.3.2: bonus_received enthält jetzt auch Miete + Story Bonus
+        const geschenkt = Number(p.bonus_received || 0);
+        const START_KAPITAL = 10000;
+        
+        let diffEuro = 0;
+        let startBasis = START_KAPITAL;
 
-      if (filter.includes('season')) {
-        const seasonStart = Number(p.season_start_worth);
-        startBasis = (seasonStart && seasonStart > 0) ? seasonStart : START_KAPITAL;
-        diffEuro = currentNetWorth - geschenkt - startBasis;
-      } else {
-        const dayStart = Number(p.day_start_worth);
-        startBasis = (dayStart && dayStart > 0) ? dayStart : currentNetWorth;
-        diffEuro = currentNetWorth - dayStart; 
-      }
+        if (filter.includes('season')) {
+          const seasonStart = Number(p.season_start_worth);
+          startBasis = (seasonStart && seasonStart > 0) ? seasonStart : START_KAPITAL;
+          diffEuro = currentNetWorth - geschenkt - startBasis;
+        } else {
+          const dayStart = Number(p.day_start_worth);
+          startBasis = (dayStart && dayStart > 0) ? dayStart : currentNetWorth;
+          diffEuro = currentNetWorth - dayStart; 
+        }
 
-      const diffPercent = startBasis > 0 ? (diffEuro / startBasis) * 100 : 0;
+        const diffPercent = startBasis > 0 ? (diffEuro / startBasis) * 100 : 0;
 
-      return {
-        id: p.id,
-        telegram_id: p.telegram_id,
-        username: p.username,
-        first_name: p.first_name,
-        avatar_url: p.avatar_url,
-        is_pro: p.is_pro || p.is_admin,
-        pro_until: p.pro_until,
-        total_volume: p.total_volume,
-        bonus_received: geschenkt,
-        net_worth: parseFloat(currentNetWorth.toFixed(2)),
-        performance_euro: parseFloat(diffEuro.toFixed(2)),
-        performance_percent: parseFloat(diffPercent.toFixed(2))
-      };
-    });
+        return {
+          id: p.id,
+          telegram_id: p.telegram_id,
+          username: p.username,
+          first_name: p.first_name,
+          avatar_url: p.avatar_url,
+          is_pro: p.is_pro || p.is_admin,
+          pro_until: p.pro_until,
+          total_volume: p.total_volume,
+          bonus_received: geschenkt,
+          net_worth: parseFloat(currentNetWorth.toFixed(2)),
+          performance_euro: parseFloat(diffEuro.toFixed(2)),
+          performance_percent: parseFloat(diffPercent.toFixed(2))
+        };
+      });
 
     if (filter.startsWith('loss')) {
       leaders.sort((a, b) => a.performance_euro - b.performance_euro);
