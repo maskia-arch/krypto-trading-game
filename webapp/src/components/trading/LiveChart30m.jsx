@@ -23,14 +23,31 @@ const CustomTooltip = ({ active, payload, color }) => {
   );
 };
 
-// Custom Dot: Lässt den letzten Punkt des Graphen pulsieren
+// Custom Dot: Zuverlässiger SVG-Puls ohne CSS-Klassen
 const PulsatingDot = (props) => {
   const { cx, cy, index, dataLength, color } = props;
+  
   if (index === dataLength - 1) {
     return (
       <g>
-        <circle cx={cx} cy={cy} r={8} fill={color} className="animate-ping" opacity={0.4} />
-        <circle cx={cx} cy={cy} r={3} fill="#fff" stroke={color} strokeWidth={1.5} />
+        {/* Pulsierender Hintergrund-Kreis via SVG-Animation */}
+        <circle cx={cx} cy={cy} r="3" fill={color} opacity="0.4">
+          <animate 
+            attributeName="r" 
+            values="3; 10; 3" 
+            dur="2s" 
+            repeatCount="indefinite" 
+          />
+          <animate 
+            attributeName="opacity" 
+            values="0.6; 0; 0.6" 
+            dur="2s" 
+            repeatCount="indefinite" 
+          />
+        </circle>
+        
+        {/* Fester innerer Punkt */}
+        <circle cx={cx} cy={cy} r="2.5" fill="#fff" stroke={color} strokeWidth="1.5" />
       </g>
     );
   }

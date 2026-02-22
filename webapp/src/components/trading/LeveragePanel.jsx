@@ -93,7 +93,6 @@ export default function LeveragePanel({ hideCoinSelector = false }) {
   return (
     <div className="space-y-4 tab-enter">
       
-      {/* Coin Selector - nur anzeigen wenn nicht extern gesteuert */}
       {!hideCoinSelector && (
         <div className="flex gap-2">
           {Object.entries(COINS).map(([sym, info]) => {

@@ -8,8 +8,8 @@ const COINS = {
 };
 const FEE = 0.005;
 
-export default function TradeView() {
-  const { profile, assets, prices, buyCrypto, sellCrypto, showToast, chartSymbol, setChartSymbol } = useStore();
+export default function TradeView({ hideCoinSelector = false }) {
+  const { profile, assets, prices, buyCrypto, sellCrypto, showToast, chartSymbol } = useStore();
   
   const coin = chartSymbol; 
   const [action, setAction] = useState('buy');
@@ -72,31 +72,31 @@ export default function TradeView() {
   return (
     <div className="space-y-4 pb-4 tab-enter">
       
-      {/* Coin Selector (Identisch zum Hebel-Bereich) */}
-      <div className="flex gap-2">
-        {Object.entries(COINS).map(([sym, info]) => {
-          const active = coin === sym;
-          const p = prices[sym] || 0;
-          return (
-            <button key={sym} onClick={() => setChartSymbol(sym)}
-              className="flex-1 rounded-2xl p-3 text-center transition-all relative overflow-hidden bg-black/40 border border-white/5 active:scale-95"
-              style={{
-                borderColor: active ? info.border : 'rgba(255,255,255,0.05)',
-                background: active ? info.bg : 'rgba(0,0,0,0.4)',
-              }}>
-              <div className="text-xl leading-none mb-1.5">{info.emoji}</div>
-              <div className={`text-[10px] font-black tracking-widest ${active ? 'text-white' : 'text-white/40'}`}>
-                {sym}
-              </div>
-              <div className="text-[9px] font-mono mt-1 text-white/20">
-                {p.toLocaleString('de-DE', { maximumFractionDigits: 0 })}€
-              </div>
-            </button>
-          );
-        })}
-      </div>
+      {!hideCoinSelector && (
+        <div className="flex gap-2">
+          {Object.entries(COINS).map(([sym, info]) => {
+            const active = coin === sym;
+            const p = prices[sym] || 0;
+            return (
+              <button key={sym} onClick={() => useStore.getState().setChartSymbol(sym)}
+                className="flex-1 rounded-2xl p-3 text-center transition-all relative overflow-hidden bg-black/40 border border-white/5 active:scale-95"
+                style={{
+                  borderColor: active ? info.border : 'rgba(255,255,255,0.05)',
+                  background: active ? info.bg : 'rgba(0,0,0,0.4)',
+                }}>
+                <div className="text-xl leading-none mb-1.5">{info.emoji}</div>
+                <div className={`text-[10px] font-black tracking-widest ${active ? 'text-white' : 'text-white/40'}`}>
+                  {sym}
+                </div>
+                <div className="text-[9px] font-mono mt-1 text-white/20">
+                  {p.toLocaleString('de-DE', { maximumFractionDigits: 0 })}€
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
-      {/* Buy/Sell Toggle */}
       <div className="flex bg-black/40 p-1.5 rounded-2xl border border-white/5 shadow-inner">
         <button onClick={() => setAction('buy')}
           className={`flex-1 py-3 rounded-xl text-[11px] font-black uppercase tracking-[0.1em] transition-all duration-300 ${
@@ -116,7 +116,6 @@ export default function TradeView() {
         </button>
       </div>
 
-      {/* Trading Panel */}
       <div className="card p-4 border border-white/5 bg-gradient-to-br from-[#0a0c14] to-black/60 relative overflow-hidden shadow-xl">
         <div className={`absolute -top-20 -left-20 w-48 h-48 blur-[80px] rounded-full pointer-events-none opacity-20 transition-colors duration-700 ${
           action === 'buy' ? 'bg-neon-green' : 'bg-neon-red'
@@ -229,7 +228,6 @@ export default function TradeView() {
         )}
       </div>
 
-      {/* Portfolio Info */}
       {holding > 0 && (
         <div className="card p-3 border border-white/5 bg-black/40 flex items-center justify-between">
           <div className="flex items-center gap-3">
