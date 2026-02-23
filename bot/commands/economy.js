@@ -2,7 +2,22 @@ const { InlineKeyboard } = require('grammy');
 const { db } = require('../core/database');
 const { esc } = require('../core/utils');
 const { WEBAPP_URL } = require('../core/config');
-const { getVersion } = require('./start');
+// v0.3.21: Safe import mit Fallback
+let getVersion;
+try {
+  getVersion = require('./start').getVersion;
+} catch(e) {}
+if (typeof getVersion !== 'function') {
+  const fs = require('fs');
+  const path = require('path');
+  getVersion = () => {
+    try {
+      const vp = path.join(__dirname, '../../version.txt');
+      if (fs.existsSync(vp)) return fs.readFileSync(vp, 'utf8').trim();
+    } catch(e) {}
+    return '0.3.21';
+  };
+}
 
 async function handleLeaderboard(ctx) {
   try {
@@ -58,8 +73,6 @@ async function handleLeaderboard(ctx) {
         text += `\n━━ 👤 <b>Deine Platzierung</b> ━━\n\n`;
         text += `<b>${myRank}.</b> ${me.is_pro ? '⭐ ' : ''}${esc(me.username || me.first_name)} (Du)\n`;
         text += ` └ Profit: <b>${me.performance_euro >= 0 ? '+' : ''}${myPerfEuro}€</b> (${myPerfPercent}%)\n`;
-      } else if (myRank === 0) {
-        text += `\n<i>💡 Du bist noch nicht in der Rangliste. Starte deinen ersten Trade!</i>\n`;
       }
     }
 
@@ -103,16 +116,19 @@ async function handlePro(ctx) {
     if (!profile) return ctx.reply('Starte zuerst mit /start');
     
     const version = getVersion();
+    // v0.3.21: Admin hat IMMER vollen Pro-Zugang
     const isPro = profile.is_admin || (profile.is_pro && new Date(profile.pro_until) > new Date());
     
-    // v0.3.2: Admin hat immer vollen Zugriff
     if (profile.is_admin) {
-      return ctx.reply(`👑 <b>Admin-Status aktiv!</b>\n\nDu hast unbegrenzten Zugriff auf alle v${version} Features.\n\n` +
-      `🎰 Zocker-Modus: x20 & x50 Hebel\n` +
-      `🛡️ Stop-Loss & Take-Profit\n` +
-      `📈 Trailing-Stops (Auto-Profit)\n` +
-      `🎯 Limit-Orders\n` +
-      `⚡ 3 parallele Trades`, { parse_mode: 'HTML' });
+      return ctx.reply(
+        `👑 <b>Admin-Status aktiv!</b>\n\n` +
+        `Du hast unbegrenzten Zugriff auf alle v${version} Features:\n\n` +
+        `🎰 Zocker-Modus: x20 & x50 Hebel — dauerhaft\n` +
+        `⚡ 3 Positionen gleichzeitig offen\n` +
+        `🛡️ Stop-Loss & Take-Profit\n` +
+        `📈 Trailing-Stops (Auto-Profit)\n` +
+        `🎯 Limit-Orders (Auto-Dip-Kauf)\n` +
+        `🎨 Profilhintergrund & Namensänderung`, { parse_mode: 'HTML' });
     }
     
     if (isPro) {
@@ -121,15 +137,12 @@ async function handlePro(ctx) {
         `✅ <b>Pro-Mitgliedschaft aktiv!</b>\n\n` +
         `Vorteile freigeschaltet bis zum <b>${until}</b>:\n\n` +
         `🎰 Zocker-Modus: x20 & x50 Hebel — dauerhaft\n` +
-        `⚡ Bis zu 3 Positionen gleichzeitig\n` +
+        `⚡ 3 Positionen gleichzeitig\n` +
         `🛡️ Stop-Loss, Take-Profit & Trailing-Stop\n` +
         `🎯 Limit-Orders\n` +
-        `🎨 Profilhintergrund & Namensänderung`,
-        { parse_mode: 'HTML' }
-      );
+        `🎨 Profilhintergrund & Namensänderung alle 30 Tage`, { parse_mode: 'HTML' });
     }
     
-    // v0.3.2: Free User — alle Pro-Vorteile zeigen inkl. Zocker-Modus
     const kb = new InlineKeyboard()
       .text('💎 Pro Bestellen', 'buy_pro_menu')
       .row()
@@ -139,14 +152,15 @@ async function handlePro(ctx) {
       `⭐ <b>UPGRADE AUF VALUE-PRO (v${version})</b>\n\n` +
       `Werde zum Profi-Trader und schalte exklusive Werkzeuge frei:\n\n` +
       `🎰 <b>Zocker-Modus:</b> x20 & x50 Hebel — dauerhaft statt nur Montag!\n` +
-      `⚡ <b>Hebel-Boost:</b> Trade mit bis zu 3 Positionen gleichzeitig\n` +
+      `⚡ <b>Kapazität:</b> Bis zu 3 Positionen gleichzeitig\n` +
       `🛡️ <b>Automation:</b> Stop-Loss, Take-Profit & Trailing-Stopp\n` +
       `🎯 <b>Limit-Orders:</b> Kaufe automatisch im Dip\n` +
       `🎨 <b>Kosmetik:</b> Profilhintergrund & Namensänderung alle 30 Tage\n\n` +
-      `<i>💡 Free User: x20 & x50 nur am Hebel-Montag!</i>`,
+      `<i>Sichere dir den entscheidenden Vorteil in der Rangliste!</i>`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
   } catch (err) {
+    console.error('handlePro Error:', err);
     ctx.reply('❌ Fehler beim Laden der Pro-Infos.');
   }
 }

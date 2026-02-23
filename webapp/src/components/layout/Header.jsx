@@ -36,10 +36,10 @@ export default function Header() {
 
   return (
     <div className="flex flex-col w-full select-none">
-      {/* v0.3.2: Event Banner — Zocker-Modus x20 & x50 */}
+      {/* Event Banner */}
       {isMonday && (
-        <div className="bg-gradient-to-r from-neon-red/20 via-neon-purple/30 to-neon-blue/20 py-1.5 border-b border-white/5 animate-pulse-slow shrink-0">
-          <p className="text-[9px] text-center font-black tracking-[0.12em] text-white uppercase italic">
+        <div className="bg-gradient-to-r from-red-600/30 via-orange-500/30 to-red-600/30 py-1.5 border-b border-white/5 animate-pulse-slow shrink-0">
+          <p className="text-[9px] text-center font-black tracking-[0.15em] text-white uppercase italic">
             🎰 Zocker-Montag: x20 & x50 Hebel für ALLE — noch {timeLeft} 🎰
           </p>
         </div>

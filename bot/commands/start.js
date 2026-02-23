@@ -160,3 +160,5 @@ startCommand.sendWelcomeMessage = async (ctx, profile) => {
 };
 
 module.exports = startCommand;
+// v0.3.21 FIX: getVersion als Named Export für economy.js und handler.js
+module.exports.getVersion = getVersion;

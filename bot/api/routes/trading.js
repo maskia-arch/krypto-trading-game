@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../../core/database');
-const { COINS, FEE_RATE } = require('../../core/config');
+const { COINS, FEE_RATE, TRADING_LIMITS } = require('../../core/config');
 
 // 1. Marktdaten (Öffentlich, aber via Middleware gesichert)
 router.get('/prices', async (req, res) => {
@@ -22,15 +22,34 @@ router.get('/leverage/positions', async (req, res) => {
     const positions = await db.getOpenLeveragedPositions(profile.id);
     const isMonday = new Date().getDay() === 1;
     const isPro = req.permissions.isPro;
+    const isAdmin = req.permissions.isAdmin;
+    const effectivelyPro = isPro || isAdmin;
+
+    // v0.3.21: Zocker-Modus Policy
+    let limits;
+    if (effectivelyPro) {
+      limits = TRADING_LIMITS.PRO;
+    } else if (isMonday) {
+      limits = TRADING_LIMITS.FREE_MONDAY;
+    } else {
+      limits = TRADING_LIMITS.FREE;
+    }
 
     res.json({ 
       positions,
       policy: {
-        max_positions: isPro ? 3 : 1,
-        margin_limit_factor: isPro ? 0.9 : 0.8,
-        max_leverage: (isMonday || isPro) ? 10 : 5,
+        max_positions: limits.MAX_POSITIONS,
+        margin_limit_factor: limits.MARGIN_LIMIT_FACTOR,
+        max_leverage: limits.MAX_LEVERAGE,
+        maxLeverage: limits.MAX_LEVERAGE,
+        maxPositions: limits.MAX_POSITIONS,
+        standardLeverages: limits.STANDARD_LEVERAGES,
+        zockerLeverages: limits.ZOCKER_LEVERAGES,
+        zockerEnabled: limits.ZOCKER_ENABLED,
         is_monday: isMonday,
-        is_pro: isPro
+        is_pro: effectivelyPro,
+        isPro: effectivelyPro,
+        isAdmin: !!isAdmin
       }
     });
   } catch (err) {
@@ -47,7 +66,7 @@ router.post('/leverage/open', async (req, res) => {
     const price = await db.getCurrentPrice(symbol);
     if (!price) return res.status(500).json({ error: 'Kurs nicht verfügbar' });
 
-    const isPro = req.permissions.isPro;
+    const isPro = req.permissions.isPro || req.permissions.isAdmin;
     
     const options = {
       stop_loss: isPro ? stop_loss : null,

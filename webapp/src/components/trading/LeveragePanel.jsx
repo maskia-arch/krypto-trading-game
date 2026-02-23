@@ -2,6 +2,12 @@ import React, { useState, useEffect } from 'react';
 import useStore from '../../lib/store';
 import TradeInfoModal from '../modals/TradeInfoModal';
 
+const COINS = {
+  BTC: { name: 'Bitcoin',  emoji: '₿', color: '#f7931a', bg: 'rgba(247,147,26,0.1)', border: 'rgba(247,147,26,0.2)' },
+  ETH: { name: 'Ethereum', emoji: 'Ξ', color: '#627eea', bg: 'rgba(98,126,234,0.1)',  border: 'rgba(98,126,234,0.2)' },
+  LTC: { name: 'Litecoin', emoji: 'Ł', color: '#bfbbbb', bg: 'rgba(191,187,187,0.1)', border: 'rgba(191,187,187,0.2)' },
+};
+
 const InfoBtn = ({ type, setInfoType }) => (
   <button 
     onClick={(e) => { e.preventDefault(); e.stopPropagation(); setInfoType(type); }}
@@ -13,7 +19,7 @@ const InfoBtn = ({ type, setInfoType }) => (
 
 export default function LeveragePanel({ hideCoinSelector = false }) {
   const { 
-    profile, chartSymbol, prices, openLeveragePosition, 
+    profile, chartSymbol, setChartSymbol, prices, openLeveragePosition, 
     showToast, leveragePolicy, leveragePositions, getAvailableMargin,
     fetchLeveragePositions, isPremiumUser
   } = useStore();
@@ -28,7 +34,6 @@ export default function LeveragePanel({ hideCoinSelector = false }) {
   const [limitPrice, setLimitPrice] = useState('');
   const [trailingStop, setTrailingStop] = useState(false);
   const [infoType, setInfoType] = useState(null);
-  const [showProInfo, setShowProInfo] = useState(false);
 
   const isPremium = isPremiumUser();
 
@@ -45,11 +50,14 @@ export default function LeveragePanel({ hideCoinSelector = false }) {
   }
 
   const coin = chartSymbol || 'BTC';
-  const maxLev = leveragePolicy?.maxLeverage || leveragePolicy?.max_leverage || 10;
+  const maxLev = leveragePolicy?.maxLeverage || leveragePolicy?.max_leverage || 5;
   const maxPos = isPremium ? 3 : (leveragePolicy?.maxPositions || leveragePolicy?.max_positions || 1);
   const currentOpen = leveragePositions?.length || 0;
-  const isMonday = leveragePolicy?.isMonday || leveragePolicy?.is_monday || false;
-  const zockerEnabled = leveragePolicy?.zockerEnabled || (leveragePolicy?.zockerLeverages?.length > 0) || false;
+  
+  // v0.3.21: Zocker-Modus Daten aus Policy
+  const standardLeverages = leveragePolicy?.standardLeverages || [2, 3, 5, 10];
+  const zockerLeverages = leveragePolicy?.zockerLeverages || [];
+  const zockerEnabled = leveragePolicy?.zockerEnabled || false;
   
   const availableMargin = Number(getAvailableMargin()) || 0;
 
@@ -75,8 +83,7 @@ export default function LeveragePanel({ hideCoinSelector = false }) {
       };
 
       await openLeveragePosition(coin, dir, collatNum, leverage, options);
-      const isZocker = leverage >= 20;
-      showToast(`${isZocker ? '🎰' : '⚡'} ${leverage}x ${dir} auf ${coin} geöffnet!`);
+      showToast(`⚡ ${leverage}x ${dir} auf ${coin} geöffnet!`);
       setCollateral('');
       setStopLoss('');
       setTakeProfit('');
@@ -90,44 +97,20 @@ export default function LeveragePanel({ hideCoinSelector = false }) {
 
   return (
     <div className="space-y-4 tab-enter">
-
-      {/* Pro Info Modal für Free User */}
-      {showProInfo && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center px-4">
-          <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={() => setShowProInfo(false)} />
-          <div className="relative w-full max-w-[320px] card border border-neon-gold/20 bg-gradient-to-b from-[#1a1c26] to-black p-6 shadow-2xl tab-enter">
-            <div className="flex flex-col items-center text-center">
-              <div className="text-4xl mb-3">⭐</div>
-              <h3 className="text-lg font-black uppercase tracking-widest mb-4 text-neon-gold">Value-Pro</h3>
-              
-              <div className="w-full space-y-2.5 text-left mb-5">
-                {[
-                  { icon: '🎰', title: 'Zocker-Modus', desc: 'x20 & x50 Hebel — dauerhaft!' },
-                  { icon: '⚡', title: '3 Positionen', desc: 'Gleichzeitig offen halten' },
-                  { icon: '🛡️', title: 'Stop-Loss & Take-Profit', desc: 'Automatischer Verlust-Schutz' },
-                  { icon: '📈', title: 'Trailing-Stop', desc: 'Gewinne automatisch absichern' },
-                  { icon: '🎯', title: 'Limit-Orders', desc: 'Automatisch im Dip kaufen' },
-                  { icon: '🎨', title: 'Profilhintergrund', desc: 'Individuelles Design' },
-                  { icon: '✏️', title: 'Namensänderung', desc: 'Alle 30 Tage möglich' }
-                ].map((item, i) => (
-                  <div key={i} className="flex items-center gap-3 p-2 rounded-lg bg-white/5 border border-white/5">
-                    <span className="text-lg">{item.icon}</span>
-                    <div>
-                      <p className="text-[10px] font-black text-white uppercase tracking-wider">{item.title}</p>
-                      <p className="text-[9px] text-white/40">{item.desc}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <button
-                onClick={() => setShowProInfo(false)}
-                className="w-full py-3 rounded-xl bg-neon-gold/20 hover:bg-neon-gold/30 text-neon-gold text-[11px] font-black uppercase tracking-widest transition-all active:scale-95 border border-neon-gold/30"
-              >
-                Verstanden
+      
+      {!hideCoinSelector && (
+        <div className="flex gap-2">
+          {Object.entries(COINS).map(([sym, info]) => {
+            const active = coin === sym;
+            return (
+              <button key={sym} onClick={() => setChartSymbol(sym)}
+                className="flex-1 rounded-2xl p-3 text-center transition-all bg-black/40 border border-white/5"
+                style={{ borderColor: active ? info.border : 'rgba(255,255,255,0.05)', background: active ? info.bg : 'rgba(0,0,0,0.4)' }}>
+                <div className="text-xl mb-1">{info.emoji}</div>
+                <div className={`text-[10px] font-black tracking-widest ${active ? 'text-white' : 'text-white/40'}`}>{sym}</div>
               </button>
-            </div>
-          </div>
+            );
+          })}
         </div>
       )}
 
@@ -165,81 +148,41 @@ export default function LeveragePanel({ hideCoinSelector = false }) {
           </div>
         </div>
 
-        {/* Standard Hebel */}
         <div>
           <p className="text-[10px] uppercase tracking-wider font-black text-[var(--text-dim)] mb-2 px-1">Hebel</p>
           <div className="flex gap-1.5">
-            {[2, 3, 5, 10].map(mult => (
-              <button key={mult} onClick={() => setLeverage(mult)}
-                className={`flex-1 py-2.5 rounded-lg text-xs font-black border transition-all ${
-                  leverage === mult 
-                    ? 'bg-neon-blue/20 text-neon-blue border-neon-blue/40' 
-                    : 'bg-black/40 text-[var(--text-dim)] border-white/5 hover:text-white/60'
-                }`}>
-                {mult}x
+            {standardLeverages.map(mult => (
+              <button key={mult} disabled={mult > maxLev} onClick={() => setLeverage(mult)}
+                className={`flex-1 py-2.5 rounded-lg text-xs font-black border transition-all ${leverage === mult ? 'bg-neon-blue/20 text-neon-blue border-neon-blue/40' : mult > maxLev ? 'bg-black/40 text-white/20 border-white/5 opacity-30 cursor-not-allowed' : 'bg-black/40 text-[var(--text-dim)] border-white/5 hover:bg-white/5'}`}>
+                {mult}x {mult > maxLev && '🔒'}
               </button>
             ))}
           </div>
-        </div>
-
-        {/* v0.3.2: Zocker-Modus (x20, x50) */}
-        <div className="border-t border-white/5 pt-3">
-          <div className="flex items-center justify-between mb-2 px-1">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs">🎰</span>
-              <p className="text-[10px] uppercase tracking-wider font-black text-neon-red">Zocker-Modus</p>
+          {/* v0.3.21: Zocker-Modus Buttons */}
+          {zockerEnabled && zockerLeverages.length > 0 && (
+            <div className="mt-2">
+              <p className="text-[9px] uppercase tracking-widest font-black text-orange-400/60 mb-1.5 px-1 flex items-center gap-1">
+                <span>🎰</span> Zocker-Modus
+              </p>
+              <div className="flex gap-1.5">
+                {zockerLeverages.map(mult => (
+                  <button key={mult} disabled={mult > maxLev} onClick={() => setLeverage(mult)}
+                    className={`flex-1 py-2.5 rounded-lg text-xs font-black border transition-all ${leverage === mult ? 'bg-gradient-to-b from-orange-500/30 to-red-600/30 text-orange-300 border-orange-500/40 shadow-lg shadow-orange-500/10' : mult > maxLev ? 'bg-black/40 text-white/20 border-white/5 opacity-30 cursor-not-allowed' : 'bg-black/40 text-orange-400/50 border-orange-500/10 hover:bg-orange-500/10'}`}>
+                    x{mult} {mult > maxLev ? '🔒' : '🔥'}
+                  </button>
+                ))}
+              </div>
             </div>
-            {!isPremium && !isMonday && (
-              <button 
-                onClick={() => setShowProInfo(true)}
-                className="text-[9px] font-black uppercase tracking-wider text-neon-gold bg-neon-gold/10 px-2 py-0.5 rounded border border-neon-gold/20"
-              >
-                Pro Info
-              </button>
-            )}
-          </div>
-          
-          {zockerEnabled ? (
-            <div className="flex gap-1.5">
-              {[20, 50].map(mult => (
-                <button key={mult} onClick={() => setLeverage(mult)}
-                  className={`flex-1 py-2.5 rounded-lg text-xs font-black border transition-all ${
-                    leverage === mult 
-                      ? 'bg-neon-red/20 text-neon-red border-neon-red/40 shadow-[0_0_10px_rgba(244,63,94,0.2)]' 
-                      : 'bg-black/40 text-neon-red/60 border-neon-red/10 hover:bg-neon-red/10'
-                  }`}>
-                  {mult}x {leverage === mult && '🔥'}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <button 
-              onClick={() => setShowProInfo(true)}
-              className="w-full py-2.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-white/5 text-white/20 border border-white/5 flex items-center justify-center gap-2"
-            >
-              🔒 x20 & x50 nur für Pro {isMonday ? '' : '(oder Montag)'}
-            </button>
           )}
-
-          {!isPremium && isMonday && zockerEnabled && (
-            <p className="text-[8px] text-neon-red/60 text-center mt-1.5 font-bold italic">
-              ⚠️ Zocker-Positionen werden um Mitternacht automatisch abgerechnet
+          {!zockerEnabled && !isPremium && (
+            <p className="text-[8px] text-center text-white/20 mt-1.5 italic">
+              🎰 Zocker-Modus (x20/x50) — nur Montags oder mit Pro
             </p>
           )}
         </div>
 
-        {/* Pro Features: SL/TP */}
         <div className="border-t border-white/5 pt-2">
-          <button 
-            onClick={() => {
-              if (isPremium) {
-                setShowProSettings(!showProSettings);
-              } else {
-                setShowProInfo(true);
-              }
-            }} 
-            className={`w-full flex items-center justify-between p-2 rounded-lg ${isPremium ? 'hover:bg-white/5 text-white' : 'text-white/40'}`}
-          >
+          <button onClick={() => isPremium && setShowProSettings(!showProSettings)} className={`w-full flex items-center justify-between p-2 rounded-lg ${isPremium ? 'hover:bg-white/5 text-white' : 'opacity-50 text-white/40 cursor-not-allowed'}`}>
             <div className="flex items-center gap-2">
               <span className="text-xs">🎯</span>
               <span className="text-[10px] font-black uppercase tracking-widest">Profit & Schutz {!isPremium && '🔒'}</span>
@@ -260,18 +203,8 @@ export default function LeveragePanel({ hideCoinSelector = false }) {
           )}
         </div>
 
-        {/* Pro Features: Advanced */}
         <div className="border-t border-white/5 pt-2">
-          <button 
-            onClick={() => {
-              if (isPremium) {
-                setShowAdvanced(!showAdvanced);
-              } else {
-                setShowProInfo(true);
-              }
-            }}
-            className={`w-full flex items-center justify-between p-2 rounded-lg ${isPremium ? 'hover:bg-white/5 text-white' : 'text-white/40'}`}
-          >
+          <button onClick={() => isPremium && setShowAdvanced(!showAdvanced)} className={`w-full flex items-center justify-between p-2 rounded-lg ${isPremium ? 'hover:bg-white/5 text-white' : 'opacity-50 text-white/40 cursor-not-allowed'}`}>
             <div className="flex items-center gap-2">
               <span className="text-xs">⚙️</span>
               <span className="text-[10px] font-black uppercase tracking-widest">Erweiterte Optionen {!isPremium && '🔒'}</span>
@@ -294,23 +227,14 @@ export default function LeveragePanel({ hideCoinSelector = false }) {
           )}
         </div>
 
-        {/* Zocker Warnung */}
-        {leverage >= 20 && (
-          <div className="bg-neon-red/10 border border-neon-red/20 rounded-xl p-3 text-center">
-            <p className="text-[10px] font-black text-neon-red uppercase tracking-widest">
-              ⚠️ {leverage}x Zocker-Modus — Hohes Liquidierungsrisiko!
-            </p>
-          </div>
-        )}
-
         <div className="flex gap-2 border-t border-white/5 pt-4">
           <button onClick={() => handleOpen('LONG')} disabled={!canOpen || !hasMargin || loadingDir !== null}
             className={`flex-1 py-4 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all ${canOpen && hasMargin ? 'bg-neon-green/10 text-neon-green border-neon-green/20 hover:bg-neon-green/20 shadow-lg shadow-neon-green/5' : 'bg-white/5 text-white/10 grayscale cursor-not-allowed'}`}>
-            {loadingDir === 'LONG' ? 'Sende...' : `LONG ${leverage}x`}
+            {loadingDir === 'LONG' ? 'Sende...' : 'LONG'}
           </button>
           <button onClick={() => handleOpen('SHORT')} disabled={!canOpen || !hasMargin || loadingDir !== null}
             className={`flex-1 py-4 rounded-xl text-[11px] font-black uppercase tracking-widest border transition-all ${canOpen && hasMargin ? 'bg-neon-red/10 text-neon-red border-neon-red/20 hover:bg-neon-red/20 shadow-lg shadow-neon-red/5' : 'bg-white/5 text-white/10 grayscale cursor-not-allowed'}`}>
-            {loadingDir === 'SHORT' ? 'Sende...' : `SHORT ${leverage}x`}
+            {loadingDir === 'SHORT' ? 'Sende...' : 'SHORT'}
           </button>
         </div>
 

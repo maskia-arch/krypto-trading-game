@@ -15,7 +15,7 @@ module.exports = (db) => ({
     return this.getLeveragePositions(profileId);
   },
 
-  // v0.3.2: Alle offenen Positionen (für Scheduler, Liquidation, Auto-Close)
+  // v0.3.21: Alle offenen Positionen ALLER User (für Scheduler: SL/TP/Liquidation/Zocker-Close)
   async getAllOpenLeveragedPositions() {
     const { data, error } = await db.supabase
       .from('leveraged_positions')

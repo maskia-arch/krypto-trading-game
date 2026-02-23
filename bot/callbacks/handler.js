@@ -4,16 +4,31 @@ const handlePortfolio = require('../commands/portfolio');
 const { handleLeaderboard, handlePro } = require('../commands/economy');
 const { esc } = require('../core/utils');
 const { InlineKeyboard } = require('grammy');
-const { WEBAPP_URL, VERSION } = require('../core/config');
-const { getVersion } = require('../commands/start');
+const { WEBAPP_URL } = require('../core/config');
+// v0.3.21: Safe import mit Fallback
+let getVersion;
+try {
+  getVersion = require('../commands/start').getVersion;
+} catch(e) {}
+if (typeof getVersion !== 'function') {
+  const fs = require('fs');
+  const path = require('path');
+  getVersion = () => {
+    try {
+      const vp = path.join(__dirname, '../../version.txt');
+      if (fs.existsSync(vp)) return fs.readFileSync(vp, 'utf8').trim();
+    } catch(e) {}
+    return '0.3.21';
+  };
+}
 
 module.exports = async (ctx) => {
   const data = ctx.callbackQuery.data;
   const adminId = Number(process.env.ADMIN_ID);
 
-  let version = VERSION || '0.3.2';
+  let version = '0.3.21';
   try {
-    if (typeof getVersion === 'function') version = getVersion();
+    version = getVersion();
   } catch (e) {}
 
   // --- BASIS NAVIGATION ---
@@ -35,29 +50,6 @@ module.exports = async (ctx) => {
     }
     
     return handlePro(ctx);
-  }
-
-  // v0.3.2: Pro Info für Free User — zeigt alle Vorteile
-  if (data === 'pro_info') {
-    await ctx.answerCallbackQuery();
-    const kb = new InlineKeyboard()
-      .text('💎 Pro Bestellen', 'buy_pro_menu')
-      .row()
-      .text('🔙 Zurück', 'back_to_start');
-
-    return ctx.editMessageText(
-      `⭐ <b>VALUE-PRO VORTEILE</b>\n\n` +
-      `Schalte als Pro-Mitglied folgende Features frei:\n\n` +
-      `🎰 <b>Zocker-Modus:</b> x20 & x50 Hebel — dauerhaft!\n` +
-      `⚡ <b>Hebel-Boost:</b> Bis zu 3 Positionen gleichzeitig\n` +
-      `🛡️ <b>Stop-Loss & Take-Profit:</b> Automatischer Schutz\n` +
-      `📈 <b>Trailing-Stop:</b> Gewinne automatisch absichern\n` +
-      `🎯 <b>Limit-Orders:</b> Kaufe automatisch im Dip\n` +
-      `🎨 <b>Profilhintergrund:</b> Individuelles Design\n` +
-      `✏️ <b>Namensänderung:</b> Alle 30 Tage möglich\n\n` +
-      `<i>Free User können den Zocker-Modus nur am Hebel-Montag nutzen!</i>`,
-      { parse_mode: 'HTML', reply_markup: kb }
-    );
   }
 
   // --- ZURÜCK ZUM START ---
@@ -123,165 +115,6 @@ module.exports = async (ctx) => {
     );
   }
 
-  // --- ADMIN CALLBACKS ---
-  
-  if (data === 'admin_users') {
-    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
-    await ctx.answerCallbackQuery();
-    try {
-      const { data: users } = await db.supabase
-        .from('profiles')
-        .select('telegram_id, username, first_name, balance, is_pro, is_admin, last_active')
-        .order('balance', { ascending: false })
-        .limit(20);
-
-      let text = `👥 <b>Top 20 User (nach Balance)</b>\n\n`;
-      (users || []).forEach((u, i) => {
-        const badge = u.is_admin ? '👑' : u.is_pro ? '⭐' : '👤';
-        text += `${i+1}. ${badge} ${esc(u.username || u.first_name)} — ${Number(u.balance).toLocaleString('de-DE')}€\n`;
-      });
-
-      const kb = new InlineKeyboard().text('🔙 Zurück', 'admin_back');
-      return ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
-    } catch (e) {
-      return ctx.editMessageText('❌ Fehler beim Laden der User-Liste.');
-    }
-  }
-
-  if (data === 'admin_pool') {
-    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
-    await ctx.answerCallbackQuery();
-    try {
-      const pool = await db.getFeePool();
-      const kb = new InlineKeyboard().text('🔙 Zurück', 'admin_back');
-      return ctx.editMessageText(
-        `💰 <b>Fee Pool Details</b>\n\n` +
-        `Aktueller Pool: <b>${pool.toLocaleString('de-DE', {minimumFractionDigits: 2})}€</b>\n\n` +
-        `Dieser Betrag wird am Season-Ende an die Top-Spieler verteilt.`,
-        { parse_mode: 'HTML', reply_markup: kb }
-      );
-    } catch (e) {
-      return ctx.editMessageText('❌ Fehler beim Laden des Fee Pools.');
-    }
-  }
-
-  if (data === 'admin_deletions') {
-    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
-    await ctx.answerCallbackQuery();
-    try {
-      const { data: requests } = await db.supabase
-        .from('deletion_requests')
-        .select('*, profiles(telegram_id, username, first_name)')
-        .eq('status', 'pending');
-
-      if (!requests || requests.length === 0) {
-        const kb = new InlineKeyboard().text('🔙 Zurück', 'admin_back');
-        return ctx.editMessageText('✅ Keine offenen Löschanträge.', { reply_markup: kb });
-      }
-
-      let text = `⚠️ <b>Offene Löschanträge (${requests.length})</b>\n\n`;
-      requests.forEach((r, i) => {
-        const p = r.profiles;
-        text += `${i+1}. ${esc(p?.username || p?.first_name || '?')} (ID: ${p?.telegram_id})\n`;
-      });
-
-      const kb = new InlineKeyboard().text('🔙 Zurück', 'admin_back');
-      return ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
-    } catch (e) {
-      return ctx.editMessageText('❌ Fehler beim Laden der Löschanträge.');
-    }
-  }
-
-  if (data === 'admin_prices') {
-    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
-    await ctx.answerCallbackQuery();
-    try {
-      const prices = await db.getAllPrices();
-      let text = `📊 <b>Aktuelle Preise</b>\n\n`;
-      prices.forEach(p => {
-        text += `${p.symbol}: <b>${Number(p.price_eur).toLocaleString('de-DE')}€</b>\n`;
-      });
-      text += `\n🕐 ${new Date().toLocaleString('de-DE')}`;
-      const kb = new InlineKeyboard().text('🔙 Zurück', 'admin_back');
-      return ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
-    } catch (e) {
-      return ctx.editMessageText('❌ Fehler beim Laden der Preise.');
-    }
-  }
-
-  if (data === 'admin_fetch') {
-    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
-    try {
-      await priceService.fetchAndStorePrices();
-      await ctx.answerCallbackQuery('✅ Preise aktualisiert!');
-    } catch (e) {
-      await ctx.answerCallbackQuery('❌ Fetch fehlgeschlagen');
-    }
-    return;
-  }
-
-  if (data === 'admin_new_season') {
-    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
-    await ctx.answerCallbackQuery();
-    const kb = new InlineKeyboard()
-      .text('✅ Neue Season starten', 'admin_confirm_new_season')
-      .row()
-      .text('🔙 Abbrechen', 'admin_back');
-    return ctx.editMessageText(
-      `🏆 <b>Neue Season starten?</b>\n\nDies setzt die aktuelle Season zurück und startet eine neue.`,
-      { parse_mode: 'HTML', reply_markup: kb }
-    );
-  }
-
-  if (data === 'admin_end_season') {
-    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
-    await ctx.answerCallbackQuery();
-    const kb = new InlineKeyboard()
-      .text('🎁 Season auswerten', 'admin_confirm_end_season')
-      .row()
-      .text('🔙 Abbrechen', 'admin_back');
-    return ctx.editMessageText(
-      `🎁 <b>Season auswerten?</b>\n\nDies berechnet die Gewinner und verteilt den Fee Pool.`,
-      { parse_mode: 'HTML', reply_markup: kb }
-    );
-  }
-
-  if (data === 'admin_back') {
-    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
-    await ctx.answerCallbackQuery();
-    try {
-      const stats = await db.getStats();
-      const pool = await db.getFeePool();
-      const { count: deleteRequests } = await db.supabase
-        .from('deletion_requests')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'pending');
-
-      const kb = new InlineKeyboard()
-        .text('👥 Alle User', 'admin_users')
-        .text('💰 Fee Pool', 'admin_pool')
-        .row()
-        .text(`⚠️ Löschanträge (${deleteRequests || 0})`, 'admin_deletions')
-        .row()
-        .text('🏆 Season starten', 'admin_new_season')
-        .text('🎁 Season auswerten', 'admin_end_season')
-        .row()
-        .text('📊 Preis-Check', 'admin_prices')
-        .text('🔄 Preise fetchen', 'admin_fetch');
-
-      return ctx.editMessageText(
-        `🔧 <b>ADMIN DASHBOARD</b> (v${version})\n\n` +
-        `👥 User: ${stats.userCount}\n` +
-        `📝 Transaktionen: ${stats.txCount}\n` +
-        `💰 Fee Pool: ${pool.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€\n\n` +
-        `Letzte Aktualisierung: ${new Date().toLocaleString('de-DE')}`,
-        { parse_mode: 'HTML', reply_markup: kb }
-      );
-    } catch (e) {
-      return ctx.editMessageText('❌ Fehler beim Laden des Dashboards.');
-    }
-  }
-
   // --- ADMIN: DELETION ---
   if (data.startsWith('confirm_delete:')) {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
@@ -313,7 +146,7 @@ module.exports = async (ctx) => {
   }
 
   // --- PRO BESTELLPROZESS ---
-  if (data === 'buy_pro_menu') {
+  if (data === 'buy_pro_menu' || data === 'buy_pro') {
     await ctx.answerCallbackQuery();
     const kb = new InlineKeyboard()
       .text('1 Monat - 5€', 'order_pro:1:5').row()
@@ -377,34 +210,28 @@ module.exports = async (ctx) => {
   // --- ADMIN ACTIONS (Pro) ---
   if (data.startsWith('approve_pro_order:')) {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
-    const parts = data.split(':');
-    const profileId = parts[1];
-    const months = Number(parts[2]) || 1;
+    const [_, profileId, months] = data.split(':');
     
-    try {
-      const proUntil = await db.activateProForUser(profileId, months);
-      const untilStr = proUntil.toLocaleDateString('de-DE');
+    const proUntil = await db.activateProForUser(profileId, Number(months));
+    const untilStr = proUntil.toLocaleDateString('de-DE');
 
-      const { data: profile } = await db.supabase.from('profiles').select('telegram_id, first_name').eq('id', profileId).single();
-      
-      if (profile) {
-        try {
-          await ctx.api.sendMessage(profile.telegram_id, 
-            `⭐ <b>VALUE-PRO AKTIVIERT!</b>\n\n` +
-            `Vielen Dank für deine Bestellung. Deine Profi-Werkzeuge sind bis zum <b>${untilStr}</b> bereit:\n\n` +
-            `🎰 <b>Zocker-Modus:</b> x20 & x50 Hebel — dauerhaft\n` +
-            `⚡ <b>Hebel-Boost:</b> Bis zu 10x Hebel + 3 Positionen\n` +
-            `🛡️ <b>Automation:</b> Stop-Loss & Take-Profit\n` +
-            `📈 <b>Trailing-Stop:</b> Auto-Gewinnabsicherung\n` +
-            `🎨 <b>Kosmetik:</b> Hintergründe & Name alle 30 Tage`,
-            { parse_mode: 'HTML' });
-        } catch (e) {}
-      }
-
-      await ctx.editMessageText(`✅ Pro für ${months} Monate aktiviert (bis ${untilStr}).`);
-    } catch (e) {
-      await ctx.editMessageText(`❌ Fehler: ${e.message}`);
+    const { data: profile } = await db.supabase.from('profiles').select('telegram_id, first_name').eq('id', profileId).single();
+    
+    if (profile) {
+      try {
+        await ctx.api.sendMessage(profile.telegram_id, 
+          `⭐ <b>VALUE-PRO AKTIVIERT!</b>\n\n` +
+          `Vielen Dank für deine Bestellung. Deine Profi-Werkzeuge sind bis zum <b>${untilStr}</b> bereit:\n` +
+          `• ⚡ <b>Hebel-Boost:</b> Bis zu 10x Hebel\n` +
+          `• 🛡️ <b>Automation:</b> Stop-Loss & Take-Profit\n` +
+          `• 📈 <b>Trailing-Stop:</b> Auto-Gewinnabsicherung\n` +
+          `• 📦 <b>Kapazität:</b> 3 Positionen gleichzeitig\n` +
+          `• 🎨 <b>Kosmetik:</b> Hintergründe & Name alle 30 Tage`,
+          { parse_mode: 'HTML' });
+      } catch (e) {}
     }
+
+    await ctx.editMessageText(`✅ Pro für ${months} Monate aktiviert.`);
     return ctx.answerCallbackQuery();
   }
 
@@ -412,12 +239,8 @@ module.exports = async (ctx) => {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
     const profileId = data.split(':').pop();
     
-    try {
-      const newStrikes = await db.addProStrike(profileId);
-      await ctx.editMessageText(`❌ Bestellung abgelehnt. User hat nun ${newStrikes}/3 Strikes.`);
-    } catch (e) {
-      await ctx.editMessageText(`❌ Fehler: ${e.message}`);
-    }
+    const newStrikes = await db.addProStrike(profileId);
+    await ctx.editMessageText(`❌ Bestellung abgelehnt. User hat nun ${newStrikes}/3 Strikes.`);
     return ctx.answerCallbackQuery('Strike erteilt.');
   }
 
@@ -432,6 +255,138 @@ module.exports = async (ctx) => {
       `⚙️ <b>Version:</b> v${version}\n\n` +
       `<i>Status: System stabil & v${version.split('.').slice(0, 2).join('.')} Engine aktiv</i>`,
       { parse_mode: 'HTML', reply_markup: kb }
+    );
+  }
+
+  // --- ADMIN PANEL CALLBACKS ---
+  if (data === 'admin_users') {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    const { data: users } = await db.supabase.from('profiles').select('username, first_name, balance, telegram_id, is_pro, is_admin').order('balance', { ascending: false }).limit(20);
+    let text = `👥 <b>Top 20 User (Balance)</b>\n\n`;
+    (users || []).forEach((u, i) => {
+      const badge = u.is_admin ? '👑' : u.is_pro ? '⭐' : '👤';
+      text += `${i+1}. ${badge} ${esc(u.username || u.first_name)} — ${Number(u.balance).toLocaleString('de-DE')}€\n`;
+    });
+    const kb = new InlineKeyboard().text('🔙 Dashboard', 'admin_back');
+    return ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
+  }
+
+  if (data === 'admin_pool') {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    const pool = await db.getFeePool();
+    const kb = new InlineKeyboard().text('🔙 Dashboard', 'admin_back');
+    return ctx.editMessageText(`💰 <b>Fee Pool:</b> ${pool.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€`, { parse_mode: 'HTML', reply_markup: kb });
+  }
+
+  if (data === 'admin_deletions') {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    const { data: reqs } = await db.supabase.from('deletion_requests').select('*, profiles(username, first_name, telegram_id)').eq('status', 'pending');
+    if (!reqs || reqs.length === 0) {
+      const kb = new InlineKeyboard().text('🔙 Dashboard', 'admin_back');
+      return ctx.editMessageText('✅ Keine offenen Löschanträge.', { reply_markup: kb });
+    }
+    let kb = new InlineKeyboard();
+    for (const r of reqs) {
+      const name = r.profiles?.username || r.profiles?.first_name || 'Unknown';
+      kb.text(`✅ ${name}`, `confirm_delete:${r.profile_id}`).text(`❌ ${name}`, `reject_delete:${r.profile_id}`).row();
+    }
+    kb.text('🔙 Dashboard', 'admin_back');
+    return ctx.editMessageText(`⚠️ <b>${reqs.length} Löschanträge</b>`, { parse_mode: 'HTML', reply_markup: kb });
+  }
+
+  if (data === 'admin_prices') {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    const prices = await db.getAllPrices();
+    let text = `📊 <b>Aktuelle Preise</b>\n\n`;
+    prices.forEach(p => {
+      text += `${p.symbol}: ${Number(p.price_eur).toLocaleString('de-DE', { minimumFractionDigits: 2 })}€\n`;
+    });
+    text += `\n🕒 ${new Date().toLocaleString('de-DE')}`;
+    const kb = new InlineKeyboard().text('🔄 Fetchen', 'admin_fetch').row().text('🔙 Dashboard', 'admin_back');
+    return ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
+  }
+
+  if (data === 'admin_fetch') {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    try {
+      await priceService.fetchAndStorePrices();
+      await ctx.answerCallbackQuery('✅ Preise aktualisiert!');
+    } catch(e) {
+      await ctx.answerCallbackQuery('❌ Fetch fehlgeschlagen');
+    }
+    return;
+  }
+
+  if (data === 'admin_new_season') {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    try {
+      const seasonNum = Math.floor(Date.now() / 1000);
+      const end = new Date(); end.setDate(end.getDate() + 30);
+      await db.supabase.from('seasons').update({ is_active: false }).eq('is_active', true);
+      await db.supabase.from('seasons').insert({ name: `Season ${seasonNum}`, start_date: new Date().toISOString(), end_date: end.toISOString(), is_active: true });
+      const { data: users } = await db.supabase.from('profiles').select('id, balance');
+      for (const u of (users || [])) {
+        await db.supabase.from('profiles').update({ season_start_worth: Number(u.balance) }).eq('id', u.id);
+      }
+      return ctx.editMessageText(`✅ Neue Season gestartet! Endet am ${end.toLocaleDateString('de-DE')}`);
+    } catch(e) {
+      return ctx.editMessageText(`❌ Fehler: ${e.message}`);
+    }
+  }
+
+  if (data === 'admin_end_season') {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    try {
+      const result = await db.getLeaderboard('profit_season', 3);
+      let text = `🎁 <b>Season-Ergebnis</b>\n\n`;
+      (result.leaders || []).forEach((l, i) => {
+        text += `${['🥇','🥈','🥉'][i]} ${esc(l.username || l.first_name)} — ${Number(l.performance_euro).toLocaleString('de-DE')}€\n`;
+      });
+      text += `\n💰 Pool: ${Number(result.pool || 0).toLocaleString('de-DE')}€`;
+      const kb = new InlineKeyboard().text('🔙 Dashboard', 'admin_back');
+      return ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
+    } catch(e) {
+      return ctx.editMessageText(`❌ Fehler: ${e.message}`);
+    }
+  }
+
+  if (data === 'admin_back') {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    const stats = await db.getStats();
+    const pool = await db.getFeePool();
+    const { count: deleteRequests } = await db.supabase.from('deletion_requests').select('*', { count: 'exact', head: true }).eq('status', 'pending');
+    const kb = new InlineKeyboard()
+      .text('👥 Alle User', 'admin_users').text('💰 Fee Pool', 'admin_pool').row()
+      .text(`⚠️ Löschanträge (${deleteRequests || 0})`, 'admin_deletions').row()
+      .text('🏆 Season starten', 'admin_new_season').text('🎁 Season auswerten', 'admin_end_season').row()
+      .text('📊 Preis-Check', 'admin_prices').text('🔄 Preise fetchen', 'admin_fetch');
+    return ctx.editMessageText(
+      `🔧 <b>ADMIN DASHBOARD</b> (v${version})\n\n` +
+      `👥 User: ${stats.userCount}\n📝 Transaktionen: ${stats.txCount}\n💰 Fee Pool: ${pool.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€`,
+      { parse_mode: 'HTML', reply_markup: kb }
+    );
+  }
+
+  // --- PRO INFO MODAL (für LeveragePanel) ---
+  if (data === 'pro_info') {
+    await ctx.answerCallbackQuery();
+    return ctx.reply(
+      `⭐ <b>VALUE-PRO Vorteile</b>\n\n` +
+      `🎰 Zocker-Modus: x20 & x50 Hebel — dauerhaft!\n` +
+      `⚡ 3 Positionen gleichzeitig offen halten\n` +
+      `🛡️ Stop-Loss & Take-Profit: Automatischer Verlust-Schutz\n` +
+      `📈 Trailing-Stop: Gewinne automatisch absichern\n` +
+      `🎯 Limit-Orders: Automatisch im Dip kaufen\n` +
+      `🎨 Profilhintergrund: Individuelles Design\n` +
+      `✏️ Namensänderung: Alle 30 Tage möglich`,
+      { parse_mode: 'HTML' }
     );
   }
 
