@@ -76,29 +76,38 @@ bot.on('message:story', async (ctx) => {
       .eq('telegram_id', userId)
       .single();
 
-    if (profile && !profile.story_bonus_claimed) {
-      const bonusAmount = 1000.00;
-      const newBalance = (Number(profile.balance) || 0) + bonusAmount;
-      
-      await db.supabase
-        .from('profiles')
-        .update({ 
-          balance: newBalance, 
-          story_bonus_claimed: true,
-          bonus_received: Number(profile.bonus_received || 0) + bonusAmount
-        })
-        .eq('id', profile.id);
-
-      await db.supabase.from('transactions').insert({
-        profile_id: profile.id,
-        type: 'achievement_reward',
-        symbol: 'STORY',
-        total_eur: bonusAmount,
-        details: 'Story Bonus Belohnung'
-      });
-
-      await ctx.reply("🌟 <b>Bonus aktiviert!</b>\n\nDanke für deine Story-Erwähnung! Ich habe dir soeben <b>1.000€ extra Guthaben</b> gutgeschrieben. Viel Erfolg beim Trading!", { parse_mode: 'HTML' });
+    if (!profile) return;
+    if (profile.story_bonus_claimed) {
+      return ctx.reply("ℹ️ Du hast den Story-Bonus bereits erhalten.", { parse_mode: 'HTML' });
     }
+
+    // v0.3.22: Atomares Update — nur erfolgreich wenn story_bonus_claimed NOCH false ist
+    const bonusAmount = 1000.00;
+    const { data: updated, error } = await db.supabase
+      .from('profiles')
+      .update({ 
+        balance: Number(profile.balance) + bonusAmount, 
+        story_bonus_claimed: true,
+        bonus_received: Number(profile.bonus_received || 0) + bonusAmount
+      })
+      .eq('id', profile.id)
+      .eq('story_bonus_claimed', false)
+      .select('id');
+
+    // Wenn kein Row aktualisiert wurde → bereits geclaimed (Race Condition abgefangen)
+    if (error || !updated || updated.length === 0) {
+      return ctx.reply("ℹ️ Du hast den Story-Bonus bereits erhalten.", { parse_mode: 'HTML' });
+    }
+
+    await db.supabase.from('transactions').insert({
+      profile_id: profile.id,
+      type: 'achievement_reward',
+      symbol: 'STORY',
+      total_eur: bonusAmount,
+      details: 'Story Bonus Belohnung'
+    });
+
+    await ctx.reply("🌟 <b>Bonus aktiviert!</b>\n\nDanke für deine Story-Erwähnung! Ich habe dir soeben <b>1.000€ extra Guthaben</b> gutgeschrieben. Viel Erfolg beim Trading!", { parse_mode: 'HTML' });
   } catch (e) {
     console.error('Story Bonus Fehler:', e);
   }
