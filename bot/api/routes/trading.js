@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../../core/database');
-const { COINS, FEE_RATE, TRADING_LIMITS } = require('../../core/config');
+const { COINS, FEE_RATE, SPOT_FEE_RATE, TRADING_LIMITS } = require('../../core/config');
 
 // 1. Marktdaten (Öffentlich, aber via Middleware gesichert)
 router.get('/prices', async (req, res) => {
@@ -163,7 +163,8 @@ router.post('/', async (req, res) => {
       const euroAmount = Number(amount_eur);
       if (euroAmount > Number(profile.balance)) return res.status(400).json({ error: 'Guthaben unzureichend' });
 
-      const fee = parseFloat((euroAmount * (FEE_RATE || 0.005)).toFixed(2));
+      // v0.3.23: Spot Fee = 0.25%
+      const fee = parseFloat((euroAmount * (SPOT_FEE_RATE || 0.0025)).toFixed(2));
       const cryptoAmount = (euroAmount - fee) / price;
       const newBalance = parseFloat((Number(profile.balance) - euroAmount).toFixed(2));
 
@@ -199,7 +200,8 @@ router.post('/', async (req, res) => {
       }
 
       const grossEur = cryptoAmount * price;
-      const fee = parseFloat((grossEur * (FEE_RATE || 0.005)).toFixed(2));
+      // v0.3.23: Spot Fee = 0.25%
+      const fee = parseFloat((grossEur * (SPOT_FEE_RATE || 0.0025)).toFixed(2));
       const netEur = parseFloat((grossEur - fee).toFixed(2));
       const newBalance = parseFloat((Number(profile.balance) + netEur).toFixed(2));
       const newAmount = Number(asset.amount) - cryptoAmount;

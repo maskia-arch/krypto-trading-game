@@ -6,7 +6,7 @@ const COINS = {
   ETH: { name: 'Ethereum', emoji: 'Ξ', color: '#627eea', bg: 'rgba(98,126,234,0.1)',  border: 'rgba(98,126,234,0.2)' },
   LTC: { name: 'Litecoin', emoji: 'Ł', color: '#bfbbbb', bg: 'rgba(191,187,187,0.1)', border: 'rgba(191,187,187,0.2)' },
 };
-const FEE = 0.005;
+const FEE = 0.0025; // v0.3.23: Spot Fee 0.25%
 
 export default function TradeView({ hideCoinSelector = false }) {
   const { profile, assets, prices, buyCrypto, sellCrypto, showToast, chartSymbol } = useStore();
@@ -157,7 +157,7 @@ export default function TradeView({ hideCoinSelector = false }) {
                   <span className="text-neon-green font-mono text-xs">{cryptoGet.toFixed(6)} {coin}</span>
                 </div>
                 <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-tight">
-                  <span className="text-[var(--text-dim)]">Gebühr (0.5%):</span>
+                  <span className="text-[var(--text-dim)]">Gebühr (0.25%):</span>
                   <span className="text-white/60 font-mono text-[10px]">{fee.toFixed(2)}€</span>
                 </div>
               </div>
@@ -209,7 +209,7 @@ export default function TradeView({ hideCoinSelector = false }) {
                   <span className="text-neon-green font-mono text-xs">{sellNet.toFixed(2)}€</span>
                 </div>
                 <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-tight">
-                  <span className="text-[var(--text-dim)]">Gebühr (0.5%):</span>
+                  <span className="text-[var(--text-dim)]">Gebühr (0.25%):</span>
                   <span className="text-white/60 font-mono text-[10px]">{sellFee.toFixed(2)}€</span>
                 </div>
               </div>

@@ -37,7 +37,10 @@ const COINS = {
   LTC: { name: 'Litecoin', gecko: 'litecoin', emoji: 'Ł' }
 };
 
-const FEE_RATE = 0.005;
+// v0.3.23: Getrennte Fee-Rates
+const SPOT_FEE_RATE = 0.0025;      // 0.25% pro Spot-Trade (Kauf & Verkauf)
+const LEVERAGE_FEE_RATE = 0.001;    // 0.1% pro Hebel-Trade (Eröffnung & Schließung)
+const FEE_RATE = SPOT_FEE_RATE;     // Abwärtskompatibel
 
 const TRADING_LIMITS = {
   FREE: {
@@ -76,5 +79,7 @@ module.exports = {
   supabaseConfig,
   COINS,
   FEE_RATE,
+  SPOT_FEE_RATE,
+  LEVERAGE_FEE_RATE,
   TRADING_LIMITS
 };

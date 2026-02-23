@@ -33,7 +33,8 @@ module.exports = (db) => ({
   },
 
   async openLeveragedPosition(profileId, symbol, direction, collateral, leverage, entryPrice, options = {}) {
-    const fee = (collateral * leverage) * 0.005;
+    // v0.3.23: Leverage Fee = 0.1% vom Notional bei Eröffnung
+    const fee = (collateral * leverage) * 0.001;
     const totalCost = collateral + fee;
 
     const { data: profile, error: profileErr } = await db.supabase
@@ -81,9 +82,13 @@ module.exports = (db) => ({
       profile_id: profileId,
       type: 'LEVERAGE_OPEN',
       total_eur: -totalCost,
+      fee_eur: fee,
       symbol: symbol.toUpperCase(),
-      details: `[${orderId}] ${leverage}x ${direction} @ ${entryPrice.toFixed(2)}€`
+      details: `[${orderId}] ${leverage}x ${direction} @ ${entryPrice.toFixed(2)}€ (Fee: ${fee.toFixed(2)}€)`
     });
+
+    // v0.3.23: Leverage-Fee in Season Pool
+    if (db.addToFeePool) await db.addToFeePool(fee);
 
     return pos;
   },
@@ -116,7 +121,8 @@ module.exports = (db) => ({
       pnl = -collateral;
     }
 
-    const fee = notional * 0.005;
+    // v0.3.23: Leverage Fee = 0.1% vom Notional bei Schließung
+    const fee = notional * 0.001;
     let payout = (collateral + pnl) - fee;
     if (payout < 0) payout = 0;
 
@@ -155,9 +161,13 @@ module.exports = (db) => ({
       profile_id: pos.profile_id,
       type: isLiquidation ? 'LIQUIDATION' : 'LEVERAGE_CLOSE',
       total_eur: isLiquidation ? 0 : payout,
+      fee_eur: fee,
       symbol: pos.symbol,
       details: `[${pos.order_id || pos.id}] PnL: ${pnl.toFixed(2)}€ (Fee: ${fee.toFixed(2)}€)`
     });
+
+    // v0.3.23: Leverage-Fee in Season Pool
+    if (db.addToFeePool) await db.addToFeePool(fee);
 
     return { pnl, payout, status: isLiquidation ? 'LIQUIDATED' : 'CLOSED' };
   },
@@ -189,7 +199,8 @@ module.exports = (db) => ({
       pnl = ((Number(pos.entry_price) - currentPrice) / Number(pos.entry_price)) * closingNotional;
     }
 
-    const fee = closingNotional * 0.005;
+    // v0.3.23: Leverage Fee = 0.1% vom Notional
+    const fee = closingNotional * 0.001;
     const payout = Math.max(0, (closingCollateral + pnl) - fee);
     const newCollateral = Number(pos.collateral) - closingCollateral;
 
@@ -217,9 +228,13 @@ module.exports = (db) => ({
       profile_id: profileId,
       type: 'LEVERAGE_CLOSE',
       total_eur: payout,
+      fee_eur: fee,
       symbol: pos.symbol,
-      details: `[${pos.order_id || pos.id}] Partial ${percentage * 100}% | PnL: ${pnl.toFixed(2)}€`
+      details: `[${pos.order_id || pos.id}] Partial ${percentage * 100}% | PnL: ${pnl.toFixed(2)}€ (Fee: ${fee.toFixed(2)}€)`
     });
+
+    // v0.3.23: Leverage-Fee in Season Pool
+    if (db.addToFeePool) await db.addToFeePool(fee);
 
     return { pnl, payout, new_collateral: newCollateral };
   },

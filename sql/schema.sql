@@ -1,5 +1,5 @@
 -- ============================================================
--- VALUETRADEGAME - Supabase Schema v0.3
+-- VALUETRADEGAME - Supabase Schema v0.3.23
 -- ============================================================
 
 -- 1) PROFILES
@@ -11,14 +11,18 @@ CREATE TABLE profiles (
   balance                   NUMERIC(18,2) DEFAULT 10000.00,
   total_volume              NUMERIC(18,2) DEFAULT 0.00,
   bonus_received            NUMERIC(18,2) DEFAULT 0.00,
+  season_start_worth        NUMERIC(18,2) DEFAULT 10000.00,
+  day_start_worth           NUMERIC(18,2) DEFAULT 10000.00,
   claimable_bonus           NUMERIC(18,2) DEFAULT 0.00,
   inactivity_bonus_claimed  BOOLEAN DEFAULT FALSE,
   story_bonus_claimed       BOOLEAN DEFAULT FALSE,
   feedback_sent             BOOLEAN DEFAULT FALSE,
+  notifications_enabled     BOOLEAN DEFAULT TRUE,
   bailout_count             INT DEFAULT 0,
   bailout_last              TIMESTAMPTZ,
   is_pro                    BOOLEAN DEFAULT FALSE,
   pro_until                 TIMESTAMPTZ,
+  pro_strikes               INT DEFAULT 0,
   is_admin                  BOOLEAN DEFAULT FALSE,
   hide_collectibles         BOOLEAN DEFAULT FALSE,
   username_changes          INT DEFAULT 0,
@@ -163,17 +167,17 @@ CREATE TABLE seasons (
   name        TEXT NOT NULL,
   start_date  TIMESTAMPTZ NOT NULL,
   end_date    TIMESTAMPTZ NOT NULL,
-  status      TEXT DEFAULT 'active' CHECK (status IN ('active', 'ended')),
+  is_active   BOOLEAN DEFAULT TRUE,
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 11) FEE_POOL
+-- 11) FEE_POOL (Einzelner Row, ID=1, sammelt alle Fees für die aktive Season)
 CREATE TABLE fee_pool (
   id          SERIAL PRIMARY KEY,
-  season_id   INT REFERENCES seasons(id),
-  amount      NUMERIC(18,2) DEFAULT 0,
+  total_eur   NUMERIC(18,2) DEFAULT 0,
   updated_at  TIMESTAMPTZ DEFAULT NOW()
 );
+INSERT INTO fee_pool (id, total_eur) VALUES (1, 0);
 
 -- 12) DELETION_REQUESTS
 CREATE TABLE deletion_requests (
@@ -203,6 +207,7 @@ SELECT
   p.balance,
   p.total_volume,
   p.is_pro,
+  p.is_admin,
   p.avatar_url,
   COALESCE(SUM(a.amount * cp.price_eur), 0) AS portfolio_value,
   p.balance + COALESCE(SUM(a.amount * cp.price_eur), 0) AS net_worth
@@ -213,8 +218,13 @@ GROUP BY p.id
 ORDER BY net_worth DESC;
 
 CREATE INDEX idx_pro_bg_cleanup ON profiles (background_disabled_at) WHERE background_disabled_at IS NOT NULL;
-Falls du die DB nicht neu aufsetzen willst, hier die Migration für bestehende Daten:
--- Migration v0.2 → v0.3 (nur ausführen wenn DB bereits existiert)
+
+-- ============================================================
+-- MIGRATION: v0.2 → v0.3.23
+-- Nur ausführen wenn DB bereits existiert und aktualisiert wird
+-- ============================================================
+
+-- v0.2 → v0.3 Leverage-Erweiterungen
 ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS order_id TEXT UNIQUE;
 ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS stop_loss NUMERIC(18,2);
 ALTER TABLE leveraged_positions ADD COLUMN IF NOT EXISTS take_profit NUMERIC(18,2);
@@ -234,17 +244,79 @@ UPDATE leveraged_positions SET order_id = CONCAT(
 -- Danach NOT NULL setzen
 ALTER TABLE leveraged_positions ALTER COLUMN order_id SET NOT NULL;
 
--- Spalten-Rename falls opened_at/closed_at existieren
-ALTER TABLE leveraged_positions RENAME COLUMN opened_at TO entry_time;
-ALTER TABLE leveraged_positions RENAME COLUMN closed_at TO close_time;
-ALTER TABLE leveraged_positions RENAME COLUMN exit_price TO close_price;
+-- Spalten-Rename falls opened_at/closed_at existieren (ignoriert Fehler wenn Spalten nicht da)
+DO $$ BEGIN
+  ALTER TABLE leveraged_positions RENAME COLUMN opened_at TO entry_time;
+EXCEPTION WHEN undefined_column THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE leveraged_positions RENAME COLUMN closed_at TO close_time;
+EXCEPTION WHEN undefined_column THEN NULL;
+END $$;
+DO $$ BEGIN
+  ALTER TABLE leveraged_positions RENAME COLUMN exit_price TO close_price;
+EXCEPTION WHEN undefined_column THEN NULL;
+END $$;
 
--- Neuer Index für atomare Closes
+-- Index für atomare Closes
 CREATE INDEX IF NOT EXISTS idx_lev_pos_open ON leveraged_positions(status) WHERE status = 'OPEN';
 
--- Profiles erweitern
+-- v0.3 Profile-Erweiterungen
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS username_changes INT DEFAULT 0;
 ALTER TABLE profiles ADD COLUMN IF NOT EXISTS referred_by BIGINT;
-
--- Collectibles erweitern
 ALTER TABLE user_collectibles ADD COLUMN IF NOT EXISTS purchase_price NUMERIC(18,2);
+
+-- v0.3.21 Erweiterungen
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS bonus_received NUMERIC(18,2) DEFAULT 0;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS season_start_worth NUMERIC(18,2) DEFAULT 10000;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS day_start_worth NUMERIC(18,2) DEFAULT 10000;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS notifications_enabled BOOLEAN DEFAULT TRUE;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS pro_strikes INT DEFAULT 0;
+UPDATE profiles SET bonus_received = 0 WHERE bonus_received IS NULL;
+
+-- v0.3.21 Seasons: is_active statt status
+DO $$ BEGIN
+  ALTER TABLE seasons ADD COLUMN is_active BOOLEAN DEFAULT TRUE;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+-- Bestehende Daten migrieren falls status-Spalte existiert
+DO $$ BEGIN
+  UPDATE seasons SET is_active = (status = 'active') WHERE is_active IS NULL;
+EXCEPTION WHEN undefined_column THEN NULL;
+END $$;
+
+-- v0.3.21 fee_pool: total_eur statt amount
+DO $$ BEGIN
+  ALTER TABLE fee_pool RENAME COLUMN amount TO total_eur;
+EXCEPTION WHEN undefined_column THEN NULL;
+END $$;
+-- Sicherstellen dass Row ID=1 existiert
+INSERT INTO fee_pool (id, total_eur) VALUES (1, 0) ON CONFLICT (id) DO NOTHING;
+
+-- v0.3.22 Story-Bonus absichern
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS story_bonus_claimed BOOLEAN DEFAULT FALSE;
+
+-- v0.3.21 Retroaktive Bonus-Korrektur (Story + Miete)
+UPDATE profiles
+SET bonus_received = COALESCE(bonus_received, 0) + 1000
+WHERE story_bonus_claimed = true AND bonus_received = 0;
+
+-- Leaderboard View aktualisieren (mit is_admin)
+CREATE OR REPLACE VIEW leaderboard AS
+SELECT
+  p.id,
+  p.telegram_id,
+  p.username,
+  p.first_name,
+  p.balance,
+  p.total_volume,
+  p.is_pro,
+  p.is_admin,
+  p.avatar_url,
+  COALESCE(SUM(a.amount * cp.price_eur), 0) AS portfolio_value,
+  p.balance + COALESCE(SUM(a.amount * cp.price_eur), 0) AS net_worth
+FROM profiles p
+LEFT JOIN assets a ON a.profile_id = p.id AND a.amount > 0
+LEFT JOIN current_prices cp ON cp.symbol = a.symbol
+GROUP BY p.id
+ORDER BY net_worth DESC;

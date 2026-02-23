@@ -63,7 +63,7 @@ export default function LeveragePanel({ hideCoinSelector = false }) {
 
   const collatNum = Number(collateral) || 0;
   const notional = collatNum * leverage;
-  const fee = notional * 0.005;
+  const fee = notional * 0.001; // v0.3.23: Leverage Fee 0.1%
   const totalCost = collatNum + fee;
 
   const canOpen = currentOpen < maxPos;
@@ -137,7 +137,7 @@ export default function LeveragePanel({ hideCoinSelector = false }) {
               <button 
                 key={pct} 
                 onClick={() => {
-                  const raw = (availableMargin * (pct / 100)) / (1 + (leverage * 0.005));
+                  const raw = (availableMargin * (pct / 100)) / (1 + (leverage * 0.001));
                   setCollateral((Math.floor(raw * 100) / 100).toFixed(2));
                 }}
                 className="flex-1 py-2 rounded-lg text-[10px] font-black bg-white/5 text-[var(--text-dim)] hover:bg-white/10 hover:text-white transition-all border border-white/5 active:scale-95"
@@ -226,6 +226,29 @@ export default function LeveragePanel({ hideCoinSelector = false }) {
             </div>
           )}
         </div>
+
+        {/* v0.3.23: Fee-Transparenz */}
+        {collatNum > 0 && (
+          <div className="border-t border-white/5 pt-3 space-y-1.5 px-1">
+            <div className="flex justify-between text-[10px]">
+              <span className="text-white/40">Notional (Einsatz × Hebel)</span>
+              <span className="font-mono text-white/60">{notional.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€</span>
+            </div>
+            <div className="flex justify-between text-[10px]">
+              <span className="text-white/40">Eröffnungsgebühr (0.1%)</span>
+              <span className="font-mono text-white/60">{fee.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€</span>
+            </div>
+            <div className="flex justify-between text-[10px]">
+              <span className="text-white/40">Schließgebühr (0.1%)</span>
+              <span className="font-mono text-white/40">≈ {fee.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€</span>
+            </div>
+            <div className="flex justify-between text-[10px] pt-1 border-t border-white/5">
+              <span className="text-white/60 font-bold">Gesamtkosten</span>
+              <span className="font-mono font-bold text-white">{totalCost.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€</span>
+            </div>
+            <p className="text-[8px] text-white/20 italic text-center">Gebühren fließen in den Season-Pool</p>
+          </div>
+        )}
 
         <div className="flex gap-2 border-t border-white/5 pt-4">
           <button onClick={() => handleOpen('LONG')} disabled={!canOpen || !hasMargin || loadingDir !== null}

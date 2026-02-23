@@ -68,7 +68,7 @@ export default function PositionsTable() {
           pnl = entryPrice > 0 ? ((entryPrice - currentPrice) / entryPrice) * notional : 0;
         }
 
-        const closingFee = notional * 0.005;
+        const closingFee = notional * 0.001; // v0.3.23: Leverage Fee 0.1%
         const netPnL = pnl - closingFee;
 
         const pnlPercent = collateral > 0 ? (pnl / collateral) * 100 : 0;
