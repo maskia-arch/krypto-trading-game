@@ -69,6 +69,22 @@ const TRADING_LIMITS = {
   }
 };
 
+// v0.3.24: Timezone-korrekte Tagabfrage (Europe/Berlin)
+function isMondayBerlin() {
+  const berlinDay = new Intl.DateTimeFormat('en-US', { 
+    weekday: 'short', 
+    timeZone: 'Europe/Berlin' 
+  }).format(new Date());
+  return berlinDay === 'Mon';
+}
+
+function getBerlinHour() {
+  return Number(new Intl.DateTimeFormat('en-US', {
+    hour: 'numeric', hour12: false,
+    timeZone: 'Europe/Berlin'
+  }).format(new Date()));
+}
+
 module.exports = {
   VERSION,
   botConfig,
@@ -81,5 +97,7 @@ module.exports = {
   FEE_RATE,
   SPOT_FEE_RATE,
   LEVERAGE_FEE_RATE,
-  TRADING_LIMITS
+  TRADING_LIMITS,
+  isMondayBerlin,
+  getBerlinHour
 };

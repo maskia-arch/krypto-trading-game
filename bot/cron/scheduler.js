@@ -3,6 +3,9 @@ const { InlineKeyboard } = require('grammy');
 const { db } = require('../core/database');
 const { ADMIN_ID, BONUS_CLAIM_URL } = require('../core/config');
 const { priceService } = require('../services/priceService');
+
+// v0.3.24: Alle Event-relevanten Crons in Berliner Zeit
+const BERLIN = { timezone: 'Europe/Berlin' };
 const { tradeService } = require('../services/tradeService');
 const { seasonService } = require('../services/seasonService');
 
@@ -158,7 +161,7 @@ function setupCronJobs(bot) {
     }
   });
 
-  // v0.3.21: ZOCKER-MONTAG — 08:00 Broadcast
+  // v0.3.24: ZOCKER-MONTAG — 08:00 Berlin-Zeit Broadcast
   cron.schedule('0 8 * * 1', async () => {
     try {
       const { data: users, error } = await db.supabase.from('profiles').select('telegram_id, notifications_enabled');
@@ -181,9 +184,9 @@ function setupCronJobs(bot) {
     } catch (err) {
       console.error('Monday broadcast error:', err);
     }
-  });
+  }, BERLIN);
 
-  // v0.3.21: ZOCKER-MONTAG — 21:00 Warnung an Free-User mit offenen x20/x50
+  // v0.3.24: ZOCKER-MONTAG — 21:00 Berlin-Zeit Warnung an Free-User mit offenen x20/x50
   cron.schedule('0 21 * * 1', async () => {
     try {
       const positions = await db.getAllOpenLeveragedPositions();
@@ -214,9 +217,9 @@ function setupCronJobs(bot) {
     } catch (err) {
       console.error('Monday warning error:', err);
     }
-  });
+  }, BERLIN);
 
-  // v0.3.21: DIENSTAG 00:01 — Auto-Close aller Free-User x20/x50 Positionen
+  // v0.3.24: DIENSTAG 00:01 Berlin-Zeit — Auto-Close aller Free-User x20/x50 Positionen
   cron.schedule('1 0 * * 2', async () => {
     try {
       const positions = await db.getAllOpenLeveragedPositions();
@@ -269,7 +272,7 @@ function setupCronJobs(bot) {
     } catch (err) {
       console.error('Tuesday auto-close error:', err);
     }
-  });
+  }, BERLIN);
 
   cron.schedule('0 0,12 * * *', async () => {
     try {
@@ -373,6 +376,7 @@ function setupCronJobs(bot) {
     }
   });
 
+  // v0.3.24: Tages-Snapshot um Mitternacht Berlin-Zeit
   cron.schedule('0 0 * * *', async () => {
     try {
       if (db.updateDailySnapshots) {
@@ -381,7 +385,7 @@ function setupCronJobs(bot) {
     } catch (err) {
       console.error(err);
     }
-  });
+  }, BERLIN);
 }
 
 module.exports = { setupCronJobs };

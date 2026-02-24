@@ -1,7 +1,7 @@
 # 🎮 ValueTradeGame v0.3 (The Stability & Polish Update)
 
 **Autor:** autoacts
-**Engine:** v0.3.23
+**Engine:** v0.3.24
 
 Das ultimative Krypto-Trading-Erlebnis direkt in Telegram. Version 0.3 fokussiert sich auf Stabilität, korrekte Margin-Berechnungen, fehlende Store-Funktionen und ein vollständiges UI-Feedback-System.
 
@@ -192,7 +192,8 @@ Das ultimative Krypto-Trading-Erlebnis direkt in Telegram. Version 0.3 fokussier
 ├── sql/
 │   ├── schema.sql
 │   ├── v0321_update.sql
-│   └── v0322_story_fix.sql
+│   ├── v0322_story_fix.sql
+│   └── v0324_admin_timezone_fix.sql
 ├── version.txt
 └── README.md
 ```
@@ -219,7 +220,7 @@ Web App ◀──(GET /api)─────────┘  ← Profile Refresh 2
 
 ### 1. Supabase & Storage
 - Führe `sql/schema.sql` im SQL Editor aus
-- Danach `sql/v0321_update.sql` und `sql/v0322_story_fix.sql` ausführen
+- Danach `sql/v0321_update.sql`, `sql/v0322_story_fix.sql` und `sql/v0324_admin_timezone_fix.sql` ausführen
 - Storage Buckets erstellen (beide auf Public):
   - `avatars` (Profilbilder)
   - `backgrounds` (Pro-Hintergrundbilder)
@@ -266,6 +267,15 @@ cd webapp && npm install && npm run build
 ---
 
 ## Changelog
+
+### v0.3.24 – Admin-Erkennung & Timezone-Fix
+- **CRITICAL:** Auth-Middleware scheiterte still an nicht-existierender `last_active` Spalte — `proCache` wurde nie befüllt, alle User bekamen `isPro: false`
+- Auth: SELECT getrennt von UPDATE (fire-and-forget), Permission-Read kann nicht mehr an Activity-Tracking scheitern
+- Auth: Admin-Erkennung zusätzlich via `ADMIN_ID` env var, auto-sync `is_admin` in DB
+- Timezone: Alle Montags-Checks (`getDay() === 1`) durch `isMondayBerlin()` ersetzt (Intl.DateTimeFormat)
+- Timezone: Alle Zocker-Crons (08:00 Broadcast, 21:00 Warnung, 00:01 Auto-Close) mit `{ timezone: 'Europe/Berlin' }` 
+- Timezone: Tages-Snapshot Cron auf Berlin-Zeit umgestellt
+- SQL: `last_active` Spalte zum Schema hinzugefügt
 
 ### v0.3.23 – Fee-Restrukturierung
 - Spot Fees reduziert: 0.5% → 0.25% (Kauf & Verkauf)
@@ -318,4 +328,4 @@ cd webapp && npm install && npm run build
 
 ---
 
-**System Architect:** @autoacts | **Version:** 0.3.23
+**System Architect:** @autoacts | **Version:** 0.3.24

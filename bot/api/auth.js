@@ -29,27 +29,43 @@ async function parseTelegramUser(req) {
   const parsedId = tgId ? Number(tgId) : null;
   if (!parsedId) return null;
 
-  // 3. Activity Tracking & Berechtigungs-Sync (Synchronisiert für v0.3.0)
+  // 3. v0.3.24: Berechtigungs-Sync (SELECT getrennt von UPDATE)
   try {
     const now = Date.now();
     const lastUpdate = activeCache.get(parsedId) || 0;
     
-    // WICHTIG: Wenn kein Cache existiert ODER die 5 Minuten um sind, müssen wir WARTEN (await)
     if (!proCache.has(parsedId) || (now - lastUpdate > 300000)) {
+      // ERST: Berechtigungen laden (darf nicht an Update-Fehler scheitern)
       const { data, error } = await db.supabase
         .from('profiles')
-        .update({ last_active: new Date().toISOString() })
-        .eq('telegram_id', parsedId)
         .select('is_admin, is_pro, pro_until')
+        .eq('telegram_id', parsedId)
         .maybeSingle();
 
       if (data) {
-        const isPro = data.is_admin || (data.is_pro && new Date(data.pro_until) > new Date());
-        proCache.set(parsedId, { isPro, isAdmin: !!data.is_admin });
+        // v0.3.24: Admin-Status auch via ADMIN_ID env var erkennen
+        const envAdmin = Number(process.env.ADMIN_ID) === parsedId;
+        const isAdmin = !!data.is_admin || envAdmin;
+        const isPro = isAdmin || (data.is_pro && new Date(data.pro_until) > new Date());
+        
+        proCache.set(parsedId, { isPro, isAdmin });
         activeCache.set(parsedId, now);
+
+        // v0.3.24: is_admin in DB synchronisieren falls nötig
+        if (envAdmin && !data.is_admin) {
+          db.supabase.from('profiles').update({ is_admin: true }).eq('telegram_id', parsedId).then(() => {});
+        }
       } else if (error) {
-        console.error("Auth DB Sync Error:", error.message);
+        console.error("Auth DB Read Error:", error.message);
       }
+
+      // DANN: Activity-Tracking (fire-and-forget, darf fehlschlagen)
+      db.supabase
+        .from('profiles')
+        .update({ last_active: new Date().toISOString() })
+        .eq('telegram_id', parsedId)
+        .then(() => {})
+        .catch(() => {});
     }
   } catch (err) {
     console.error("Critical Auth Error:", err);

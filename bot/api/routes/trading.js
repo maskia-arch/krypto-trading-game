@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../../core/database');
-const { COINS, FEE_RATE, SPOT_FEE_RATE, TRADING_LIMITS } = require('../../core/config');
+const { COINS, FEE_RATE, SPOT_FEE_RATE, TRADING_LIMITS, isMondayBerlin } = require('../../core/config');
 
 // 1. Marktdaten (Öffentlich, aber via Middleware gesichert)
 router.get('/prices', async (req, res) => {
@@ -20,7 +20,7 @@ router.get('/leverage/positions', async (req, res) => {
     if (!profile) return res.status(404).json({ error: 'Profil nicht gefunden' });
 
     const positions = await db.getOpenLeveragedPositions(profile.id);
-    const isMonday = new Date().getDay() === 1;
+    const isMonday = isMondayBerlin();
     const isPro = req.permissions.isPro;
     const isAdmin = req.permissions.isAdmin;
     const effectivelyPro = isPro || isAdmin;

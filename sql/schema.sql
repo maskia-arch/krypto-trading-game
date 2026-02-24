@@ -1,5 +1,5 @@
 -- ============================================================
--- VALUETRADEGAME - Supabase Schema v0.3.23
+-- VALUETRADEGAME - Supabase Schema v0.3.24
 -- ============================================================
 
 -- 1) PROFILES
@@ -30,6 +30,7 @@ CREATE TABLE profiles (
   background_url            TEXT DEFAULT NULL,
   background_disabled_at    TIMESTAMPTZ DEFAULT NULL,
   referred_by               BIGINT,
+  last_active               TIMESTAMPTZ DEFAULT NOW(),
   created_at                TIMESTAMPTZ DEFAULT NOW(),
   updated_at                TIMESTAMPTZ DEFAULT NOW()
 );
@@ -300,6 +301,10 @@ ALTER TABLE profiles ADD COLUMN IF NOT EXISTS story_bonus_claimed BOOLEAN DEFAUL
 UPDATE profiles
 SET bonus_received = COALESCE(bonus_received, 0) + 1000
 WHERE story_bonus_claimed = true AND bonus_received = 0;
+
+-- v0.3.24 Admin/Timezone Fix
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_active TIMESTAMPTZ DEFAULT NOW();
+UPDATE profiles SET last_active = COALESCE(updated_at, created_at) WHERE last_active IS NULL;
 
 -- Leaderboard View aktualisieren (mit is_admin)
 CREATE OR REPLACE VIEW leaderboard AS

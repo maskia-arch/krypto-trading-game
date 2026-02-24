@@ -1,11 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../../core/database');
-const { TRADING_LIMITS } = require('../../core/config');
+const { TRADING_LIMITS, isMondayBerlin } = require('../../core/config');
 
-// v0.3.21: Effektive Policy berechnen (Admin = permanent Pro)
+// v0.3.24: Effektive Policy (Berlin-Timezone für Montags-Event)
 function getEffectivePolicy(isPro, isAdmin) {
-  const isMonday = new Date().getDay() === 1;
+  const isMonday = isMondayBerlin();
   const effectivelyPro = isPro || isAdmin;
 
   let limits;
