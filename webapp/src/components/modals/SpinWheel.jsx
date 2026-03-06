@@ -1,6 +1,31 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../lib/api';
 import useStore from '../../lib/store';
+
+// Krypto-Symbol-Mapping
+const CRYPTO_SYMBOLS = {
+  BTC: '₿', ETH: 'Ξ', LTC: 'Ł', SOL: '◎', XRP: '✕', BNB: '◆', ADA: '₳', DOT: '●'
+};
+
+function getCryptoDisplay(label) {
+  for (const [code, sym] of Object.entries(CRYPTO_SYMBOLS)) {
+    if (label.toUpperCase().includes(code)) {
+      return label.replace(new RegExp(code, 'i'), sym);
+    }
+  }
+  return label;
+}
+
+function shadeColor(hex, percent) {
+  const h = hex.startsWith('#') ? hex : '#38bdf8';
+  let r = parseInt(h.slice(1, 3), 16) || 0;
+  let g = parseInt(h.slice(3, 5), 16) || 0;
+  let b = parseInt(h.slice(5, 7), 16) || 0;
+  r = Math.min(255, Math.max(0, r + percent));
+  g = Math.min(255, Math.max(0, g + percent));
+  b = Math.min(255, Math.max(0, b + percent));
+  return `rgb(${r},${g},${b})`;
+}
 
 export default function SpinWheel({ onClose }) {
   const { profile, showToast, fetchProfile, isPremiumUser } = useStore();
@@ -8,23 +33,26 @@ export default function SpinWheel({ onClose }) {
   const [canSpin, setCanSpin] = useState(false);
   const [tier, setTier] = useState('free');
   const [spinning, setSpinning] = useState(false);
-  const [rotation, setRotation] = useState(0);
   const [result, setResult] = useState(null);
   const [showResult, setShowResult] = useState(false);
   const [proPreview, setProPreview] = useState(null);
+  const [lightPhase, setLightPhase] = useState(0);
   const canvasRef = useRef(null);
   const wheelRef = useRef(null);
+  const rotationRef = useRef(0);
   const isPro = isPremiumUser();
 
+  useEffect(() => { loadConfig(); }, []);
+
+  // Lichterkette-Animation
   useEffect(() => {
-    loadConfig();
+    const iv = setInterval(() => setLightPhase(p => (p + 1) % 3), 400);
+    return () => clearInterval(iv);
   }, []);
 
   useEffect(() => {
-    if (config && config.length > 0) {
-      drawWheel(rotation);
-    }
-  }, [config, rotation]);
+    if (config && config.length > 0) drawWheel();
+  }, [config, isPro]);
 
   const loadConfig = async () => {
     try {
@@ -38,120 +66,130 @@ export default function SpinWheel({ onClose }) {
     }
   };
 
-  const drawWheel = (currentRotation) => {
+  const drawWheel = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas || !config || config.length === 0) return;
 
+    const dpr = window.devicePixelRatio || 1;
+    const displaySize = 280;
+    canvas.width = displaySize * dpr;
+    canvas.height = displaySize * dpr;
+    canvas.style.width = displaySize + 'px';
+    canvas.style.height = displaySize + 'px';
+
     const ctx = canvas.getContext('2d');
-    const size = canvas.width;
-    const center = size / 2;
-    const radius = center - 8;
+    ctx.scale(dpr, dpr);
+
+    const center = displaySize / 2;
+    const outerRadius = center - 4;
+    const innerRadius = 28;
     const sliceAngle = (2 * Math.PI) / config.length;
 
-    ctx.clearRect(0, 0, size, size);
+    ctx.clearRect(0, 0, displaySize, displaySize);
 
-    // Outer glow
-    if (isPro) {
-      const glow = ctx.createRadialGradient(center, center, radius - 20, center, center, radius + 15);
-      glow.addColorStop(0, 'rgba(251, 191, 36, 0)');
-      glow.addColorStop(0.8, 'rgba(251, 191, 36, 0.15)');
-      glow.addColorStop(1, 'rgba(251, 191, 36, 0.3)');
-      ctx.fillStyle = glow;
-      ctx.fillRect(0, 0, size, size);
-    }
-
-    // Outer ring
+    // ---- Clip zum Kreis (kein Quadrat-Hintergrund!) ----
+    ctx.save();
     ctx.beginPath();
-    ctx.arc(center, center, radius + 4, 0, 2 * Math.PI);
-    ctx.strokeStyle = isPro ? '#fbbf24' : '#38bdf8';
-    ctx.lineWidth = 3;
-    ctx.stroke();
+    ctx.arc(center, center, outerRadius, 0, 2 * Math.PI);
+    ctx.clip();
 
-    // Draw slices
+    // ---- Slices zeichnen ----
     config.forEach((item, i) => {
       const startAngle = i * sliceAngle - Math.PI / 2;
       const endAngle = startAngle + sliceAngle;
+      const midAngle = startAngle + sliceAngle / 2;
 
       ctx.beginPath();
       ctx.moveTo(center, center);
-      ctx.arc(center, center, radius, startAngle, endAngle);
+      ctx.arc(center, center, outerRadius, startAngle, endAngle);
       ctx.closePath();
 
-      // Gradient fill per slice
-      const midAngle = startAngle + sliceAngle / 2;
-      const gx = center + Math.cos(midAngle) * radius * 0.5;
-      const gy = center + Math.sin(midAngle) * radius * 0.5;
-      const grad = ctx.createRadialGradient(center, center, 0, gx, gy, radius);
-      
-      const baseColor = item.color || (isPro ? '#fbbf24' : '#38bdf8');
-      grad.addColorStop(0, adjustBrightness(baseColor, i % 2 === 0 ? 0 : -30));
-      grad.addColorStop(1, adjustBrightness(baseColor, i % 2 === 0 ? -20 : -50));
-      
+      const baseColor = item.color || '#38bdf8';
+      const grad = ctx.createLinearGradient(
+        center + Math.cos(midAngle) * innerRadius,
+        center + Math.sin(midAngle) * innerRadius,
+        center + Math.cos(midAngle) * outerRadius,
+        center + Math.sin(midAngle) * outerRadius
+      );
+      grad.addColorStop(0, shadeColor(baseColor, i % 2 === 0 ? 25 : -5));
+      grad.addColorStop(1, shadeColor(baseColor, i % 2 === 0 ? -20 : -40));
+
       ctx.fillStyle = grad;
       ctx.fill();
 
-      // Slice border
-      ctx.strokeStyle = 'rgba(0,0,0,0.3)';
-      ctx.lineWidth = 1;
+      // Trennlinie
+      ctx.beginPath();
+      ctx.moveTo(center, center);
+      ctx.lineTo(
+        center + Math.cos(startAngle) * outerRadius,
+        center + Math.sin(startAngle) * outerRadius
+      );
+      ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+      ctx.lineWidth = 1.5;
       ctx.stroke();
 
-      // Label text
+      // ---- Label ----
       ctx.save();
       ctx.translate(center, center);
       ctx.rotate(midAngle);
+
+      const displayLabel = getCryptoDisplay(item.label);
+      const labelDist = outerRadius * 0.62;
+      const fontSize = Math.max(11, Math.min(14, outerRadius / config.length * 1.4));
+
+      ctx.font = `800 ${fontSize}px 'Outfit', sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-      
-      const labelDist = radius * 0.65;
-      ctx.font = `bold ${Math.max(10, Math.min(13, radius / config.length * 1.2))}px 'Outfit', sans-serif`;
+      ctx.shadowColor = 'rgba(0,0,0,0.8)';
+      ctx.shadowBlur = 5;
+      ctx.shadowOffsetX = 1;
+      ctx.shadowOffsetY = 1;
       ctx.fillStyle = '#ffffff';
-      ctx.shadowColor = 'rgba(0,0,0,0.6)';
-      ctx.shadowBlur = 4;
-      ctx.fillText(item.label, labelDist, 0);
+      ctx.fillText(displayLabel, labelDist, 0);
+      ctx.shadowColor = 'transparent';
       ctx.shadowBlur = 0;
       ctx.restore();
     });
 
-    // Center circle
-    const centerGrad = ctx.createRadialGradient(center, center, 0, center, center, 28);
-    centerGrad.addColorStop(0, isPro ? '#fbbf24' : '#38bdf8');
-    centerGrad.addColorStop(1, isPro ? '#b45309' : '#0369a1');
+    ctx.restore(); // Clip aufheben
+
+    // ---- Äußerer Ring (dünn, auf dem Kreis) ----
     ctx.beginPath();
-    ctx.arc(center, center, 26, 0, 2 * Math.PI);
-    ctx.fillStyle = centerGrad;
-    ctx.fill();
-    ctx.strokeStyle = isPro ? '#fde68a' : '#7dd3fc';
-    ctx.lineWidth = 2;
+    ctx.arc(center, center, outerRadius, 0, 2 * Math.PI);
+    ctx.strokeStyle = isPro ? 'rgba(251,191,36,0.35)' : 'rgba(56,189,248,0.3)';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
 
-    // Center text
-    ctx.font = "bold 10px 'Outfit', sans-serif";
-    ctx.fillStyle = '#ffffff';
+    // ---- Hub (Mitte) ----
+    ctx.beginPath();
+    ctx.arc(center, center, innerRadius + 3, 0, 2 * Math.PI);
+    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+    ctx.fill();
+
+    const hubGrad = ctx.createRadialGradient(center - 3, center - 3, 2, center, center, innerRadius);
+    if (isPro) {
+      hubGrad.addColorStop(0, '#fde68a');
+      hubGrad.addColorStop(0.6, '#fbbf24');
+      hubGrad.addColorStop(1, '#78350f');
+    } else {
+      hubGrad.addColorStop(0, '#bae6fd');
+      hubGrad.addColorStop(0.6, '#38bdf8');
+      hubGrad.addColorStop(1, '#0c4a6e');
+    }
+    ctx.beginPath();
+    ctx.arc(center, center, innerRadius, 0, 2 * Math.PI);
+    ctx.fillStyle = hubGrad;
+    ctx.fill();
+    ctx.strokeStyle = isPro ? 'rgba(254,243,199,0.5)' : 'rgba(186,230,253,0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    ctx.font = "800 10px 'Outfit', sans-serif";
+    ctx.fillStyle = isPro ? '#451a03' : '#0c4a6e';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('SPIN', center, center);
-
-    // Decorative dots around the wheel
-    for (let i = 0; i < 24; i++) {
-      const angle = (i / 24) * 2 * Math.PI;
-      const x = center + Math.cos(angle) * (radius + 8);
-      const y = center + Math.sin(angle) * (radius + 8);
-      ctx.beginPath();
-      ctx.arc(x, y, 2.5, 0, 2 * Math.PI);
-      ctx.fillStyle = i % 2 === 0 
-        ? (isPro ? 'rgba(251,191,36,0.8)' : 'rgba(56,189,248,0.8)') 
-        : 'rgba(255,255,255,0.3)';
-      ctx.fill();
-    }
-  };
-
-  const adjustBrightness = (hex, percent) => {
-    const num = parseInt(hex.replace('#', ''), 16);
-    const r = Math.min(255, Math.max(0, ((num >> 16) & 0xff) + percent));
-    const g = Math.min(255, Math.max(0, ((num >> 8) & 0xff) + percent));
-    const b = Math.min(255, Math.max(0, (num & 0xff) + percent));
-    return `rgb(${r},${g},${b})`;
-  };
+  }, [config, isPro]);
 
   const handleSpin = async () => {
     if (spinning || !canSpin) return;
@@ -161,41 +199,31 @@ export default function SpinWheel({ onClose }) {
 
     try {
       const data = await api.spinWheel();
-      
-      // Finde den Index des Gewinners
       const winnerIndex = config.findIndex(c => c.id === data.winner.id);
       const sliceAngle = 360 / config.length;
-      
-      // Berechne Zielwinkel: Das Gewinnfeld soll oben (bei der Nadel) landen
       const targetAngle = 360 - (winnerIndex * sliceAngle + sliceAngle / 2);
-      
-      // Mindestens 5 volle Umdrehungen + Zielwinkel + etwas Random
-      const extraSpins = 5 * 360 + targetAngle + (Math.random() * 10 - 5);
-      const finalRotation = rotation + extraSpins;
-      
-      setRotation(finalRotation);
+      const totalSpin = 6 * 360 + targetAngle + (Math.random() * sliceAngle * 0.3 - sliceAngle * 0.15);
+      const newRotation = rotationRef.current + totalSpin;
+      rotationRef.current = newRotation;
       setCanSpin(false);
 
-      // Animation: Rad dreht sich über CSS transform
       if (wheelRef.current) {
-        wheelRef.current.style.transition = 'transform 5s cubic-bezier(0.17, 0.67, 0.12, 0.99)';
-        wheelRef.current.style.transform = `rotate(${finalRotation}deg)`;
+        wheelRef.current.style.transition = 'transform 5.5s cubic-bezier(0.12, 0.60, 0.08, 1.00)';
+        wheelRef.current.style.transform = `rotate(${newRotation}deg)`;
       }
 
-      // Nach Animation: Ergebnis anzeigen
       setTimeout(() => {
         setResult(data);
         setShowResult(true);
         setSpinning(false);
         fetchProfile();
-        
+
         let emoji = '🎰';
         if (data.winner.reward_type === 'cash') emoji = '💰';
         if (data.winner.reward_type === 'crypto') emoji = '🪙';
         if (data.winner.reward_type === 'feature') emoji = '⚡';
         showToast(`${emoji} ${data.description}`, 'success');
-      }, 5200);
-
+      }, 5800);
     } catch (err) {
       setSpinning(false);
       showToast(err.message || 'Fehler beim Drehen', 'error');
@@ -204,105 +232,165 @@ export default function SpinWheel({ onClose }) {
 
   if (!config) {
     return (
-      <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-xl flex items-center justify-center">
+      <div className="fixed inset-0 z-[100] flex items-center justify-center" style={{ background: '#06080f' }}>
         <div className="w-8 h-8 border-2 border-neon-blue/30 border-t-neon-blue rounded-full animate-spin"></div>
       </div>
     );
   }
 
+  // Lichterkette Positionen
+  const lightCount = 32;
+  const lightRad = 155;
+
   return (
-    <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex flex-col items-center justify-start overflow-y-auto">
-      {/* Close Button */}
+    <div className="fixed inset-0 z-[100] flex flex-col items-center justify-start overflow-y-auto" style={{ background: '#06080f' }}>
+
+      {/* Pro: Goldene Akzentlinien oben & unten (Fenster-Design) */}
+      {isPro && <>
+        <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/70 to-transparent" />
+        <div className="absolute top-[2px] left-0 right-0 h-[1px] bg-gradient-to-r from-transparent via-amber-200/30 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
+        {/* Seitliche goldene Akzente */}
+        <div className="absolute top-0 bottom-0 left-0 w-[2px] bg-gradient-to-b from-transparent via-amber-400/20 to-transparent" />
+        <div className="absolute top-0 bottom-0 right-0 w-[2px] bg-gradient-to-b from-transparent via-amber-400/20 to-transparent" />
+      </>}
+
+      {/* Close */}
       <button
         onClick={onClose}
-        className="absolute top-4 right-4 z-50 w-10 h-10 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-lg active:scale-95 transition-all"
-      >
-        ✕
-      </button>
+        className={`absolute top-4 right-4 z-50 w-10 h-10 rounded-xl flex items-center justify-center text-lg active:scale-95 transition-all ${
+          isPro ? 'bg-amber-950/50 border border-amber-600/25 text-amber-300' : 'bg-white/5 border border-white/10 text-white'
+        }`}
+      >✕</button>
 
       {/* Header */}
-      <div className="pt-6 pb-2 text-center">
-        <h2 className={`text-xl font-black tracking-tight ${isPro ? 'text-neon-gold glow-gold' : 'text-white'}`}>
-          {isPro ? '⭐ PRO GLÜCKSRAD' : '🎰 DAILY LOGIN BONUS'}
-        </h2>
-        <p className="text-[10px] uppercase tracking-widest text-[var(--text-dim)] mt-1">
+      <div className="pt-6 pb-3 text-center relative z-10">
+        {isPro ? (
+          <h2 className="text-xl font-black tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-amber-200 via-yellow-400 to-amber-200">
+            ⭐ PRO GLÜCKSRAD
+          </h2>
+        ) : (
+          <h2 className="text-xl font-black tracking-tight text-white">
+            🎰 DAILY LOGIN BONUS
+          </h2>
+        )}
+        <p className={`text-[10px] uppercase tracking-[0.2em] mt-1 font-bold ${isPro ? 'text-amber-600/50' : 'text-[var(--text-dim)]'}`}>
           {canSpin && !spinning ? 'Tippe zum Drehen!' : spinning ? 'Viel Glück...' : 'Nächster Spin: 0:00 Uhr'}
         </p>
       </div>
 
-      {/* Pointer / Needle */}
-      <div className="relative flex items-center justify-center" style={{ width: 300, height: 310 }}>
-        {/* Needle at top */}
-        <div className="absolute top-0 left-1/2 -translate-x-1/2 z-20" style={{ marginTop: -2 }}>
-          <div className={`w-0 h-0 border-l-[12px] border-r-[12px] border-t-[22px] ${
-            isPro 
-              ? 'border-l-transparent border-r-transparent border-t-neon-gold drop-shadow-[0_0_10px_rgba(251,191,36,0.6)]' 
-              : 'border-l-transparent border-r-transparent border-t-neon-blue drop-shadow-[0_0_10px_rgba(56,189,248,0.6)]'
-          }`} />
+      {/* ---- WHEEL AREA ---- */}
+      <div className="relative flex items-center justify-center" style={{ width: 320, height: 330 }}>
+
+        {/* Äußerer Dekor-Ring (dreht sich NICHT) */}
+        {isPro ? (
+          <div className="absolute rounded-full pointer-events-none"
+            style={{
+              width: 304, height: 304,
+              top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
+              background: 'conic-gradient(from 0deg, #78350f, #fbbf24, #fef3c7, #fbbf24, #78350f, #fbbf24, #fef3c7, #fbbf24, #78350f)',
+              borderRadius: '50%',
+              padding: 4,
+            }}
+          >
+            <div className="w-full h-full rounded-full" style={{ background: '#06080f' }} />
+          </div>
+        ) : (
+          <div className="absolute rounded-full pointer-events-none"
+            style={{
+              width: 300, height: 300,
+              top: '50%', left: '50%',
+              transform: 'translate(-50%, -50%)',
+              border: '2px solid rgba(56,189,248,0.2)',
+              borderRadius: '50%',
+            }}
+          />
+        )}
+
+        {/* Lichterkette (dreht sich NICHT) */}
+        <svg className="absolute pointer-events-none z-10"
+          style={{ width: 310, height: 310, top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
+          viewBox="0 0 310 310"
+        >
+          {Array.from({ length: lightCount }, (_, i) => {
+            const angle = (i / lightCount) * 2 * Math.PI - Math.PI / 2;
+            const cx = 155 + Math.cos(angle) * lightRad;
+            const cy = 155 + Math.sin(angle) * lightRad;
+            const isOn = (i % 3) === lightPhase;
+            return (
+              <circle key={i} cx={cx} cy={cy} r={isPro ? 3.5 : 2.8}
+                fill={isOn
+                  ? (isPro ? '#fbbf24' : '#38bdf8')
+                  : (isPro ? 'rgba(120,53,15,0.4)' : 'rgba(14,55,80,0.4)')
+                }
+                style={{
+                  filter: isOn ? `drop-shadow(0 0 ${isPro ? 4 : 3}px ${isPro ? 'rgba(251,191,36,0.7)' : 'rgba(56,189,248,0.6)'})` : 'none',
+                  transition: 'fill 0.25s ease, filter 0.25s ease'
+                }}
+              />
+            );
+          })}
+        </svg>
+
+        {/* Nadel (dreht sich NICHT) */}
+        <div className="absolute z-30" style={{ top: 6, left: '50%', transform: 'translateX(-50%)' }}>
+          <svg width="30" height="34" viewBox="0 0 30 34">
+            <defs>
+              <linearGradient id="ng" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor={isPro ? '#fde68a' : '#bae6fd'} />
+                <stop offset="100%" stopColor={isPro ? '#92400e' : '#0369a1'} />
+              </linearGradient>
+              <filter id="ns"><feDropShadow dx="0" dy="2" stdDeviation="2" floodColor={isPro ? '#fbbf24' : '#38bdf8'} floodOpacity="0.6" /></filter>
+            </defs>
+            <polygon points="15,30 3,3 27,3" fill="url(#ng)" stroke={isPro ? '#fde68a' : '#93c5fd'} strokeWidth="1.2" filter="url(#ns)" />
+            <circle cx="15" cy="8" r="2.5" fill={isPro ? '#fef3c7' : '#dbeafe'} opacity="0.7" />
+          </svg>
         </div>
 
-        {/* Wheel Container (rotates) */}
-        <div 
-          ref={wheelRef}
-          className="relative"
-          style={{ 
-            width: 280, 
-            height: 280
-          }}
-        >
-          <canvas
-            ref={canvasRef}
-            width={280}
-            height={280}
+        {/* ---- RAD (NUR dieses Element dreht sich) ---- */}
+        <div ref={wheelRef} className="absolute" style={{ width: 280, height: 280, top: '50%', left: '50%', marginTop: -140, marginLeft: -140, borderRadius: '50%' }}>
+          <canvas ref={canvasRef}
+            style={{ width: 280, height: 280, display: 'block', borderRadius: '50%' }}
             onClick={!spinning && canSpin ? handleSpin : undefined}
-            className={`cursor-pointer ${!spinning && canSpin ? 'active:scale-95' : ''} transition-transform`}
+            className={!spinning && canSpin ? 'cursor-pointer' : ''}
           />
         </div>
       </div>
 
       {/* Spin Button */}
-      <button
-        onClick={handleSpin}
-        disabled={spinning || !canSpin}
-        className={`mt-2 px-10 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 ${
+      <button onClick={handleSpin} disabled={spinning || !canSpin}
+        className={`mt-3 px-10 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all active:scale-95 ${
           spinning || !canSpin
             ? 'bg-white/5 text-white/30 border border-white/5 cursor-not-allowed'
             : isPro
-              ? 'bg-gradient-to-r from-yellow-500 to-amber-600 text-black border border-yellow-400/50 shadow-[0_0_30px_rgba(251,191,36,0.3)]'
-              : 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white border border-cyan-400/30 shadow-[0_0_30px_rgba(56,189,248,0.3)]'
+              ? 'bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-400 text-amber-950 border border-amber-300/50 shadow-[0_0_25px_rgba(251,191,36,0.2)]'
+              : 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white border border-cyan-400/30 shadow-[0_0_25px_rgba(56,189,248,0.2)]'
         }`}
       >
         {spinning ? '🎰 Dreht...' : canSpin ? '🎰 DREHEN!' : '✅ Morgen wieder'}
       </button>
 
-      {/* Result Display */}
+      {/* Ergebnis */}
       {showResult && result && (
         <div className={`mt-4 mx-6 p-4 rounded-2xl border text-center tab-enter ${
-          isPro 
-            ? 'bg-neon-gold/10 border-neon-gold/30' 
-            : 'bg-neon-green/10 border-neon-green/30'
+          isPro ? 'bg-amber-950/25 border-amber-500/25' : 'bg-neon-green/10 border-neon-green/30'
         }`}>
-          <p className="text-2xl mb-1">
+          <p className="text-3xl mb-1.5">
             {result.winner.reward_type === 'cash' ? '💰' : result.winner.reward_type === 'crypto' ? '🪙' : '⚡'}
           </p>
-          <p className={`text-sm font-black ${isPro ? 'text-neon-gold' : 'text-neon-green'}`}>
-            {result.winner.label}
+          <p className={`text-base font-black ${isPro ? 'text-amber-300' : 'text-neon-green'}`}>
+            {getCryptoDisplay(result.winner.label)}
           </p>
-          <p className="text-[10px] text-[var(--text-dim)] mt-1">
-            {result.description}
-          </p>
+          <p className="text-[10px] text-[var(--text-dim)] mt-1.5">{result.description}</p>
         </div>
       )}
 
-      {/* Free User: Pro Teaser */}
+      {/* Free: Pro Teaser */}
       {!isPro && (
-        <div className="mt-4 mx-6 p-3 rounded-2xl bg-neon-gold/5 border border-neon-gold/20 text-center">
-          <p className="text-[10px] font-black text-neon-gold uppercase tracking-widest">
-            ⭐ Daily Login PRO — x2 Gewinn
-          </p>
-          <p className="text-[9px] text-[var(--text-dim)] mt-1">
-            Pro-Spieler erhalten ein goldenes Glücksrad mit doppelten Gewinnen!
-          </p>
+        <div className="mt-4 mx-6 p-3 rounded-2xl bg-amber-950/15 border border-amber-600/15 text-center">
+          <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest">⭐ Daily Login PRO — x2 Gewinn</p>
+          <p className="text-[9px] text-[var(--text-dim)] mt-1">Pro-Spieler erhalten ein goldenes Glücksrad mit doppelten Gewinnen!</p>
         </div>
       )}
 
