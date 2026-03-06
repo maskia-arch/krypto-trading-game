@@ -382,10 +382,52 @@ function setupCronJobs(bot) {
       if (db.updateDailySnapshots) {
         await db.updateDailySnapshots();
       }
+
+      // v0.3.30: Abgelaufene Temp Features aufräumen
+      if (db.cleanupExpiredTempFeatures) {
+        const cleaned = await db.cleanupExpiredTempFeatures();
+        if (cleaned > 0) console.log(`🧹 ${cleaned} abgelaufene Temp-Features entfernt`);
+      }
     } catch (err) {
       console.error(err);
     }
   }, BERLIN);
+
+  // v0.3.30: Daily Login Bonus Benachrichtigung um 0:05 Berlin-Zeit
+  cron.schedule('5 0 * * *', async () => {
+    try {
+      const { data: users } = await db.supabase
+        .from('profiles')
+        .select('telegram_id, username, notifications_enabled');
+      if (!users) return;
+
+      for (const user of users) {
+        if (user.notifications_enabled === false) continue;
+        try {
+          await bot.api.sendMessage(user.telegram_id,
+            `🎰 <b>Dein Daily Bonus ist bereit!</b>\n\n` +
+            `Drehe jetzt am Glücksrad und sichere dir deinen täglichen Gewinn! ` +
+            `Öffne die App und tippe oben auf das Glücksrad-Symbol.`,
+            { parse_mode: 'HTML' }
+          );
+        } catch (e) {}
+      }
+    } catch (err) {
+      console.error('Daily Spin Notification Error:', err);
+    }
+  }, BERLIN);
+
+  // v0.3.30: Copy Trading — Abgelaufene Abos expiren (alle 5 Minuten)
+  setInterval(async () => {
+    try {
+      if (db.expireCopySubscriptions) {
+        const count = await db.expireCopySubscriptions();
+        if (count > 0) console.log(`📋 ${count} Copy-Abos abgelaufen`);
+      }
+    } catch (err) {
+      console.error('Copy Expiry Error:', err);
+    }
+  }, 5 * 60 * 1000);
 }
 
 module.exports = { setupCronJobs };

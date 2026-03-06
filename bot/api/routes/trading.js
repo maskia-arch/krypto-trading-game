@@ -35,6 +35,24 @@ router.get('/leverage/positions', async (req, res) => {
       limits = TRADING_LIMITS.FREE;
     }
 
+    // v0.3.30: Temporäre Features (Glücksrad) einbeziehen
+    let tempFeatures = [];
+    if (!effectivelyPro && db.getActiveTempFeatures) {
+      try {
+        tempFeatures = await db.getActiveTempFeatures(profile.id);
+        const featureKeys = tempFeatures.map(f => f.feature_key);
+        
+        if (featureKeys.includes('zocker_mode')) {
+          limits = { ...limits, MAX_LEVERAGE: 50, ZOCKER_LEVERAGES: [20, 50], ZOCKER_ENABLED: true };
+        }
+        if (featureKeys.includes('multi_positions')) {
+          limits = { ...limits, MAX_POSITIONS: 3 };
+        }
+      } catch (e) {
+        console.error('Temp features check error:', e.message);
+      }
+    }
+
     res.json({ 
       positions,
       policy: {
@@ -256,6 +274,28 @@ router.post('/', async (req, res) => {
     if (tradeResult && db.checkAndGrantAchievements) {
       const unlocked = await db.checkAndGrantAchievements(profile.id);
       tradeResult.new_achievements = unlocked;
+    }
+
+    // v0.3.30: Copy Trading — Kopierte Trades ausführen
+    if (tradeResult && db.executeCopyTrades) {
+      try {
+        // Berechne den prozentualen Anteil des Trades am Gesamtvermögen
+        const totalBalance = Number(profile.balance) + Number(amount_eur || 0);
+        const tradePercentage = action === 'buy' 
+          ? Number(amount_eur) / totalBalance
+          : Number(amount_crypto) * price / (Number(profile.balance) + Number(amount_crypto) * price);
+        
+        const copyResults = await db.executeCopyTrades(profile.id, symbol, action, tradePercentage, price);
+        
+        if (copyResults.length > 0 && req.bot) {
+          req.bot.api.sendMessage(profile.telegram_id,
+            `📋 ${copyResults.length} Kopierer haben deinen ${action === 'buy' ? 'Kauf' : 'Verkauf'} nachgemacht.`,
+            { parse_mode: 'HTML' }
+          ).catch(() => {});
+        }
+      } catch (copyErr) {
+        console.error('Copy Trade Error (non-fatal):', copyErr.message);
+      }
     }
 
     res.json(tradeResult || { success: true });

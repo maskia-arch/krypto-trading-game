@@ -4,6 +4,7 @@ import useStore from '../../lib/store';
 export default function Header() {
   const { profile, version, setTab } = useStore();
   const balance = Number(profile?.balance || 0);
+  const canSpin = useStore(s => s.canSpin);
   
   const [timeLeft, setTimeLeft] = useState('');
   const [isMonday, setIsMonday] = useState(false);
@@ -75,6 +76,19 @@ export default function Header() {
             </div>
           </div>
           
+          {/* Center: Glücksrad Button */}
+          <button
+            onClick={() => window.__setShowSpin && window.__setShowSpin(true)}
+            className="relative shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-neon-gold/20 to-neon-gold/5 border border-neon-gold/30 flex items-center justify-center active:scale-90 transition-all shadow-[0_0_15px_rgba(251,191,36,0.1)] group"
+            title="Glücksrad"
+          >
+            <span className="text-lg group-hover:animate-spin">🎰</span>
+            {/* Notification dot - shows when spin is available */}
+            {canSpin && (
+              <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-neon-green border border-black animate-pulse shadow-[0_0_6px_rgba(34,214,138,0.6)]"></div>
+            )}
+          </button>
+
           {/* Right: Balance Display */}
           <div className="text-right shrink-0">
             <p className={`text-base font-mono font-bold tabular-nums transition-all duration-500 ${

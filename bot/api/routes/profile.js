@@ -50,12 +50,33 @@ router.get('/', async (req, res) => {
       achievements = await db.getUserAchievements(profile.id);
     }
 
+    // v0.3.30: Temp Features laden
+    let tempFeatures = [];
+    if (db.getActiveTempFeatures) {
+      try { tempFeatures = await db.getActiveTempFeatures(profile.id); } catch(e) {}
+    }
+
+    // v0.3.30: Aktive Copy Subscriptions laden
+    let copySubs = [];
+    if (db.getMyCopySubscriptions) {
+      try { copySubs = await db.getMyCopySubscriptions(profile.id); } catch(e) {}
+    }
+
+    // v0.3.30: Spin-Status laden
+    let canSpin = false;
+    if (db.canSpinToday) {
+      try { canSpin = await db.canSpinToday(profile.id); } catch(e) {}
+    }
+
     res.json({ 
       profile, 
       assets, 
       prices,
       achievements,
-      collectibles 
+      collectibles,
+      tempFeatures,
+      copySubs,
+      canSpin
     });
   } catch (err) {
     res.status(500).json({ error: 'Fehler beim Abrufen des Profils' });

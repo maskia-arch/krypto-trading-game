@@ -110,4 +110,16 @@ export const api = {
   }),
   closeLeverage:          (position_id) => apiCall('/api/leverage/close', { method: 'POST', body: JSON.stringify({ position_id }) }),
   createAlert:            (symbol, target_price, direction) => apiCall('/api/alert', { method: 'POST', body: JSON.stringify({ symbol, target_price, direction }) }),
+  
+  // v0.3.30: Copy Trading
+  getCopyCanCopy:         () => apiCall('/api/copy/can-copy'),
+  copySubscribe:          (target_telegram_id, budget, duration_hours) => apiCall('/api/copy/subscribe', { method: 'POST', body: JSON.stringify({ target_telegram_id, budget, duration_hours }) }),
+  getCopySubs:            () => apiCall('/api/copy/my-subs'),
+  cancelCopySub:          (subscription_id) => apiCall('/api/copy/cancel', { method: 'POST', body: JSON.stringify({ subscription_id }) }),
+  
+  // v0.3.30: Daily Spin (Glücksrad)
+  getSpinConfig:          () => apiCall('/api/spin/config'),
+  spinWheel:              () => apiCall('/api/spin/spin', { method: 'POST' }),
+  getSpinHistory:         () => apiCall('/api/spin/history'),
+  getTempFeatures:        () => apiCall('/api/spin/temp-features'),
 };

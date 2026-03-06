@@ -1,10 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import useStore from '../lib/store';
+import CopyTraderModal from '../components/modals/CopyTraderModal';
+import { getTelegramId } from '../lib/api';
 
 export default function PublicProfileView({ userId, onClose }) {
   const { loadPublicProfile } = useStore();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const myId = getTelegramId();
 
   useEffect(() => {
     if (!userId) return;
@@ -106,6 +110,28 @@ export default function PublicProfileView({ userId, onClose }) {
           </div>
         </div>
       </section>
+
+      {/* Copy Trader Button — nur anzeigen wenn nicht das eigene Profil */}
+      {Number(userId) !== Number(myId) && (
+        <section className="px-1">
+          <button
+            onClick={() => setShowCopyModal(true)}
+            className="w-full py-3.5 rounded-2xl font-black text-xs uppercase tracking-widest bg-gradient-to-r from-cyan-500 to-blue-600 text-white border border-cyan-400/30 shadow-[0_0_20px_rgba(56,189,248,0.15)] active:scale-95 transition-all flex items-center justify-center gap-2"
+          >
+            <span>📋</span>
+            <span>Trader Kopieren</span>
+          </button>
+        </section>
+      )}
+
+      {/* Copy Trader Modal */}
+      {showCopyModal && (
+        <CopyTraderModal
+          targetUserId={userId}
+          targetUsername={profileInfo.username || 'Trader'}
+          onClose={() => setShowCopyModal(false)}
+        />
+      )}
 
       {/* Besitztümer */}
       <section className="space-y-3 pt-2">

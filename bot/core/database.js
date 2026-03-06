@@ -14,6 +14,8 @@ Object.assign(db, require('./db/realEstate')(db));
 Object.assign(db, require('./db/pro')(db));
 Object.assign(db, require('./db/achievements')(db));
 Object.assign(db, require('./db/leverage')(db));
+Object.assign(db, require('./db/copyTrading')(db));
+Object.assign(db, require('./db/spin')(db));
 
 // --- HELPER FUNKTIONEN ---
 

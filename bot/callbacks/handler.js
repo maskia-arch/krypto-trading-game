@@ -366,12 +366,40 @@ module.exports = async (ctx) => {
       .text('👥 Alle User', 'admin_users').text('💰 Fee Pool', 'admin_pool').row()
       .text(`⚠️ Löschanträge (${deleteRequests || 0})`, 'admin_deletions').row()
       .text('🏆 Season starten', 'admin_new_season').text('🎁 Season auswerten', 'admin_end_season').row()
-      .text('📊 Preis-Check', 'admin_prices').text('🔄 Preise fetchen', 'admin_fetch');
+      .text('📊 Preis-Check', 'admin_prices').text('🔄 Preise fetchen', 'admin_fetch').row()
+      .text('🎰 Glücksrad Config', 'admin_spin_config');
     return ctx.editMessageText(
       `🔧 <b>ADMIN DASHBOARD</b> (v${version})\n\n` +
       `👥 User: ${stats.userCount}\n📝 Transaktionen: ${stats.txCount}\n💰 Fee Pool: ${pool.toLocaleString('de-DE', { minimumFractionDigits: 2 })}€`,
       { parse_mode: 'HTML', reply_markup: kb }
     );
+  }
+
+  // v0.3.30: Glücksrad Admin Config
+  if (data === 'admin_spin_config') {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    
+    try {
+      const freeConfig = await db.getSpinConfig('free');
+      const proConfig = await db.getSpinConfig('pro');
+      
+      let text = `🎰 <b>GLÜCKSRAD KONFIGURATION</b>\n\n`;
+      text += `<b>FREE Rad (${freeConfig.length} Felder):</b>\n`;
+      freeConfig.forEach(c => {
+        text += `  ${c.label} — ${(Number(c.probability) * 100).toFixed(1)}% [${c.reward_type}]\n`;
+      });
+      text += `\n<b>PRO Rad (${proConfig.length} Felder):</b>\n`;
+      proConfig.forEach(c => {
+        text += `  ${c.label} — ${(Number(c.probability) * 100).toFixed(1)}% [${c.reward_type}]\n`;
+      });
+      text += `\n<i>Konfiguration über API oder Supabase-Dashboard ändern.</i>`;
+      
+      const kb = new InlineKeyboard().text('🔙 Dashboard', 'admin_back');
+      return ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
+    } catch (e) {
+      return ctx.editMessageText(`❌ Fehler: ${e.message}`);
+    }
   }
 
   // --- PRO INFO MODAL (für LeveragePanel) ---

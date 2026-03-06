@@ -12,6 +12,7 @@ import RankView from './views/RankView';
 import SettingsView from './views/SettingsView';
 import ProfileView from './views/ProfileView';
 import AffiliateView from './views/AffiliateView';
+import SpinWheel from './components/modals/SpinWheel';
 
 const TABS = [
   { id: 'wallet', label: 'Wallet', icon: '💳' },
@@ -34,6 +35,7 @@ export default function App() {
   } = useStore();
 
   const [authChecking, setAuthChecking] = useState(true);
+  const [showSpin, setShowSpin] = useState(false);
   const lastKnownVersion = localStorage.getItem('vt_last_version') || '...';
   const profileRef = useRef(profile);
 
@@ -110,6 +112,12 @@ export default function App() {
     }
   }, [tab, setTab]);
 
+  // v0.3.30: Listen for Glücksrad trigger from Header
+  useEffect(() => {
+    window.__setShowSpin = setShowSpin;
+    return () => { delete window.__setShowSpin; };
+  }, []);
+
   if (authChecking || (loading && !profile && !error)) {
     return (
       <div className="flex h-screen flex-col items-center justify-center text-white bg-[#06080f] space-y-4">
@@ -179,6 +187,11 @@ export default function App() {
       <div className="flex-none">
         <Navbar tabs={TABS} currentTab={tab} onTabChange={setTab} />
       </div>
+
+      {/* v0.3.30: Glücksrad Modal */}
+      {showSpin && (
+        <SpinWheel onClose={() => setShowSpin(false)} />
+      )}
 
       {toast && (
         <div className={`fixed top-4 left-4 right-4 z-[200] p-3 rounded-xl text-xs font-bold text-center backdrop-blur-xl border transition-all ${

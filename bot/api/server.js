@@ -11,6 +11,8 @@ const profileRoutes = require('./routes/profile');
 const economyRoutes = require('./routes/economy');
 const collectiblesRoutes = require('./routes/collectibles');
 const leverageRoutes = require('./routes/leverage');
+const copyTradingRoutes = require('./routes/copyTrading');
+const spinRoutes = require('./routes/spin');
 
 function getGameVersion() {
   try {
@@ -110,6 +112,8 @@ function setupApi(bot) {
   app.use('/api/economy/collectibles', collectiblesRoutes);
   app.use('/api/economy', economyRoutes);
   app.use('/api/leverage', leverageRoutes);
+  app.use('/api/copy', copyTradingRoutes);
+  app.use('/api/spin', spinRoutes);
 
   app.use((err, req, res, next) => {
     console.error(err.stack);

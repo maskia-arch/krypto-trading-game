@@ -139,3 +139,29 @@ input:focus {
 
 /* Safe Area Utility */
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+
+/* v0.3.30: Spin Wheel Animations */
+@keyframes spinPulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.2); }
+}
+.spin-glow { animation: spinPulse 2s ease-in-out infinite; }
+
+@keyframes resultPopIn {
+  0% { opacity: 0; transform: scale(0.5); }
+  60% { transform: scale(1.1); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.result-pop { animation: resultPopIn 0.5s cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+@keyframes goldShimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+.gold-shimmer {
+  background: linear-gradient(90deg, #fbbf24 0%, #fde68a 25%, #fbbf24 50%, #f59e0b 75%, #fbbf24 100%);
+  background-size: 200% auto;
+  animation: goldShimmer 3s linear infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

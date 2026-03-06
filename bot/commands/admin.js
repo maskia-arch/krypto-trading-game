@@ -29,7 +29,9 @@ async function dashboard(ctx) {
       .text('🎁 Season auswerten', 'admin_end_season')
       .row()
       .text('📊 Preis-Check', 'admin_prices')
-      .text('🔄 Preise fetchen', 'admin_fetch');
+      .text('🔄 Preise fetchen', 'admin_fetch')
+      .row()
+      .text('🎰 Glücksrad Config', 'admin_spin_config');
 
     return ctx.reply(
       `🔧 <b>ADMIN DASHBOARD</b> (v${VERSION})\n\n` +
