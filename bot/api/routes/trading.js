@@ -35,24 +35,6 @@ router.get('/leverage/positions', async (req, res) => {
       limits = TRADING_LIMITS.FREE;
     }
 
-    // v0.3.30: Temporäre Features (Glücksrad) einbeziehen
-    let tempFeatures = [];
-    if (!effectivelyPro && db.getActiveTempFeatures) {
-      try {
-        tempFeatures = await db.getActiveTempFeatures(profile.id);
-        const featureKeys = tempFeatures.map(f => f.feature_key);
-        
-        if (featureKeys.includes('zocker_mode')) {
-          limits = { ...limits, MAX_LEVERAGE: 50, ZOCKER_LEVERAGES: [20, 50], ZOCKER_ENABLED: true };
-        }
-        if (featureKeys.includes('multi_positions')) {
-          limits = { ...limits, MAX_POSITIONS: 3 };
-        }
-      } catch (e) {
-        console.error('Temp features check error:', e.message);
-      }
-    }
-
     res.json({ 
       positions,
       policy: {
@@ -67,8 +49,7 @@ router.get('/leverage/positions', async (req, res) => {
         is_monday: isMonday,
         is_pro: effectivelyPro,
         isPro: effectivelyPro,
-        isAdmin: !!isAdmin,
-        tempFeatures: tempFeatures.map(f => f.feature_key)
+        isAdmin: !!isAdmin
       }
     });
   } catch (err) {
@@ -76,7 +57,7 @@ router.get('/leverage/positions', async (req, res) => {
   }
 });
 
-// 3. Hebel-Trade eröffnen (inkl. Pro-Features + Temp-Features)
+// 3. Hebel-Trade eröffnen (inkl. Pro-Features)
 router.post('/leverage/open', async (req, res) => {
   const { symbol, direction, collateral, leverage, stop_loss, take_profit, limit_price, trailing_stop } = req.body;
 
@@ -85,27 +66,13 @@ router.post('/leverage/open', async (req, res) => {
     const price = await db.getCurrentPrice(symbol);
     if (!price) return res.status(500).json({ error: 'Kurs nicht verfügbar' });
 
-    let isPro = req.permissions.isPro || req.permissions.isAdmin;
-    
-    // v0.3.31: Temp Features für Free User berücksichtigen
-    let tempFeatureKeys = [];
-    if (!isPro && db.getActiveTempFeatures) {
-      try {
-        const tempFeatures = await db.getActiveTempFeatures(profile.id);
-        tempFeatureKeys = tempFeatures.map(f => f.feature_key);
-      } catch (e) {}
-    }
-
-    const hasZocker = isPro || tempFeatureKeys.includes('zocker_mode');
-    const hasTrailing = isPro || tempFeatureKeys.includes('trailing_stop');
-    const hasLimitOrders = isPro || tempFeatureKeys.includes('limit_orders');
-    const hasStopLoss = isPro || tempFeatureKeys.includes('stop_loss');
+    const isPro = req.permissions.isPro || req.permissions.isAdmin;
     
     const options = {
-      stop_loss: hasStopLoss ? stop_loss : null,
-      take_profit: hasStopLoss ? take_profit : null,
-      limit_price: hasLimitOrders ? limit_price : null,
-      trailing_stop: hasTrailing ? trailing_stop : false
+      stop_loss: isPro ? stop_loss : null,
+      take_profit: isPro ? take_profit : null,
+      limit_price: isPro ? limit_price : null,
+      trailing_stop: isPro ? trailing_stop : false
     };
 
     const position = await db.openLeveragedPosition(

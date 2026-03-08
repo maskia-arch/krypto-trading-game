@@ -387,27 +387,7 @@ function setupCronJobs(bot) {
     }
   }, { timezone: 'Europe/Berlin' });
 
-  // v0.3.31: Temp Features häufiger aufräumen (alle 30 Minuten statt nur 1x/Tag)
-  // Damit abgelaufene Features zuverlässig gesperrt werden
-  setInterval(async () => {
-    try {
-      if (db.cleanupExpiredTempFeatures) {
-        const cleaned = await db.cleanupExpiredTempFeatures();
-        if (cleaned > 0) console.log(`🧹 ${cleaned} abgelaufene Temp-Features entfernt`);
-      }
-    } catch (err) {
-      console.error('Temp Feature Cleanup Error:', err);
-    }
-  }, 30 * 60 * 1000);
-
-  // Initiales Cleanup beim Start
-  setTimeout(async () => {
-    try {
-      if (db.cleanupExpiredTempFeatures) await db.cleanupExpiredTempFeatures();
-    } catch(e) {}
-  }, 5000);
-
-  // v0.3.31: Daily Login Bonus Benachrichtigung um 0:05 Berlin-Zeit
+  // v0.3.32: Daily Login Bonus Benachrichtigung um 0:05 Berlin-Zeit
   // Explizites Timezone-Object für node-cron Kompatibilität
   cron.schedule('5 0 * * *', async () => {
     try {

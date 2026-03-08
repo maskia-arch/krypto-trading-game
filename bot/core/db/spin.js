@@ -9,31 +9,24 @@ module.exports = (db) => ({
 
     if (!profile || !profile.last_spin) return true;
 
-    // Aktuelle Berlin-Zeit Mitternacht berechnen
+    // Berliner Datum heute
     const now = new Date();
-    // Berliner Datum-String holen (YYYY-MM-DD)
-    const berlinDate = new Intl.DateTimeFormat('en-CA', { 
+    const berlinToday = new Intl.DateTimeFormat('en-CA', { 
       timeZone: 'Europe/Berlin', 
       year: 'numeric', month: '2-digit', day: '2-digit' 
     }).format(now);
     
-    // Berliner Stunde/Minute holen
-    const berlinHour = Number(new Intl.DateTimeFormat('en-US', {
-      hour: 'numeric', hour12: false, timeZone: 'Europe/Berlin'
-    }).format(now));
-    
-    // last_spin Datum in Berlin-Zeit
+    // Berliner Datum des letzten Spins
     const lastSpin = new Date(profile.last_spin);
-    const lastSpinBerlinDate = new Intl.DateTimeFormat('en-CA', { 
+    const lastSpinBerlin = new Intl.DateTimeFormat('en-CA', { 
       timeZone: 'Europe/Berlin', 
       year: 'numeric', month: '2-digit', day: '2-digit' 
     }).format(lastSpin);
 
-    // Kann drehen wenn das Berlin-Datum heute anders ist als beim letzten Spin
-    return berlinDate !== lastSpinBerlinDate;
+    return berlinToday !== lastSpinBerlin;
   },
 
-  // Glücksrad-Konfiguration laden (für ein Tier)
+  // Glücksrad-Konfiguration laden
   async getSpinConfig(tier = 'free') {
     const { data } = await db.supabase
       .from('spin_config')
@@ -44,7 +37,7 @@ module.exports = (db) => ({
     return data || [];
   },
 
-  // Gewinnermittlung (Server-seitig, manipulationssicher)
+  // Drehen (Server-seitig, manipulationssicher)
   async spinWheel(profileId, tier = 'free') {
     const config = await this.getSpinConfig(tier);
     if (!config || config.length === 0) throw new Error('Kein Glücksrad konfiguriert');
@@ -65,7 +58,6 @@ module.exports = (db) => ({
       }
     }
 
-    // Profil laden
     const { data: profile } = await db.supabase
       .from('profiles')
       .select('id, balance, bonus_received')
@@ -76,7 +68,7 @@ module.exports = (db) => ({
 
     let rewardDescription = '';
 
-    // ===== CASH GEWINN =====
+    // ===== CASH =====
     if (winner.reward_type === 'cash') {
       const amount = Number(winner.reward_value);
       await db.supabase
@@ -94,9 +86,9 @@ module.exports = (db) => ({
         details: `Glücksrad Gewinn: ${amount}€`
       });
 
-      rewardDescription = `${amount.toLocaleString('de-DE')}€ auf dein Konto`;
+      rewardDescription = `${amount.toLocaleString('de-DE')}€ auf dein Konto gutgeschrieben!`;
     } 
-    // ===== CRYPTO GEWINN =====
+    // ===== CRYPTO =====
     else if (winner.reward_type === 'crypto') {
       const symbol = winner.reward_symbol;
       const amount = Number(winner.reward_value);
@@ -129,76 +121,7 @@ module.exports = (db) => ({
         details: `Glücksrad Gewinn: ${amount} ${symbol}`
       });
 
-      rewardDescription = `${amount} ${symbol} auf dein Spot-Konto`;
-    } 
-    // ===== FEATURE GEWINN =====
-    else if (winner.reward_type === 'feature') {
-      const featureKey = winner.reward_detail;
-      if (!featureKey) {
-        rewardDescription = 'Feature-Gewinn (nicht konfiguriert)';
-      } else {
-        const expiresAt = new Date();
-        expiresAt.setHours(expiresAt.getHours() + 24);
-
-        // v0.3.31: Robuster Upsert — abgelaufene UND aktive Rows berücksichtigen
-        // Erst schauen ob es IRGENDEINEN Row für dieses Feature gibt (egal ob abgelaufen)
-        const { data: existing } = await db.supabase
-          .from('temp_features')
-          .select('id, expires_at')
-          .eq('profile_id', profileId)
-          .eq('feature_key', featureKey)
-          .maybeSingle();
-
-        if (existing) {
-          // Row existiert (aktiv oder abgelaufen) → Update mit neuem Ablaufdatum
-          const { error: updateErr } = await db.supabase
-            .from('temp_features')
-            .update({ 
-              expires_at: expiresAt.toISOString(), 
-              granted_at: new Date().toISOString(),
-              source: 'spin'
-            })
-            .eq('id', existing.id);
-          
-          if (updateErr) {
-            console.error('Temp feature update error:', updateErr);
-          }
-        } else {
-          // Kein Row vorhanden → Insert
-          const { error: insertErr } = await db.supabase
-            .from('temp_features')
-            .insert({
-              profile_id: profileId,
-              feature_key: featureKey,
-              expires_at: expiresAt.toISOString(),
-              source: 'spin'
-            });
-          
-          if (insertErr) {
-            console.error('Temp feature insert error:', insertErr);
-            // Fallback: Vielleicht Race Condition, versuche Update
-            await db.supabase
-              .from('temp_features')
-              .update({ 
-                expires_at: expiresAt.toISOString(), 
-                granted_at: new Date().toISOString(),
-                source: 'spin'
-              })
-              .eq('profile_id', profileId)
-              .eq('feature_key', featureKey);
-          }
-        }
-
-        const featureNames = {
-          'zocker_mode': 'Zocker-Modus (x20 & x50 Hebel)',
-          'trailing_stop': 'Trailing-Stop',
-          'limit_orders': 'Limit-Orders',
-          'multi_positions': '3 Positionen gleichzeitig',
-          'stop_loss': 'Stop-Loss / Take-Profit'
-        };
-
-        rewardDescription = `24h ${featureNames[featureKey] || featureKey} freigeschaltet!`;
-      }
+      rewardDescription = `${amount} ${symbol} auf dein Spot-Konto gutgeschrieben!`;
     }
 
     // Spin protokollieren
@@ -212,7 +135,7 @@ module.exports = (db) => ({
       reward_detail: winner.reward_detail
     });
 
-    // last_spin aktualisieren
+    // last_spin updaten
     await db.supabase
       .from('profiles')
       .update({ last_spin: new Date().toISOString() })
@@ -225,7 +148,6 @@ module.exports = (db) => ({
         reward_type: winner.reward_type,
         reward_value: winner.reward_value,
         reward_symbol: winner.reward_symbol,
-        reward_detail: winner.reward_detail,
         color: winner.color
       },
       description: rewardDescription,
@@ -238,45 +160,7 @@ module.exports = (db) => ({
     };
   },
 
-  // Aktive Temp Features laden
-  async getActiveTempFeatures(profileId) {
-    const { data } = await db.supabase
-      .from('temp_features')
-      .select('*')
-      .eq('profile_id', profileId)
-      .gt('expires_at', new Date().toISOString());
-    return data || [];
-  },
-
-  // Prüfe einzelnes Temp-Feature
-  async hasTempFeature(profileId, featureKey) {
-    const { data } = await db.supabase
-      .from('temp_features')
-      .select('id')
-      .eq('profile_id', profileId)
-      .eq('feature_key', featureKey)
-      .gt('expires_at', new Date().toISOString())
-      .maybeSingle();
-    return !!data;
-  },
-
-  // Abgelaufene Temp Features aufräumen
-  async cleanupExpiredTempFeatures() {
-    const { data: expired } = await db.supabase
-      .from('temp_features')
-      .select('id')
-      .lte('expires_at', new Date().toISOString());
-
-    if (expired && expired.length > 0) {
-      await db.supabase
-        .from('temp_features')
-        .delete()
-        .in('id', expired.map(e => e.id));
-    }
-    return (expired || []).length;
-  },
-
-  // Admin: Spin Config updaten
+  // Admin: Config updaten
   async updateSpinConfig(configId, updates) {
     const { error } = await db.supabase
       .from('spin_config')
@@ -285,7 +169,7 @@ module.exports = (db) => ({
     if (error) throw error;
   },
 
-  // Admin: Neues Spin-Feld hinzufügen
+  // Admin: Neues Feld
   async addSpinConfig(configData) {
     const { data, error } = await db.supabase
       .from('spin_config')
@@ -296,7 +180,7 @@ module.exports = (db) => ({
     return data;
   },
 
-  // Admin: Spin-Feld löschen
+  // Admin: Feld löschen
   async deleteSpinConfig(configId) {
     const { error } = await db.supabase
       .from('spin_config')

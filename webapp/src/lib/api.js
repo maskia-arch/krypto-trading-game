@@ -121,5 +121,4 @@ export const api = {
   getSpinConfig:          () => apiCall('/api/spin/config'),
   spinWheel:              () => apiCall('/api/spin/spin', { method: 'POST' }),
   getSpinHistory:         () => apiCall('/api/spin/history'),
-  getTempFeatures:        () => apiCall('/api/spin/temp-features'),
 };

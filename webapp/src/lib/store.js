@@ -24,7 +24,6 @@ const useStore = create((set, get) => ({
   leverageHistory: [],
   closingIds: new Set(),
   isClosing: false,
-  tempFeatures: [],
   copySubs: [],
   canSpin: false,
 
@@ -107,7 +106,6 @@ const useStore = create((set, get) => ({
         prices: priceMap,
         prevPrices: Object.keys(get().prices).length > 0 ? get().prices : priceMap,
         achievements: data.achievements || [],
-        tempFeatures: data.tempFeatures || [],
         copySubs: data.copySubs || [],
         canSpin: !!data.canSpin,
         loading: false,

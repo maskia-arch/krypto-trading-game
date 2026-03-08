@@ -377,7 +377,7 @@ export default function SpinWheel({ onClose }) {
           isPro ? 'bg-amber-950/25 border-amber-500/25' : 'bg-neon-green/10 border-neon-green/30'
         }`}>
           <p className="text-3xl mb-1.5">
-            {result.winner.reward_type === 'cash' ? '💰' : result.winner.reward_type === 'crypto' ? '🪙' : '⚡'}
+            {result.winner.reward_type === 'crypto' ? '🪙' : '💰'}
           </p>
           <p className={`text-base font-black ${isPro ? 'text-amber-300' : 'text-neon-green'}`}>
             {getCryptoDisplay(result.winner.label)}
@@ -389,8 +389,8 @@ export default function SpinWheel({ onClose }) {
       {/* Free: Pro Teaser */}
       {!isPro && (
         <div className="mt-4 mx-6 p-3 rounded-2xl bg-amber-950/15 border border-amber-600/15 text-center">
-          <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest">⭐ Daily Login PRO — x2 Gewinn</p>
-          <p className="text-[9px] text-[var(--text-dim)] mt-1">Pro-Spieler erhalten ein goldenes Glücksrad mit doppelten Gewinnen!</p>
+          <p className="text-[10px] font-black text-amber-400 uppercase tracking-widest">⭐ Daily Login PRO — Bis zu 5x mehr Gewinn</p>
+          <p className="text-[9px] text-[var(--text-dim)] mt-1">Pro-Spieler erhalten ein goldenes Glücksrad mit bis zu 5-fachen Gewinnen!</p>
         </div>
       )}
 

@@ -50,12 +50,6 @@ router.get('/', async (req, res) => {
       achievements = await db.getUserAchievements(profile.id);
     }
 
-    // v0.3.30: Temp Features laden
-    let tempFeatures = [];
-    if (db.getActiveTempFeatures) {
-      try { tempFeatures = await db.getActiveTempFeatures(profile.id); } catch(e) {}
-    }
-
     // v0.3.30: Aktive Copy Subscriptions laden
     let copySubs = [];
     if (db.getMyCopySubscriptions) {
@@ -74,7 +68,6 @@ router.get('/', async (req, res) => {
       prices,
       achievements,
       collectibles,
-      tempFeatures,
       copySubs,
       canSpin
     });
