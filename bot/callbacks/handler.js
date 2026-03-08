@@ -375,7 +375,7 @@ module.exports = async (ctx) => {
     );
   }
 
-  // v0.3.30: Glücksrad Admin Config
+  // v0.3.31: Glücksrad Admin — Hauptmenü
   if (data === 'admin_spin_config') {
     if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
     await ctx.answerCallbackQuery();
@@ -385,21 +385,191 @@ module.exports = async (ctx) => {
       const proConfig = await db.getSpinConfig('pro');
       
       let text = `🎰 <b>GLÜCKSRAD KONFIGURATION</b>\n\n`;
-      text += `<b>FREE Rad (${freeConfig.length} Felder):</b>\n`;
-      freeConfig.forEach(c => {
-        text += `  ${c.label} — ${(Number(c.probability) * 100).toFixed(1)}% [${c.reward_type}]\n`;
-      });
-      text += `\n<b>PRO Rad (${proConfig.length} Felder):</b>\n`;
-      proConfig.forEach(c => {
-        text += `  ${c.label} — ${(Number(c.probability) * 100).toFixed(1)}% [${c.reward_type}]\n`;
-      });
-      text += `\n<i>Konfiguration über API oder Supabase-Dashboard ändern.</i>`;
       
-      const kb = new InlineKeyboard().text('🔙 Dashboard', 'admin_back');
+      text += `<b>🔵 FREE Rad (${freeConfig.length} Felder):</b>\n`;
+      freeConfig.forEach((c, i) => {
+        text += `  ${i+1}. ${c.label} — ${(Number(c.probability) * 100).toFixed(1)}% [${c.reward_type}]\n`;
+      });
+      
+      text += `\n<b>🟡 PRO Rad (${proConfig.length} Felder):</b>\n`;
+      proConfig.forEach((c, i) => {
+        text += `  ${i+1}. ${c.label} — ${(Number(c.probability) * 100).toFixed(1)}% [${c.reward_type}]\n`;
+      });
+      
+      const kb = new InlineKeyboard()
+        .text('🔵 Free Felder bearbeiten', 'spin_edit_tier:free').row()
+        .text('🟡 Pro Felder bearbeiten', 'spin_edit_tier:pro').row()
+        .text('➕ Neues Feld hinzufügen', 'spin_add_start').row()
+        .text('🔙 Dashboard', 'admin_back');
+      
       return ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
     } catch (e) {
       return ctx.editMessageText(`❌ Fehler: ${e.message}`);
     }
+  }
+
+  // v0.3.31: Felder eines Tiers anzeigen mit Bearbeiten-Buttons
+  if (data.startsWith('spin_edit_tier:')) {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    
+    const tierVal = data.split(':')[1];
+    const tierLabel = tierVal === 'pro' ? '🟡 PRO' : '🔵 FREE';
+    
+    try {
+      const config = await db.getSpinConfig(tierVal);
+      let text = `🎰 <b>${tierLabel} Glücksrad-Felder</b>\n\n`;
+      
+      config.forEach((c, i) => {
+        const val = c.reward_type === 'cash' ? `${c.reward_value}€` 
+          : c.reward_type === 'crypto' ? `${c.reward_value} ${c.reward_symbol}` 
+          : `Feature: ${c.reward_detail}`;
+        text += `<b>${i+1}.</b> ${c.label}\n   Typ: ${c.reward_type} | Wert: ${val}\n   Chance: ${(Number(c.probability)*100).toFixed(1)}% | Farbe: ${c.color}\n\n`;
+      });
+      
+      const totalProb = config.reduce((s, c) => s + Number(c.probability), 0);
+      text += `📊 Gesamt-Wahrscheinlichkeit: <b>${(totalProb * 100).toFixed(1)}%</b>`;
+      if (Math.abs(totalProb - 1.0) > 0.01) {
+        text += ` ⚠️ <i>(Sollte 100% sein!)</i>`;
+      }
+      
+      let kb = new InlineKeyboard();
+      config.forEach(c => {
+        kb.text(`✏️ ${c.label}`, `spin_edit_field:${c.id}`).text(`🗑️`, `spin_delete_field:${c.id}`).row();
+      });
+      kb.text('🔙 Zurück', 'admin_spin_config');
+      
+      return ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
+    } catch (e) {
+      return ctx.editMessageText(`❌ Fehler: ${e.message}`);
+    }
+  }
+
+  // v0.3.31: Einzelnes Feld bearbeiten — Optionen anzeigen
+  if (data.startsWith('spin_edit_field:')) {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    
+    const fieldId = Number(data.split(':')[1]);
+    
+    try {
+      const { data: field } = await db.supabase
+        .from('spin_config')
+        .select('*')
+        .eq('id', fieldId)
+        .single();
+      
+      if (!field) return ctx.editMessageText('❌ Feld nicht gefunden.');
+      
+      const val = field.reward_type === 'cash' ? `${field.reward_value}€` 
+        : field.reward_type === 'crypto' ? `${field.reward_value} ${field.reward_symbol}` 
+        : `Feature: ${field.reward_detail}`;
+      
+      const text = `✏️ <b>Feld bearbeiten: ${field.label}</b>\n\n` +
+        `Tier: <b>${field.tier.toUpperCase()}</b>\n` +
+        `Typ: <b>${field.reward_type}</b>\n` +
+        `Wert: <b>${val}</b>\n` +
+        `Chance: <b>${(Number(field.probability)*100).toFixed(1)}%</b>\n` +
+        `Farbe: <b>${field.color}</b>\n` +
+        `Aktiv: <b>${field.is_active ? 'Ja' : 'Nein'}</b>\n\n` +
+        `Wähle was du ändern möchtest:`;
+      
+      const kb = new InlineKeyboard()
+        .text('💰 Wert ändern', `spin_set_value:${fieldId}`).row()
+        .text('🎲 Chance ändern', `spin_set_prob:${fieldId}`).row()
+        .text('📝 Label ändern', `spin_set_label:${fieldId}`).row()
+        .text(field.is_active ? '🔴 Deaktivieren' : '🟢 Aktivieren', `spin_toggle:${fieldId}`).row()
+        .text('🔙 Zurück', `spin_edit_tier:${field.tier}`);
+      
+      return ctx.editMessageText(text, { parse_mode: 'HTML', reply_markup: kb });
+    } catch (e) {
+      return ctx.editMessageText(`❌ Fehler: ${e.message}`);
+    }
+  }
+
+  // v0.3.31: Feld aktivieren/deaktivieren
+  if (data.startsWith('spin_toggle:')) {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    const fieldId = Number(data.split(':')[1]);
+    
+    try {
+      const { data: field } = await db.supabase.from('spin_config').select('is_active, tier').eq('id', fieldId).single();
+      await db.supabase.from('spin_config').update({ is_active: !field.is_active }).eq('id', fieldId);
+      await ctx.answerCallbackQuery(`✅ Feld ${field.is_active ? 'deaktiviert' : 'aktiviert'}`);
+      // Zurück zur Tier-Übersicht
+      const fakeData = `spin_edit_tier:${field.tier}`;
+      ctx.callbackQuery.data = fakeData;
+      return module.exports(ctx);
+    } catch (e) {
+      return ctx.answerCallbackQuery(`❌ ${e.message}`);
+    }
+  }
+
+  // v0.3.31: Feld löschen
+  if (data.startsWith('spin_delete_field:')) {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    
+    const fieldId = Number(data.split(':')[1]);
+    const kb = new InlineKeyboard()
+      .text('✅ Ja, löschen', `spin_confirm_delete:${fieldId}`)
+      .text('❌ Abbrechen', 'admin_spin_config');
+    
+    return ctx.editMessageText(`⚠️ <b>Feld wirklich löschen?</b>\n\nDiese Aktion kann nicht rückgängig gemacht werden.`, { parse_mode: 'HTML', reply_markup: kb });
+  }
+
+  if (data.startsWith('spin_confirm_delete:')) {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    const fieldId = Number(data.split(':')[1]);
+    
+    try {
+      await db.deleteSpinConfig(fieldId);
+      await ctx.answerCallbackQuery('✅ Gelöscht');
+      // Zurück zum Hauptmenü
+      ctx.callbackQuery.data = 'admin_spin_config';
+      return module.exports(ctx);
+    } catch (e) {
+      return ctx.answerCallbackQuery(`❌ ${e.message}`);
+    }
+  }
+
+  // v0.3.31: Wert/Chance/Label setzen — Reply-Nachrichten
+  if (data.startsWith('spin_set_value:') || data.startsWith('spin_set_prob:') || data.startsWith('spin_set_label:')) {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    
+    const parts = data.split(':');
+    const action = parts[0].replace('spin_', '');
+    const fieldId = parts[1];
+    
+    let promptText = '';
+    if (action === 'set_value') {
+      promptText = `💰 <b>Neuen Wert eingeben</b>\n\nAntworte mit dem neuen Wert (Zahl).\nBeispiel: 500 (für 500€) oder 0.005 (für Crypto)\n\n🔑 Feld-ID: <code>SPIN_VALUE:${fieldId}</code>`;
+    } else if (action === 'set_prob') {
+      promptText = `🎲 <b>Neue Gewinnchance eingeben</b>\n\nAntworte mit der Chance in Prozent.\nBeispiel: 15 (für 15%)\n\n🔑 Feld-ID: <code>SPIN_PROB:${fieldId}</code>`;
+    } else if (action === 'set_label') {
+      promptText = `📝 <b>Neues Label eingeben</b>\n\nAntworte mit dem neuen Anzeige-Text.\nBeispiel: 1.000€ JACKPOT\n\n🔑 Feld-ID: <code>SPIN_LABEL:${fieldId}</code>`;
+    }
+    
+    return ctx.reply(promptText, { parse_mode: 'HTML', reply_markup: { force_reply: true } });
+  }
+
+  // v0.3.31: Neues Feld hinzufügen (Start)
+  if (data === 'spin_add_start') {
+    if (ctx.from.id !== adminId) return ctx.answerCallbackQuery('❌');
+    await ctx.answerCallbackQuery();
+    
+    return ctx.reply(
+      `➕ <b>Neues Glücksrad-Feld</b>\n\n` +
+      `Antworte mit den Felddaten in diesem Format:\n\n` +
+      `<code>SPIN_ADD:tier:label:typ:wert:symbol:detail:chance:farbe</code>\n\n` +
+      `<b>Beispiele:</b>\n` +
+      `<code>SPIN_ADD:free:750€:cash:750:::7.5:#22d68a</code>\n` +
+      `<code>SPIN_ADD:pro:0.01 BTC:crypto:0.01:BTC::10:#f97316</code>\n` +
+      `<code>SPIN_ADD:free:24h Zocker:feature:0::zocker_mode:5:#f43f5e</code>\n\n` +
+      `<i>Chance in % angeben (z.B. 7.5 für 7.5%)</i>`,
+      { parse_mode: 'HTML', reply_markup: { force_reply: true } }
+    );
   }
 
   // --- PRO INFO MODAL (für LeveragePanel) ---

@@ -9,18 +9,28 @@ module.exports = (db) => ({
 
     if (!profile || !profile.last_spin) return true;
 
-    // Berechne Mitternacht Berlin-Zeit von heute
+    // Aktuelle Berlin-Zeit Mitternacht berechnen
     const now = new Date();
-    const berlinNow = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Berlin' }));
-    const berlinMidnight = new Date(berlinNow);
-    berlinMidnight.setHours(0, 0, 0, 0);
-
-    // Konvertiere Berlin-Mitternacht zurück in UTC für Vergleich
-    const berlinOffset = berlinNow.getTime() - now.getTime();
-    const utcMidnight = new Date(berlinMidnight.getTime() - berlinOffset);
-
+    // Berliner Datum-String holen (YYYY-MM-DD)
+    const berlinDate = new Intl.DateTimeFormat('en-CA', { 
+      timeZone: 'Europe/Berlin', 
+      year: 'numeric', month: '2-digit', day: '2-digit' 
+    }).format(now);
+    
+    // Berliner Stunde/Minute holen
+    const berlinHour = Number(new Intl.DateTimeFormat('en-US', {
+      hour: 'numeric', hour12: false, timeZone: 'Europe/Berlin'
+    }).format(now));
+    
+    // last_spin Datum in Berlin-Zeit
     const lastSpin = new Date(profile.last_spin);
-    return lastSpin < utcMidnight;
+    const lastSpinBerlinDate = new Intl.DateTimeFormat('en-CA', { 
+      timeZone: 'Europe/Berlin', 
+      year: 'numeric', month: '2-digit', day: '2-digit' 
+    }).format(lastSpin);
+
+    // Kann drehen wenn das Berlin-Datum heute anders ist als beim letzten Spin
+    return berlinDate !== lastSpinBerlinDate;
   },
 
   // Glücksrad-Konfiguration laden (für ein Tier)
@@ -34,16 +44,15 @@ module.exports = (db) => ({
     return data || [];
   },
 
-  // Gewinnermittlung basierend auf Wahrscheinlichkeiten (Server-seitig, manipulationssicher)
+  // Gewinnermittlung (Server-seitig, manipulationssicher)
   async spinWheel(profileId, tier = 'free') {
     const config = await this.getSpinConfig(tier);
     if (!config || config.length === 0) throw new Error('Kein Glücksrad konfiguriert');
 
-    // Prüfe ob heute schon gedreht wurde
     const canSpin = await this.canSpinToday(profileId);
     if (!canSpin) throw new Error('Du hast heute bereits gedreht! Nächster Spin um 0:00 Uhr.');
 
-    // Weighted Random Selection (Server-seitig!)
+    // Weighted Random Selection
     const totalProb = config.reduce((s, c) => s + Number(c.probability), 0);
     let random = Math.random() * totalProb;
     let winner = config[0];
@@ -56,7 +65,7 @@ module.exports = (db) => ({
       }
     }
 
-    // Gewinn anwenden
+    // Profil laden
     const { data: profile } = await db.supabase
       .from('profiles')
       .select('id, balance, bonus_received')
@@ -67,8 +76,8 @@ module.exports = (db) => ({
 
     let rewardDescription = '';
 
+    // ===== CASH GEWINN =====
     if (winner.reward_type === 'cash') {
-      // Geld auf Kontostand
       const amount = Number(winner.reward_value);
       await db.supabase
         .from('profiles')
@@ -87,12 +96,11 @@ module.exports = (db) => ({
 
       rewardDescription = `${amount.toLocaleString('de-DE')}€ auf dein Konto`;
     } 
+    // ===== CRYPTO GEWINN =====
     else if (winner.reward_type === 'crypto') {
-      // Krypto auf Spot
       const symbol = winner.reward_symbol;
       const amount = Number(winner.reward_value);
       
-      // Aktuellen Preis holen
       const { data: priceData } = await db.supabase
         .from('current_prices')
         .select('price_eur')
@@ -103,8 +111,7 @@ module.exports = (db) => ({
 
       await db.upsertAsset(profileId, symbol, amount, priceEur);
 
-      // Bonus-Wert in EUR berechnen
-      const eurValue = amount * priceEur;
+      const eurValue = parseFloat((amount * priceEur).toFixed(2));
       await db.supabase
         .from('profiles')
         .update({ 
@@ -124,44 +131,74 @@ module.exports = (db) => ({
 
       rewardDescription = `${amount} ${symbol} auf dein Spot-Konto`;
     } 
+    // ===== FEATURE GEWINN =====
     else if (winner.reward_type === 'feature') {
-      // Feature für 24h freischalten
       const featureKey = winner.reward_detail;
-      const expiresAt = new Date();
-      expiresAt.setHours(expiresAt.getHours() + 24);
-
-      // Upsert: Wenn Feature schon existiert, verlängern
-      const { data: existing } = await db.supabase
-        .from('temp_features')
-        .select('id, expires_at')
-        .eq('profile_id', profileId)
-        .eq('feature_key', featureKey)
-        .maybeSingle();
-
-      if (existing) {
-        // Verlängere um 24h ab jetzt
-        await db.supabase
-          .from('temp_features')
-          .update({ expires_at: expiresAt.toISOString(), granted_at: new Date().toISOString() })
-          .eq('id', existing.id);
+      if (!featureKey) {
+        rewardDescription = 'Feature-Gewinn (nicht konfiguriert)';
       } else {
-        await db.supabase.from('temp_features').insert({
-          profile_id: profileId,
-          feature_key: featureKey,
-          expires_at: expiresAt.toISOString(),
-          source: 'spin'
-        });
+        const expiresAt = new Date();
+        expiresAt.setHours(expiresAt.getHours() + 24);
+
+        // v0.3.31: Robuster Upsert — abgelaufene UND aktive Rows berücksichtigen
+        // Erst schauen ob es IRGENDEINEN Row für dieses Feature gibt (egal ob abgelaufen)
+        const { data: existing } = await db.supabase
+          .from('temp_features')
+          .select('id, expires_at')
+          .eq('profile_id', profileId)
+          .eq('feature_key', featureKey)
+          .maybeSingle();
+
+        if (existing) {
+          // Row existiert (aktiv oder abgelaufen) → Update mit neuem Ablaufdatum
+          const { error: updateErr } = await db.supabase
+            .from('temp_features')
+            .update({ 
+              expires_at: expiresAt.toISOString(), 
+              granted_at: new Date().toISOString(),
+              source: 'spin'
+            })
+            .eq('id', existing.id);
+          
+          if (updateErr) {
+            console.error('Temp feature update error:', updateErr);
+          }
+        } else {
+          // Kein Row vorhanden → Insert
+          const { error: insertErr } = await db.supabase
+            .from('temp_features')
+            .insert({
+              profile_id: profileId,
+              feature_key: featureKey,
+              expires_at: expiresAt.toISOString(),
+              source: 'spin'
+            });
+          
+          if (insertErr) {
+            console.error('Temp feature insert error:', insertErr);
+            // Fallback: Vielleicht Race Condition, versuche Update
+            await db.supabase
+              .from('temp_features')
+              .update({ 
+                expires_at: expiresAt.toISOString(), 
+                granted_at: new Date().toISOString(),
+                source: 'spin'
+              })
+              .eq('profile_id', profileId)
+              .eq('feature_key', featureKey);
+          }
+        }
+
+        const featureNames = {
+          'zocker_mode': 'Zocker-Modus (x20 & x50 Hebel)',
+          'trailing_stop': 'Trailing-Stop',
+          'limit_orders': 'Limit-Orders',
+          'multi_positions': '3 Positionen gleichzeitig',
+          'stop_loss': 'Stop-Loss / Take-Profit'
+        };
+
+        rewardDescription = `24h ${featureNames[featureKey] || featureKey} freigeschaltet!`;
       }
-
-      const featureNames = {
-        'zocker_mode': 'Zocker-Modus (x20 & x50 Hebel)',
-        'trailing_stop': 'Trailing-Stop',
-        'limit_orders': 'Limit-Orders',
-        'multi_positions': '3 Positionen gleichzeitig',
-        'stop_loss': 'Stop-Loss / Take-Profit'
-      };
-
-      rewardDescription = `24h ${featureNames[featureKey] || featureKey} freigeschaltet!`;
     }
 
     // Spin protokollieren
@@ -201,7 +238,7 @@ module.exports = (db) => ({
     };
   },
 
-  // Temp Features eines Users laden (aktive)
+  // Aktive Temp Features laden
   async getActiveTempFeatures(profileId) {
     const { data } = await db.supabase
       .from('temp_features')
@@ -211,7 +248,7 @@ module.exports = (db) => ({
     return data || [];
   },
 
-  // Prüfe ob User ein bestimmtes Temp-Feature hat
+  // Prüfe einzelnes Temp-Feature
   async hasTempFeature(profileId, featureKey) {
     const { data } = await db.supabase
       .from('temp_features')
@@ -231,11 +268,10 @@ module.exports = (db) => ({
       .lte('expires_at', new Date().toISOString());
 
     if (expired && expired.length > 0) {
-      const ids = expired.map(e => e.id);
       await db.supabase
         .from('temp_features')
         .delete()
-        .in('id', ids);
+        .in('id', expired.map(e => e.id));
     }
     return (expired || []).length;
   },
@@ -250,10 +286,10 @@ module.exports = (db) => ({
   },
 
   // Admin: Neues Spin-Feld hinzufügen
-  async addSpinConfig(config) {
+  async addSpinConfig(configData) {
     const { data, error } = await db.supabase
       .from('spin_config')
-      .insert(config)
+      .insert(configData)
       .select()
       .single();
     if (error) throw error;

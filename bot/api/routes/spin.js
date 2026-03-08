@@ -54,13 +54,20 @@ router.post('/spin', async (req, res) => {
     // Bot-Benachrichtigung
     if (req.bot) {
       let emoji = '🎰';
-      if (result.winner.reward_type === 'cash') emoji = '💰';
-      if (result.winner.reward_type === 'crypto') emoji = '🪙';
-      if (result.winner.reward_type === 'feature') emoji = '⚡';
+      let extraInfo = '';
+      
+      if (result.winner.reward_type === 'cash') {
+        emoji = '💰';
+      } else if (result.winner.reward_type === 'crypto') {
+        emoji = '🪙';
+      } else if (result.winner.reward_type === 'feature') {
+        emoji = '⚡';
+        extraInfo = '\n\n✅ <i>Das Feature ist ab sofort für 24 Stunden aktiv!</i>';
+      }
 
       req.bot.api.sendMessage(profile.telegram_id,
         `${emoji} <b>GLÜCKSRAD GEWINN!</b>\n\n` +
-        `${result.description}\n\n` +
+        `${result.description}${extraInfo}\n\n` +
         `🕐 Nächster Spin: Morgen um 0:00 Uhr`,
         { parse_mode: 'HTML' }
       ).catch(() => {});

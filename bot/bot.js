@@ -168,6 +168,100 @@ bot.on('message:text', async (ctx) => {
     }
   }
 
+  // v0.3.31: Admin Spin Config Antworten verarbeiten
+  if (ctx.from.id === ADMIN_ID && ctx.message.reply_to_message) {
+    const replyText = ctx.message.reply_to_message.text || '';
+    
+    // SPIN_VALUE:id — Wert ändern
+    const valueMatch = replyText.match(/SPIN_VALUE:(\d+)/);
+    if (valueMatch) {
+      const fieldId = Number(valueMatch[1]);
+      const newValue = Number(text);
+      if (isNaN(newValue)) return ctx.reply('❌ Bitte eine gültige Zahl eingeben.');
+      try {
+        await db.updateSpinConfig(fieldId, { reward_value: newValue });
+        return ctx.reply(`✅ Wert auf <b>${newValue}</b> geändert.`, { parse_mode: 'HTML' });
+      } catch (e) {
+        return ctx.reply(`❌ Fehler: ${e.message}`);
+      }
+    }
+    
+    // SPIN_PROB:id — Chance ändern
+    const probMatch = replyText.match(/SPIN_PROB:(\d+)/);
+    if (probMatch) {
+      const fieldId = Number(probMatch[1]);
+      const newProb = Number(text) / 100; // % → Dezimal
+      if (isNaN(newProb) || newProb <= 0 || newProb > 1) return ctx.reply('❌ Bitte eine gültige Chance in % eingeben (z.B. 15 für 15%).');
+      try {
+        await db.updateSpinConfig(fieldId, { probability: newProb });
+        return ctx.reply(`✅ Gewinnchance auf <b>${(newProb*100).toFixed(1)}%</b> geändert.`, { parse_mode: 'HTML' });
+      } catch (e) {
+        return ctx.reply(`❌ Fehler: ${e.message}`);
+      }
+    }
+    
+    // SPIN_LABEL:id — Label ändern
+    const labelMatch = replyText.match(/SPIN_LABEL:(\d+)/);
+    if (labelMatch) {
+      const fieldId = Number(labelMatch[1]);
+      if (!text || text.length < 1) return ctx.reply('❌ Bitte ein Label eingeben.');
+      try {
+        await db.updateSpinConfig(fieldId, { label: text });
+        return ctx.reply(`✅ Label auf <b>${text}</b> geändert.`, { parse_mode: 'HTML' });
+      } catch (e) {
+        return ctx.reply(`❌ Fehler: ${e.message}`);
+      }
+    }
+    
+    // SPIN_ADD — Neues Feld hinzufügen
+    if (text.startsWith('SPIN_ADD:')) {
+      const parts = text.split(':');
+      // Format: SPIN_ADD:tier:label:typ:wert:symbol:detail:chance:farbe
+      if (parts.length < 9) return ctx.reply('❌ Ungültiges Format. Bitte genau dem Beispiel folgen.');
+      
+      const [_, tier, label, rewardType, value, symbol, detail, chance, color] = parts;
+      
+      if (!['free', 'pro'].includes(tier)) return ctx.reply('❌ Tier muss "free" oder "pro" sein.');
+      if (!['cash', 'crypto', 'feature'].includes(rewardType)) return ctx.reply('❌ Typ muss "cash", "crypto" oder "feature" sein.');
+      
+      try {
+        const { data: existing } = await db.supabase
+          .from('spin_config')
+          .select('sort_order')
+          .eq('tier', tier)
+          .order('sort_order', { ascending: false })
+          .limit(1);
+        
+        const nextOrder = (existing && existing.length > 0 ? existing[0].sort_order : 0) + 1;
+        
+        const newConfig = {
+          tier,
+          label,
+          reward_type: rewardType,
+          reward_value: Number(value) || 0,
+          reward_symbol: symbol || null,
+          reward_detail: detail || null,
+          probability: (Number(chance) || 5) / 100,
+          color: color || '#38bdf8',
+          sort_order: nextOrder,
+          is_active: true
+        };
+        
+        await db.addSpinConfig(newConfig);
+        return ctx.reply(
+          `✅ <b>Neues Feld hinzugefügt!</b>\n\n` +
+          `Tier: ${tier.toUpperCase()}\n` +
+          `Label: ${label}\n` +
+          `Typ: ${rewardType}\n` +
+          `Chance: ${chance}%`,
+          { parse_mode: 'HTML' }
+        );
+      } catch (e) {
+        return ctx.reply(`❌ Fehler: ${e.message}`);
+      }
+    }
+  }
+
   const deleteMatch = text.match(/^Delete \((\d+)\)$/i);
   if (deleteMatch) {
     const tgId = Number(deleteMatch[1]);

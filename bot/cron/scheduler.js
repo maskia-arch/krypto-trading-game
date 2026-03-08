@@ -382,40 +382,68 @@ function setupCronJobs(bot) {
       if (db.updateDailySnapshots) {
         await db.updateDailySnapshots();
       }
+    } catch (err) {
+      console.error(err);
+    }
+  }, { timezone: 'Europe/Berlin' });
 
-      // v0.3.30: Abgelaufene Temp Features aufräumen
+  // v0.3.31: Temp Features häufiger aufräumen (alle 30 Minuten statt nur 1x/Tag)
+  // Damit abgelaufene Features zuverlässig gesperrt werden
+  setInterval(async () => {
+    try {
       if (db.cleanupExpiredTempFeatures) {
         const cleaned = await db.cleanupExpiredTempFeatures();
         if (cleaned > 0) console.log(`🧹 ${cleaned} abgelaufene Temp-Features entfernt`);
       }
     } catch (err) {
-      console.error(err);
+      console.error('Temp Feature Cleanup Error:', err);
     }
-  }, BERLIN);
+  }, 30 * 60 * 1000);
 
-  // v0.3.30: Daily Login Bonus Benachrichtigung um 0:05 Berlin-Zeit
+  // Initiales Cleanup beim Start
+  setTimeout(async () => {
+    try {
+      if (db.cleanupExpiredTempFeatures) await db.cleanupExpiredTempFeatures();
+    } catch(e) {}
+  }, 5000);
+
+  // v0.3.31: Daily Login Bonus Benachrichtigung um 0:05 Berlin-Zeit
+  // Explizites Timezone-Object für node-cron Kompatibilität
   cron.schedule('5 0 * * *', async () => {
     try {
-      const { data: users } = await db.supabase
+      console.log('🎰 Sende Daily Spin Benachrichtigungen...');
+      const { data: users, error } = await db.supabase
         .from('profiles')
-        .select('telegram_id, username, notifications_enabled');
-      if (!users) return;
+        .select('telegram_id, username, first_name, notifications_enabled');
+      
+      if (error || !users) {
+        console.error('Daily Spin Notification: DB Error', error);
+        return;
+      }
 
+      let sent = 0;
       for (const user of users) {
         if (user.notifications_enabled === false) continue;
         try {
+          const name = user.username || user.first_name || 'Trader';
           await bot.api.sendMessage(user.telegram_id,
             `🎰 <b>Dein Daily Bonus ist bereit!</b>\n\n` +
-            `Drehe jetzt am Glücksrad und sichere dir deinen täglichen Gewinn! ` +
-            `Öffne die App und tippe oben auf das Glücksrad-Symbol.`,
+            `Hey ${name}, drehe jetzt am Glücksrad und sichere dir deinen täglichen Gewinn!\n\n` +
+            `Öffne die App und tippe oben auf das 🎰 Symbol.`,
             { parse_mode: 'HTML' }
           );
-        } catch (e) {}
+          sent++;
+          // Kleine Pause um Rate-Limits zu vermeiden
+          if (sent % 20 === 0) await new Promise(r => setTimeout(r, 1000));
+        } catch (e) {
+          // User hat Bot blockiert oder Chat gelöscht — kein Fehler
+        }
       }
+      console.log(`🎰 Daily Spin: ${sent}/${users.length} Benachrichtigungen gesendet`);
     } catch (err) {
       console.error('Daily Spin Notification Error:', err);
     }
-  }, BERLIN);
+  }, { timezone: 'Europe/Berlin' });
 
   // v0.3.30: Copy Trading — Abgelaufene Abos expiren (alle 5 Minuten)
   setInterval(async () => {
